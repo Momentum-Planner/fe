@@ -42,6 +42,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.4",
     "jsdom": "^27.4.0",
+    "msw": "^2.12.10",
     "prettier": "^3.8.1",
     "remark-gfm": "^4.0.1",
     "typescript": "^5.9.3",
@@ -49,5 +50,10 @@
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.2.4",
     "zod": "^4.3.6"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
   }
 }
