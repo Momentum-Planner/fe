@@ -23,6 +23,7 @@
     "@tanstack/react-router": "^1.163.3",
     "@tanstack/react-router-devtools": "^1.163.3",
     "@tanstack/router-plugin": "^1.164.0",
+    "lightweight-charts": "^5.1.0",
     "lucide-react": "^0.545.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
