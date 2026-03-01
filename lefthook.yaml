@@ -1,0 +1,13 @@
+pre-commit:
+  commands:
+    lint:
+      run: pnpm lint
+    format:
+      run: pnpm format
+    typecheck:
+      run: pnpm tsc --noEmit
+
+commit-msg:
+  commands:
+    commitlint:
+      run: pnpm commitlint --edit {1}
