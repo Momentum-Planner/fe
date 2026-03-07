@@ -25,6 +25,8 @@ export function TrendsPage() {
       layout: {
         textColor: 'black',
         background: { type: ColorType.Solid, color: 'white' },
+        fontFamily:
+          "'NumFont', 'Pretendard Std Variable', 'Pretendard Std', Pretendard, sans-serif",
       },
     }
     const chart = createChart(containerRef.current, chartOptions)
@@ -45,6 +47,7 @@ export function TrendsPage() {
 
   return (
     <main className="page-wrap px-4 pb-8 pt-14">
+      <div>12345</div>
       <div ref={containerRef} className="w-[720px] h-[480px]"></div>
     </main>
   )
