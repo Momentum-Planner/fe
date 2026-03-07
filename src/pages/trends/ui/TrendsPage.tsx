@@ -46,8 +46,8 @@ export function TrendsPage() {
   }, [])
 
   return (
-    <main className="page-wrap px-4 pb-8 pt-14">
-      <div ref={containerRef} className="w-[720px] h-[480px]"></div>
+    <main className="page-wrap px-4 pt-14 pb-8">
+      <div ref={containerRef} className="h-[480px] w-[720px]"></div>
     </main>
   )
 }
