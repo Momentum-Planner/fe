@@ -1,9 +1,6 @@
-import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useRef } from 'react'
 import { CandlestickSeries, ColorType, createChart } from 'lightweight-charts'
 import type { CandlestickData, UTCTimestamp } from 'lightweight-charts'
-
-export const Route = createFileRoute('/trends')({ component: App })
 
 const data: CandlestickData[] = [
   { open: 10, high: 10.63, low: 9.49, close: 9.55, time: 1642427876 },
@@ -18,7 +15,7 @@ const data: CandlestickData[] = [
   { open: 10.93, high: 11.53, low: 10.76, close: 10.96, time: 1643205476 },
 ].map((d) => ({ ...d, time: d.time as UTCTimestamp }))
 
-function App() {
+export function TrendsPage() {
   const containerRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {

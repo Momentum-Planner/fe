@@ -1,6 +1,6 @@
 import ReactDOM from 'react-dom/client'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
-import { routeTree } from './routeTree.gen'
+import { routeTree } from '@/app/routeTree.gen'
 
 const router = createRouter({
   routeTree,
@@ -8,16 +8,10 @@ const router = createRouter({
   scrollRestoration: true,
 })
 
-declare module '@tanstack/react-router' {
-  interface Register {
-    router: typeof router
-  }
-}
-
 async function enableMocking() {
   if (process.env.NODE_ENV !== 'development') return
 
-  const { worker } = await import('./mocks/browser')
+  const { worker } = await import('../../mocks/browser')
   return worker.start()
 }
 

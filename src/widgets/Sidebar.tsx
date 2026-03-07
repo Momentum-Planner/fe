@@ -1,20 +1,16 @@
 import { Link } from '@tanstack/react-router'
-import { BarChart2, Camera, TrendingUp, User } from 'lucide-react'
 
-type NavItem = {
+export type NavItem = {
   to: string
   label: string
   icon: React.ComponentType<{ size?: number }>
 }
 
-const navItems: NavItem[] = [
-  { to: '/profile', label: '내 정보', icon: User },
-  { to: '/trends', label: '추세 페이지', icon: TrendingUp },
-  { to: '/market', label: '시장 동향', icon: BarChart2 },
-  { to: '/captures', label: '내 캡쳐', icon: Camera },
-]
+interface SidebarProps {
+  navItems: NavItem[]
+}
 
-export function Sidebar() {
+export function Sidebar({ navItems }: SidebarProps) {
   return (
     <aside className="w-[288px] shrink-0 h-screen sticky top-0 bg-[#A6A5B9] border-r border-(--line) flex flex-col">
       <div className="h-14 flex items-center px-6 border-b border-(--line)">

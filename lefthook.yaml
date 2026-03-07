@@ -2,6 +2,8 @@ pre-commit:
   commands:
     lint:
       run: pnpm lint
+    lint-fsd:
+      run: pnpm lint:fsd
     format:
       run: pnpm format
     typecheck:
