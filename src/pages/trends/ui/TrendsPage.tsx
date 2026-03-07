@@ -25,6 +25,8 @@ export function TrendsPage() {
       layout: {
         textColor: 'black',
         background: { type: ColorType.Solid, color: 'white' },
+        fontFamily:
+          "'NumFont', 'Pretendard Std Variable', 'Pretendard Std', Pretendard, sans-serif",
       },
     }
     const chart = createChart(containerRef.current, chartOptions)
