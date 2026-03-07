@@ -54,37 +54,35 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-@layer utilities {
-  .text-heading-18 {
-    font-weight: 600;
-    font-size: 18px;
-    line-height: 30px;
-  }
+@utility text-heading-18 {
+  font-weight: 600;
+  font-size: 18px;
+  line-height: 30px;
+}
 
-  .text-heading-24 {
-    font-weight: 700;
-    font-size: 24px;
-    line-height: 30px;
-  }
+@utility text-heading-24 {
+  font-weight: 700;
+  font-size: 24px;
+  line-height: 30px;
+}
 
-  .text-body {
-    font-weight: 400;
-    font-size: 12px;
-    line-height: 30px;
-  }
+@utility text-body {
+  font-weight: 400;
+  font-size: 12px;
+  line-height: 30px;
+}
 
-  .text-label-16 {
-    font-weight: 700;
-    font-size: 16px;
-  }
+@utility text-label-16 {
+  font-weight: 700;
+  font-size: 16px;
+}
 
-  .text-label-18 {
-    font-weight: 600;
-    font-size: 18px;
-  }
+@utility text-label-18 {
+  font-weight: 600;
+  font-size: 18px;
+}
 
-  .text-label-18r {
-    font-weight: 400;
-    font-size: 18px;
-  }
+@utility text-label-18r {
+  font-weight: 400;
+  font-size: 18px;
 }

@@ -1,9 +1,11 @@
-import { Link } from '@tanstack/react-router'
+import { Link, useMatchRoute } from '@tanstack/react-router'
+import type { SVGProps } from 'react'
 
 export type NavItem = {
   to: string
   label: string
-  icon: React.ComponentType<{ size?: number }>
+  icon: React.ComponentType<SVGProps<SVGSVGElement>>
+  activeIcon: React.ComponentType<SVGProps<SVGSVGElement>>
 }
 
 interface SidebarProps {
@@ -11,25 +13,28 @@ interface SidebarProps {
 }
 
 export function Sidebar({ navItems }: SidebarProps) {
+  const matchRoute = useMatchRoute()
+
   return (
-    <aside className="flex w-70 flex-col px-6 py-9">
-      <div className="flex h-14 items-center border-b border-(--line) px-6">
-        <span className="font-semibold text-white">Burning In</span>
-      </div>
-      <nav className="flex flex-1 flex-col gap-1 px-3 py-4">
-        {navItems.map(({ to, label, icon: Icon }) => (
-          <Link
-            key={to}
-            to={to}
-            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-white transition-all"
-            activeProps={{
-              className: 'font-large',
-            }}
-          >
-            <Icon size={17} />
-            <span>{label}</span>
-          </Link>
-        ))}
+    <aside className="flex w-70 min-w-45 flex-col px-6 py-9">
+      <span className="text-heading-24 [background-image:var(--gradation-red)] bg-clip-text font-semibold text-transparent">
+        불타기
+      </span>
+      <nav className="flex flex-1 flex-col">
+        {navItems.map(({ to, label, icon: Icon, activeIcon: ActiveIcon }) => {
+          const isActive = !!matchRoute({ to })
+          const CurrentIcon = isActive ? ActiveIcon : Icon
+          return (
+            <Link
+              key={to}
+              to={to}
+              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all"
+            >
+              <CurrentIcon color="white" />
+              <span className="text-label-18">{label}</span>
+            </Link>
+          )
+        })}
       </nav>
     </aside>
   )

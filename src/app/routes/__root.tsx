@@ -5,17 +5,31 @@ import { TanStackDevtools } from '@tanstack/react-devtools'
 import '@/app/styles.css'
 import { Sidebar } from '@/widgets/Sidebar'
 import type { NavItem } from '@/widgets/Sidebar'
-import { BarChart2, Camera, TrendingUp, User } from 'lucide-react'
+import { PageFilledIcon, PageIcon } from '@/shared/assets'
 
 export const Route = createRootRoute({
   component: RootComponent,
 })
 
 const navItems: NavItem[] = [
-  { to: '/profile', label: '내 정보', icon: User },
-  { to: '/trends', label: '추세 페이지', icon: TrendingUp },
-  { to: '/market', label: '시장 동향', icon: BarChart2 },
-  { to: '/captures', label: '내 캡쳐', icon: Camera },
+  {
+    to: '/trends',
+    label: '추세 페이지',
+    icon: PageIcon,
+    activeIcon: PageFilledIcon,
+  },
+  {
+    to: '/market',
+    label: '시장동향',
+    icon: PageIcon,
+    activeIcon: PageFilledIcon,
+  },
+  {
+    to: '/captures',
+    label: '내 캡쳐',
+    icon: PageIcon,
+    activeIcon: PageFilledIcon,
+  },
 ]
 
 function RootComponent() {
