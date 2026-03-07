@@ -29,7 +29,7 @@ body,
   --gradation-blue: linear-gradient(to right, #34ace4, #346fe4);
 
   --color-opacity-100: #818ba600;
-  --opcity-black: linear-gradient(-44deg, #000000, #0a0a0a);
+  --opacity-black: linear-gradient(-44deg, #000000, #0a0a0a);
 }
 
 body {
@@ -49,8 +49,6 @@ body {
     'Segoe UI Emoji',
     'Segoe UI Symbol',
     sans-serif;
-  color: var(--sea-ink);
-  background-color: var(--bg-base);
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -85,7 +83,7 @@ body {
     font-size: 18px;
   }
 
-  .text-lael-18r {
+  .text-label-18r {
     font-weight: 400;
     font-size: 18px;
   }

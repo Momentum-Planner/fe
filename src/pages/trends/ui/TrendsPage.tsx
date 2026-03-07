@@ -47,7 +47,6 @@ export function TrendsPage() {
 
   return (
     <main className="page-wrap px-4 pb-8 pt-14">
-      <div>12345</div>
       <div ref={containerRef} className="w-[720px] h-[480px]"></div>
     </main>
   )
