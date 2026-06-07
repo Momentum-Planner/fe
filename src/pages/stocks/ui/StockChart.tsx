@@ -8,30 +8,52 @@ import {
   LineStyle,
   createChart,
 } from 'lightweight-charts'
-import type { ISeriesApi } from 'lightweight-charts'
+import type {
+  CandlestickData,
+  HistogramData,
+  ISeriesApi,
+  LineData,
+} from 'lightweight-charts'
 import { formatChartDate } from '@/shared/lib/chartHistory'
-import {
-  VISIBLE_BARS,
-  movingAverages,
-  stockBaseBoxes,
-  stockCandles,
-  stockPriceTags,
-  stockVolume,
-} from '../model/stockChart'
+
+export type ChartBaseBox = {
+  fromIndex: number
+  toIndex: number
+  low: number
+  high: number
+}
+export type ChartMovingAverage = { color: string; data: LineData[] }
+export type ChartPriceTag = { price: number; color: string }
 
 type StockChartProps = {
   /** 지지선/저항선 — show the yellow S/R boxes */
   showSR: boolean
   /** 이동평균선 — per-line visibility (50 / 150 / 200) */
   maVisible: boolean[]
+  candles: CandlestickData[]
+  volume: HistogramData[]
+  movingAverages: ChartMovingAverage[]
+  baseBoxes: ChartBaseBox[]
+  priceTags: ChartPriceTag[]
+  /** 처음에 보일 캔들 개수 (오른쪽 정렬) */
+  visibleBars: number
 }
 
 /**
- * Stock-detail candlestick chart (lightweight-charts): candles + 3 moving
- * averages + right-axis price tags + yellow S/R overlay boxes. MA lines and the
- * S/R boxes are toggled live via props. Pannable history sits to the left.
+ * Stock-detail candlestick chart (lightweight-charts): candles + moving
+ * averages + right-axis price tags + yellow S/R overlay boxes. 데이터는 부모가
+ * API(useDailyCandles/useMovingAverages/useBases)에서 받아 props 로 주입한다.
  */
-export function StockChart({ showSR, maVisible }: StockChartProps) {
+export function StockChart({
+  showSR,
+  maVisible,
+  candles,
+  volume,
+  movingAverages,
+  baseBoxes,
+  priceTags,
+  visibleBars,
+}: StockChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const overlayRef = useRef<HTMLDivElement>(null)
   const tooltipRef = useRef<HTMLDivElement>(null)
@@ -43,6 +65,7 @@ export function StockChart({ showSR, maVisible }: StockChartProps) {
     const container = containerRef.current
     const overlay = overlayRef.current
     if (!container || !overlay) return
+    if (candles.length === 0) return
 
     const chart = createChart(container, {
       width: container.clientWidth,
@@ -71,9 +94,7 @@ export function StockChart({ showSR, maVisible }: StockChartProps) {
       },
     })
 
-    // Volume in a separate bottom pane — its own right axis (numbers as "42M"),
-    // with a separator line between it and the candle pane.
-    const volume = chart.addSeries(
+    const volumeSeries = chart.addSeries(
       HistogramSeries,
       {
         priceScaleId: 'right',
@@ -87,17 +108,18 @@ export function StockChart({ showSR, maVisible }: StockChartProps) {
       },
       1,
     )
-    volume.priceScale().applyOptions({
+    volumeSeries.priceScale().applyOptions({
       borderVisible: false,
       scaleMargins: { top: 0.15, bottom: 0.05 },
     })
-    volume.setData(stockVolume)
+    volumeSeries.setData(volume)
 
-    // Hover tooltip showing the volume value at the cursor
     chart.subscribeCrosshairMove((param) => {
       const tooltip = tooltipRef.current
       if (!tooltip) return
-      const v = param.seriesData.get(volume) as { value?: number } | undefined
+      const v = param.seriesData.get(volumeSeries) as
+        | { value?: number }
+        | undefined
       if (!param.point || param.time == null || !v || v.value == null) {
         tooltip.style.display = 'none'
         return
@@ -132,16 +154,15 @@ export function StockChart({ showSR, maVisible }: StockChartProps) {
       lastValueVisible: false,
       priceLineVisible: false,
     })
-    candle.setData(stockCandles)
+    candle.setData(candles)
 
-    // Candle pane large, volume pane ~2.5:1
     const panes = chart.panes()
     if (panes.length > 1) {
       panes[0].setStretchFactor(2.5)
       panes[1].setStretchFactor(1)
     }
 
-    for (const tag of stockPriceTags) {
+    for (const tag of priceTags) {
       candle.createPriceLine({
         price: tag.price,
         color: tag.color,
@@ -152,10 +173,10 @@ export function StockChart({ showSR, maVisible }: StockChartProps) {
       })
     }
 
-    const total = stockCandles.length
+    const total = candles.length
     chart
       .timeScale()
-      .setVisibleLogicalRange({ from: total - VISIBLE_BARS, to: total + 2 })
+      .setVisibleLogicalRange({ from: total - visibleBars, to: total + 2 })
 
     const drawBoxes = () => {
       if (!showSRRef.current) {
@@ -163,14 +184,16 @@ export function StockChart({ showSR, maVisible }: StockChartProps) {
         return
       }
       const ts = chart.timeScale()
-      const c0 = ts.timeToCoordinate(stockCandles[0].time)
-      const c1 = ts.timeToCoordinate(stockCandles[1].time)
+      const c0 = ts.timeToCoordinate(candles[0].time)
+      const c1 =
+        candles.length > 1 ? ts.timeToCoordinate(candles[1].time) : null
       const halfW = c0 != null && c1 != null ? Math.abs(c1 - c0) / 2 : 4
 
       let html = ''
-      for (const box of stockBaseBoxes) {
-        const x1 = ts.timeToCoordinate(stockCandles[box.fromIndex].time)
-        const x2 = ts.timeToCoordinate(stockCandles[box.toIndex].time)
+      for (const box of baseBoxes) {
+        if (box.fromIndex < 0 || box.toIndex >= candles.length) continue
+        const x1 = ts.timeToCoordinate(candles[box.fromIndex].time)
+        const x2 = ts.timeToCoordinate(candles[box.toIndex].time)
         const yHigh = candle.priceToCoordinate(box.high)
         const yLow = candle.priceToCoordinate(box.low)
         if (x1 == null || x2 == null || yHigh == null || yLow == null) continue
@@ -202,7 +225,7 @@ export function StockChart({ showSR, maVisible }: StockChartProps) {
       chart.remove()
       maSeriesRef.current = []
     }
-  }, [])
+  }, [candles, volume, movingAverages, baseBoxes, priceTags, visibleBars])
 
   // Live toggles: MA visibility + S/R boxes
   useEffect(() => {

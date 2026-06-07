@@ -3,15 +3,21 @@ import { Link, useNavigate } from '@tanstack/react-router'
 import { cn } from '@/shared/lib/cn'
 import { RegimeIcon } from '@/shared/ui/RegimeIcon'
 import { DateTimePicker } from '@/shared/ui/DateTimePicker'
+import type { Judgment, Regime } from '@/shared/lib/snapshots'
+import {
+  fromServerJudgment,
+  fromServerRegime,
+  toServerJudgment,
+  toServerRegime,
+} from '@/shared/lib/snapshots'
+import { toLocalDateTime } from '@/shared/lib/datetime'
+import { useSnapshotList } from '@/entities/snapshot'
 import './snapshot-list.css'
 
 const startOfToday = () => {
   const n = new Date()
   return new Date(n.getFullYear(), n.getMonth(), n.getDate(), 0, 0, 0, 0)
 }
-
-type Regime = 'start' | 'prep' | 'fail' | 'drop' | 'none'
-type Judgment = 'buy' | 'sell' | 'hold'
 
 const REGIME_LABEL: Record<Regime, string> = {
   start: '돌파성공',
@@ -26,89 +32,12 @@ const JUDGMENT_LABEL: Record<Judgment, string> = {
   hold: '관망',
 }
 
-type Snapshot = {
-  name: string
-  regime: Regime
-  judgment: Judgment
-  date: string
-  price: string
-  memo: string
+function formatRecordedAt(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())}. ${p(d.getHours())}:${p(d.getMinutes())}`
 }
-
-const snapshots: Snapshot[] = [
-  {
-    name: 'SK하이닉스',
-    regime: 'start',
-    judgment: 'buy',
-    date: '2026.03.12. 13:00',
-    price: '₩1,100,000',
-    memo: '베이스 돌파를 거래량 동반으로 확인하고 분할 매수 시작. 추세 초입으로 판단됨.',
-  },
-  {
-    name: '삼성전자',
-    regime: 'fail',
-    judgment: 'sell',
-    date: '2026.03.12. 14:30',
-    price: '₩78,400',
-    memo: '저항선 돌파 실패에 거래량도 부족. 비중 줄여 리스크 관리했음.',
-  },
-  {
-    name: '현대자동차',
-    regime: 'prep',
-    judgment: 'hold',
-    date: '2026.03.12. 15:01',
-    price: '₩221,500',
-    memo: '박스권 상단 눌림목 구간. 돌파 확인 전까지는 관망 유지.',
-  },
-  {
-    name: 'SK하이닉스',
-    regime: 'start',
-    judgment: 'buy',
-    date: '2026.02.20. 10:14',
-    price: '₩980,000',
-    memo: '눌림 후 재차 베이스 상단 안착. 모멘텀 살아있어 추가 매수.',
-  },
-  {
-    name: 'LG화학',
-    regime: 'drop',
-    judgment: 'sell',
-    date: '2026.02.14. 09:42',
-    price: '₩342,000',
-    memo: '지지선 이탈로 손절 라인 터치. 추세 훼손 판단해 비중 축소.',
-  },
-  {
-    name: '삼성생명',
-    regime: 'none',
-    judgment: 'hold',
-    date: '2026.01.28. 11:20',
-    price: '₩94,200',
-    memo: '방향성 불분명한 횡보 구간. 추세 확인될 때까지 대기.',
-  },
-  {
-    name: '현대자동차',
-    regime: 'start',
-    judgment: 'buy',
-    date: '2026.01.15. 14:55',
-    price: '₩228,000',
-    memo: '저항 돌파 후 지지로 전환되는 흐름 확인. 초기 진입.',
-  },
-  {
-    name: '삼성전자',
-    regime: 'fail',
-    judgment: 'sell',
-    date: '2026.01.08. 13:45',
-    price: '₩81,200',
-    memo: '돌파 시도 무산되며 윗꼬리 길게 발생. 단기 차익 실현.',
-  },
-  {
-    name: 'LG화학',
-    regime: 'prep',
-    judgment: 'hold',
-    date: '2025.12.22. 10:30',
-    price: '₩365,500',
-    memo: '베이스 다지는 중, 거래량 수축 관찰. 돌파 신호 기다리는 중.',
-  },
-]
 
 export function CapturesPage() {
   const navigate = useNavigate()
@@ -139,22 +68,35 @@ export function CapturesPage() {
     setEndDt(new Date())
   }
 
-  // TEMP: live-filter the dummy list by stock name + 판단 + 레짐 (real filtering = backend).
-  const q = keyword.trim().toLowerCase()
-  const anyJudg = Object.values(judg).some(Boolean)
-  const anyReg = Object.values(reg).some(Boolean)
-  // counts = per-judgment totals of the 키워드+레짐 view (independent of the 판단 selection)
-  const base = snapshots.filter(
-    (s) =>
-      `${s.name} ${s.memo}`.toLowerCase().includes(q) &&
-      (!anyReg || reg[s.regime]),
+  const selectedJudgments = (['buy', 'sell', 'hold'] as Judgment[]).filter(
+    (k) => judg[k],
   )
+  const selectedRegimes = (
+    ['start', 'prep', 'fail', 'drop', 'none'] as Regime[]
+  ).filter((k) => reg[k])
+
+  // 서버 필터링 — 기간/판단/레짐/종목명을 백엔드로 전달한다.
+  const { data, isLoading, isError } = useSnapshotList({
+    startDate: toLocalDateTime(startDt),
+    endDate: toLocalDateTime(endDt),
+    judgments: selectedJudgments.map(toServerJudgment),
+    regimes: selectedRegimes.map(toServerRegime),
+    stockName: keyword.trim() || undefined,
+  })
+
   const counts = {
-    buy: base.filter((s) => s.judgment === 'buy').length,
-    sell: base.filter((s) => s.judgment === 'sell').length,
-    hold: base.filter((s) => s.judgment === 'hold').length,
+    buy: data?.buyCount ?? 0,
+    sell: data?.sellCount ?? 0,
+    hold: data?.watchCount ?? 0,
   }
-  const filtered = base.filter((s) => !anyJudg || judg[s.judgment])
+  const items = (data?.snapshots ?? []).map((s) => ({
+    snapshotId: s.snapshotId,
+    name: s.stockName,
+    regime: fromServerRegime(s.stockRegime),
+    judgment: fromServerJudgment(s.judgment),
+    date: formatRecordedAt(s.recordedAt),
+    price: `₩${s.price.toLocaleString()}`,
+  }))
 
   return (
     <main className="snapshot-list">
@@ -280,7 +222,7 @@ export function CapturesPage() {
                 <path d="M21 21l-4.35-4.35" />
               </svg>
               <input
-                placeholder="종목명, 회고 메모 키워드로 검색"
+                placeholder="종목명으로 검색"
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
               />
@@ -307,10 +249,11 @@ export function CapturesPage() {
         </div>
 
         <div className="grid">
-          {filtered.map((snap, i) => (
+          {items.map((snap) => (
             <Link
-              key={`${snap.name}-${i}`}
+              key={snap.snapshotId}
               to="/snapshots/edit"
+              search={{ id: snap.snapshotId }}
               className={`snap ${snap.judgment}`}
             >
               <div className="snapTop">
@@ -325,14 +268,13 @@ export function CapturesPage() {
                   {JUDGMENT_LABEL[snap.judgment]}
                 </span>
               </div>
-              <p className="snapMemo">{snap.memo}</p>
               <div className="snapBot">
                 <span className="snapDate">{snap.date}</span>
                 <div className={`snapPrice ${snap.judgment}`}>{snap.price}</div>
               </div>
             </Link>
           ))}
-          {filtered.length === 0 && (
+          {(isLoading || isError || items.length === 0) && (
             <p
               style={{
                 gridColumn: '1 / -1',
@@ -342,7 +284,11 @@ export function CapturesPage() {
                 fontSize: 14,
               }}
             >
-              조건에 맞는 스냅샷이 없습니다.
+              {isLoading
+                ? '불러오는 중…'
+                : isError
+                  ? '스냅샷을 불러오지 못했습니다.'
+                  : '조건에 맞는 스냅샷이 없습니다.'}
             </p>
           )}
         </div>

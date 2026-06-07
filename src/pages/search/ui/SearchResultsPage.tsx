@@ -1,87 +1,11 @@
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
+import { useStockSearch } from '@/entities/search'
 import './search-results.css'
 
-type Status = 'success' | 'prep'
-type Result = {
-  name: string
-  ticker: string
-  status: Status
-  price: number
-  change: string
-  dir: 'up' | 'down'
-}
-
-const results: Result[] = [
-  {
-    name: '삼성전자',
-    ticker: '005930',
-    status: 'success',
-    price: 89_200,
-    change: '+0.79%',
-    dir: 'up',
-  },
-  {
-    name: '삼성SDI',
-    ticker: '006400',
-    status: 'prep',
-    price: 315_000,
-    change: '+1.42%',
-    dir: 'up',
-  },
-  {
-    name: '삼성바이오로직스',
-    ticker: '207940',
-    status: 'success',
-    price: 1_042_000,
-    change: '+2.10%',
-    dir: 'up',
-  },
-  {
-    name: '삼성물산',
-    ticker: '028260',
-    status: 'success',
-    price: 158_300,
-    change: '-0.51%',
-    dir: 'down',
-  },
-  {
-    name: '삼성생명',
-    ticker: '032830',
-    status: 'prep',
-    price: 96_400,
-    change: '+0.33%',
-    dir: 'up',
-  },
-  {
-    name: '삼성전기',
-    ticker: '009150',
-    status: 'success',
-    price: 152_800,
-    change: '+3.04%',
-    dir: 'up',
-  },
-  {
-    name: '삼성화재',
-    ticker: '000810',
-    status: 'prep',
-    price: 412_500,
-    change: '-0.22%',
-    dir: 'down',
-  },
-  {
-    name: '삼성에스디에스',
-    ticker: '018260',
-    status: 'success',
-    price: 168_900,
-    change: '+1.08%',
-    dir: 'up',
-  },
-]
-
-function StatusBadge({ status }: { status: Status }) {
-  const isSuccess = status === 'success'
+/** 돌파 성공/준비 2종만 배지로 구분(그 외 레짐은 준비형 아이콘으로 표시). */
+function StatusBadge({ success }: { success: boolean }) {
   return (
-    <span className={`sBadge ${isSuccess ? 'success' : 'prep'}`}>
+    <span className={`sBadge ${success ? 'success' : 'prep'}`}>
       <svg
         width="14"
         height="11"
@@ -92,7 +16,7 @@ function StatusBadge({ status }: { status: Status }) {
         strokeLinecap="round"
         strokeLinejoin="round"
       >
-        {isSuccess ? (
+        {success ? (
           <>
             <path d="M2 14 L7 12 L11 9 L15 5 L22 1" />
             <path d="M17 2 L22 0.5 L23 6" />
@@ -104,7 +28,7 @@ function StatusBadge({ status }: { status: Status }) {
           </>
         )}
       </svg>
-      {isSuccess ? '돌파 성공' : '돌파 준비'}
+      {success ? '돌파 성공' : '돌파 준비'}
     </span>
   )
 }
@@ -112,7 +36,9 @@ function StatusBadge({ status }: { status: Status }) {
 export function SearchResultsPage() {
   const { q } = useSearch({ from: '/search' })
   const navigate = useNavigate()
-  const query = q || '삼성'
+  const query = q
+
+  const { data: results = [], isLoading, isError } = useStockSearch(query)
 
   return (
     <main className="search-results">
@@ -162,7 +88,7 @@ export function SearchResultsPage() {
           <h1>
             <span className="q">‘{query}’</span> 검색 결과
           </h1>
-          <span className="cnt">8건</span>
+          <span className="cnt">{results.length}건</span>
         </div>
         <p className="resSub">종목명 또는 종목코드로 검색했습니다.</p>
 
@@ -172,21 +98,29 @@ export function SearchResultsPage() {
             <span>돌파 상태</span>
             <span>현재가</span>
           </div>
+
+          {isLoading && <p className="resEmpty">불러오는 중…</p>}
+          {isError && <p className="resEmpty">검색에 실패했습니다.</p>}
+          {!isLoading && !isError && results.length === 0 && (
+            <p className="resEmpty">검색 결과가 없습니다.</p>
+          )}
+
           {results.map((r) => (
             <Link
-              key={r.ticker}
+              key={r.stockCode}
               className="srow"
               to="/stocks/$ticker"
-              params={{ ticker: r.name }}
+              params={{ ticker: r.stockCode }}
             >
               <div className="sMain">
-                <span className="sNm">{r.name}</span>
-                <span className="sTk">{r.ticker}</span>
+                <span className="sNm">{r.stockName}</span>
+                <span className="sTk">{r.stockCode}</span>
               </div>
-              <StatusBadge status={r.status} />
+              <StatusBadge success={r.regime === 'BREAKOUT_SUCCESS'} />
               <div className="sPrice">
-                <span className="sPr">₩ {r.price.toLocaleString()}</span>
-                <span className={`sCh ${r.dir}`}>{r.change}</span>
+                <span className="sPr">
+                  {r.price != null ? `₩ ${r.price.toLocaleString()}` : '-'}
+                </span>
               </div>
             </Link>
           ))}

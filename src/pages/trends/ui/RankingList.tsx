@@ -1,13 +1,45 @@
 import { Info } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import { cn } from '@/shared/lib/cn'
-import { rankingRows } from '../model/marketData'
+import { useBreakoutRanking } from '@/entities/ranking'
+import type { Regime } from '@/entities/ranking'
+import { useRankingStream } from '@/entities/realtime'
 
 const GRID =
   'grid grid-cols-[28px_minmax(0,1fr)_92px_96px_116px] items-center gap-2'
 
+function formatSigned(value: number): string {
+  return `${value > 0 ? '+' : ''}${value}`
+}
+
+interface RankingRow {
+  stockName: string
+  stockCode: string | null
+  currentPrice: number | null
+  oneYearMomentum: number
+  fipScore: number
+}
+
 /** 랭킹 리스트 — ranked momentum table; the #1 row is highlighted. */
-export function RankingList() {
+export function RankingList({ regime = 'success' }: { regime?: Regime }) {
+  const {
+    data: restItems = [],
+    isLoading,
+    isError,
+  } = useBreakoutRanking(regime)
+  // 실시간 ranking-update 가 오면 그것을 우선, 없으면 REST 스냅샷 사용.
+  const stream = useRankingStream(regime)
+
+  const items: RankingRow[] =
+    stream ??
+    restItems.map((r) => ({
+      stockName: r.stockName,
+      stockCode: r.stockCode,
+      currentPrice: r.currentPrice,
+      oneYearMomentum: r.oneYearMomentum,
+      fipScore: r.fipScore,
+    }))
+
   return (
     <section className="card flex w-full flex-col px-6 pt-6 pb-3">
       <div className="flex items-center justify-between">
@@ -36,7 +68,7 @@ export function RankingList() {
         </div>
       </div>
       <div className="mt-1 text-[12px] text-white/50">
-        순위 · 오늘 09:44 기준
+        모멘텀 → FIP 순 · 상위 종목
       </div>
 
       <div
@@ -52,30 +84,54 @@ export function RankingList() {
         <span className="text-right">현재 가격</span>
       </div>
 
-      {rankingRows.map((row, i) => (
-        <Link
-          key={row.name}
-          to="/stocks/$ticker"
-          params={{ ticker: row.name }}
-          className={cn(
-            GRID,
-            '-mx-3 rounded-[10px] border-b border-white/[0.04] px-3 py-3.5 text-[14px] transition-colors hover:bg-white/[0.06]',
-            i === 0 && 'bg-white/[0.04]',
-          )}
-        >
-          <span className="font-number text-[13px] text-white/50">{i + 1}</span>
-          <span className="font-medium text-white">{row.name}</span>
-          <span className="font-number text-brand-red text-right font-bold">
-            +{row.momentum}%
-          </span>
-          <span className="font-number text-right font-medium text-white">
-            {row.stability}
-          </span>
-          <span className="font-number text-right font-medium text-white">
-            ₩ {row.price.toLocaleString()}
-          </span>
-        </Link>
-      ))}
+      {isLoading && (
+        <div className="py-10 text-center text-[13px] text-white/40">
+          불러오는 중…
+        </div>
+      )}
+
+      {isError && (
+        <div className="py-10 text-center text-[13px] text-white/40">
+          랭킹을 불러오지 못했습니다.
+        </div>
+      )}
+
+      {!isLoading && !isError && items.length === 0 && (
+        <div className="py-10 text-center text-[13px] text-white/40">
+          표시할 종목이 없습니다.
+        </div>
+      )}
+
+      {!isLoading &&
+        !isError &&
+        items.map((row, i) => (
+          <Link
+            key={row.stockCode ?? row.stockName}
+            to="/stocks/$ticker"
+            params={{ ticker: row.stockCode ?? row.stockName }}
+            className={cn(
+              GRID,
+              '-mx-3 rounded-[10px] border-b border-white/[0.04] px-3 py-3.5 text-[14px] transition-colors hover:bg-white/[0.06]',
+              i === 0 && 'bg-white/[0.04]',
+            )}
+          >
+            <span className="font-number text-[13px] text-white/50">
+              {i + 1}
+            </span>
+            <span className="font-medium text-white">{row.stockName}</span>
+            <span className="font-number text-brand-red text-right font-bold">
+              {formatSigned(row.oneYearMomentum)}%
+            </span>
+            <span className="font-number text-right font-medium text-white">
+              {row.fipScore.toFixed(2)}
+            </span>
+            <span className="font-number text-right font-medium text-white">
+              {row.currentPrice != null
+                ? `₩ ${row.currentPrice.toLocaleString()}`
+                : '-'}
+            </span>
+          </Link>
+        ))}
     </section>
   )
 }

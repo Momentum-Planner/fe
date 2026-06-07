@@ -1,12 +1,35 @@
-import { useState } from 'react'
-import { Link } from '@tanstack/react-router'
+import { useMemo, useState } from 'react'
+import { Link, useParams } from '@tanstack/react-router'
 import { cn } from '@/shared/lib/cn'
-import { toggleWatch, useWatchlist } from '@/shared/lib/watchlist'
 import { snapshotsByStock } from '@/shared/lib/snapshots'
+import { daysAgo, toLocalDate, toLocalDateTime } from '@/shared/lib/datetime'
+import { useAccount } from '@/entities/auth'
+import {
+  useAddLike,
+  useBaseStageInsight,
+  useBases,
+  useDailyCandles,
+  useEpsInsight,
+  useFipInsight,
+  useLikes,
+  useMomentumInsight,
+  useMovingAverageInsight,
+  useMovingAverages,
+  useRegimeInsight,
+  useRemoveLike,
+  useRsInsight,
+  useVolumeInsight,
+} from '@/entities/stock'
 import { SnapshotCard } from '@/shared/ui/SnapshotCard'
 import { SearchBar } from '@/shared/ui/SearchBar'
 import { StockChart } from './StockChart'
 import { ItemGrid } from './ItemCards'
+import {
+  toBaseBoxes,
+  toCandles,
+  toMaLine,
+  toVolume,
+} from '../model/buildChartData'
 import './stock-detail.css'
 
 const MA_PILLS = [
@@ -15,13 +38,31 @@ const MA_PILLS = [
   { label: '200일', tone: 'green3' },
 ]
 
+// 차트 이동평균선 색상 (50/150/200)
+const MA_COLORS = ['#34DE7B', '#FF3636', '#F46B1A'] as const
+
 const STOCK_NAME = 'SK하이닉스'
 
 export function StockDetailPage() {
+  // 라우트의 ticker 는 종목코드(stockCode)다. 관심종목 API 는 코드 기준으로 동작한다.
+  const { ticker } = useParams({ from: '/stocks/$ticker' })
+
   const [showSR, setShowSR] = useState(true)
   const [showMA, setShowMA] = useState(true)
   const [maOn, setMaOn] = useState([true, true, true])
-  const watched = useWatchlist().some((w) => w.name === STOCK_NAME)
+
+  const { data: account } = useAccount()
+  const memberId = account?.isLoggedIn ? account.userId : null
+  const { data: likes = [] } = useLikes(memberId)
+  const addLike = useAddLike(memberId)
+  const removeLike = useRemoveLike(memberId)
+  const watched = likes.some((l) => l.stockCode === ticker)
+  const toggleBookmark = () => {
+    if (memberId == null) return // 비로그인 시 무시(사이드바 로그인 유도)
+    if (watched) removeLike.mutate(ticker)
+    else addLike.mutate(ticker)
+  }
+
   const pastSnapshots = snapshotsByStock(STOCK_NAME)
   const judgmentCounts = {
     buy: pastSnapshots.filter((s) => s.judgment === 'buy').length,
@@ -32,6 +73,51 @@ export function StockDetailPage() {
   const maVisible = maOn.map((on) => on && showMA)
   const toggleMa = (i: number) =>
     setMaOn((prev) => prev.map((v, idx) => (idx === i ? !v : v)))
+
+  // ── 차트 데이터 (최근 1년) ──
+  const range = useMemo(
+    () => ({ from: toLocalDate(daysAgo(365)), to: toLocalDateTime() }),
+    [],
+  )
+  const { data: rawCandles } = useDailyCandles(ticker, range)
+  const { data: ma50 } = useMovingAverages(ticker, 'MA_50', range)
+  const { data: ma150 } = useMovingAverages(ticker, 'MA_150', range)
+  const { data: ma200 } = useMovingAverages(ticker, 'MA_200', range)
+  const { data: bases } = useBases(ticker, range)
+
+  const candles = useMemo(() => toCandles(rawCandles ?? []), [rawCandles])
+  const volume = useMemo(() => toVolume(rawCandles ?? []), [rawCandles])
+  const movingAverages = useMemo(
+    () => [
+      { color: MA_COLORS[0], data: toMaLine(ma50?.dataPoints ?? []) },
+      { color: MA_COLORS[1], data: toMaLine(ma150?.dataPoints ?? []) },
+      { color: MA_COLORS[2], data: toMaLine(ma200?.dataPoints ?? []) },
+    ],
+    [ma50, ma150, ma200],
+  )
+  const baseBoxes = useMemo(
+    () => toBaseBoxes(bases ?? [], candles),
+    [bases, candles],
+  )
+  const lastClose = candles.at(-1)?.close ?? null
+  const priceTags = useMemo(
+    () => (lastClose != null ? [{ price: lastClose, color: '#FF367C' }] : []),
+    [lastClose],
+  )
+  const visibleBars = Math.min(candles.length, 60)
+
+  // ── 인사이트 (8종) ──
+  const { data: regime } = useRegimeInsight(ticker)
+  const { data: maInsight } = useMovingAverageInsight(ticker)
+  const { data: momentum } = useMomentumInsight(ticker)
+  const { data: volumeInsight } = useVolumeInsight(ticker)
+  const { data: fip } = useFipInsight(ticker)
+  const { data: rs } = useRsInsight(ticker)
+  const { data: eps } = useEpsInsight(ticker)
+  const { data: baseStage } = useBaseStageInsight(ticker)
+
+  // 헤더 현재가: 인사이트 regime > 마지막 종가
+  const headerPrice = regime?.currentPrice ?? lastClose
 
   return (
     <main className="stock-detail">
@@ -45,16 +131,20 @@ export function StockDetailPage() {
           <div className="chartHead">
             <div>
               <h2>
-                SK하이닉스 <span className="code">| 003680</span>
+                종목 <span className="code">| {ticker}</span>
               </h2>
-              <div className="price">₩ 1,150,482</div>
+              <div className="price">
+                {headerPrice != null
+                  ? `₩ ${Math.round(headerPrice).toLocaleString()}`
+                  : '—'}
+              </div>
             </div>
             <button
               className="bookmark"
               type="button"
               aria-label={watched ? '관심 종목에서 제거' : '관심 종목에 추가'}
               aria-pressed={watched}
-              onClick={() => toggleWatch(STOCK_NAME)}
+              onClick={toggleBookmark}
             >
               <svg
                 width="28"
@@ -117,7 +207,22 @@ export function StockDetailPage() {
             </span>
           </div>
 
-          <StockChart showSR={showSR} maVisible={maVisible} />
+          {candles.length > 0 ? (
+            <StockChart
+              showSR={showSR}
+              maVisible={maVisible}
+              candles={candles}
+              volume={volume}
+              movingAverages={movingAverages}
+              baseBoxes={baseBoxes}
+              priceTags={priceTags}
+              visibleBars={visibleBars}
+            />
+          ) : (
+            <div className="chartArea flex items-center justify-center text-[13px] text-white/40">
+              차트 데이터를 불러오는 중…
+            </div>
+          )}
         </section>
 
         {/* Snapshot rail */}
@@ -156,7 +261,7 @@ export function StockDetailPage() {
               )}
             </div>
 
-            <Link to="/snapshots/new" className="recordBtn">
+            <Link to="/snapshots/new" search={{ ticker }} className="recordBtn">
               <svg
                 width="22"
                 height="22"
@@ -176,7 +281,17 @@ export function StockDetailPage() {
         </div>
       </div>
 
-      <ItemGrid stock={STOCK_NAME} />
+      <ItemGrid
+        stock={ticker}
+        regime={regime}
+        ma={maInsight}
+        momentum={momentum}
+        volume={volumeInsight}
+        fip={fip}
+        rs={rs}
+        eps={eps}
+        baseStage={baseStage}
+      />
     </main>
   )
 }

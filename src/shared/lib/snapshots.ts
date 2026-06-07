@@ -18,6 +18,56 @@ export const JUDGMENT_LABEL: Record<Judgment, string> = {
 export const REGIMES: Regime[] = ['start', 'prep', 'fail', 'drop', 'none']
 export const JUDGMENTS: Judgment[] = ['buy', 'sell', 'hold']
 
+// ─────────────── 백엔드 enum ↔ FE 키 매핑 ───────────────
+// 백엔드: StockRegime / SnapshotJudgment (com.momentum.domain)
+
+export type ServerRegime =
+  | 'BREAKOUT_SUCCESS'
+  | 'BREAKOUT_READY'
+  | 'BREAKOUT_FAILED'
+  | 'DOWNSIDE_BREAK'
+  | 'DIRECTION_UNDETERMINED'
+  | 'UNKNOWN'
+
+export type ServerJudgment = 'BUY' | 'SELL' | 'WATCH'
+
+const REGIME_FROM_SERVER: Record<ServerRegime, Regime> = {
+  BREAKOUT_SUCCESS: 'start',
+  BREAKOUT_READY: 'prep',
+  BREAKOUT_FAILED: 'fail',
+  DOWNSIDE_BREAK: 'drop',
+  DIRECTION_UNDETERMINED: 'none',
+  UNKNOWN: 'none',
+}
+
+const REGIME_TO_SERVER: Record<Regime, ServerRegime> = {
+  start: 'BREAKOUT_SUCCESS',
+  prep: 'BREAKOUT_READY',
+  fail: 'BREAKOUT_FAILED',
+  drop: 'DOWNSIDE_BREAK',
+  none: 'DIRECTION_UNDETERMINED',
+}
+
+const JUDGMENT_FROM_SERVER: Record<ServerJudgment, Judgment> = {
+  BUY: 'buy',
+  SELL: 'sell',
+  WATCH: 'hold',
+}
+
+const JUDGMENT_TO_SERVER: Record<Judgment, ServerJudgment> = {
+  buy: 'BUY',
+  sell: 'SELL',
+  hold: 'WATCH',
+}
+
+export const fromServerRegime = (r: ServerRegime): Regime =>
+  REGIME_FROM_SERVER[r]
+export const toServerRegime = (r: Regime): ServerRegime => REGIME_TO_SERVER[r]
+export const fromServerJudgment = (j: ServerJudgment): Judgment =>
+  JUDGMENT_FROM_SERVER[j]
+export const toServerJudgment = (j: Judgment): ServerJudgment =>
+  JUDGMENT_TO_SERVER[j]
+
 /** Regime pill text/border color. */
 export const REGIME_COLOR: Record<Regime, string> = {
   start: '#FF3636',

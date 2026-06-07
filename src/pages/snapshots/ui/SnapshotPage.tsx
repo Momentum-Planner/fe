@@ -1,8 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Check, ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react'
-import { useNavigate, useRouter } from '@tanstack/react-router'
+import { useNavigate, useRouter, useSearch } from '@tanstack/react-router'
 import { cn } from '@/shared/lib/cn'
 import { DateTimePicker } from '@/shared/ui/DateTimePicker'
+import { fromServerJudgment, toServerJudgment } from '@/shared/lib/snapshots'
+import {
+  useCreateSnapshot,
+  useSnapshotDetail,
+  useUpdateSnapshot,
+} from '@/entities/snapshot'
 import { SnapshotChart } from './SnapshotChart'
 import { pastSnapshots } from '../model/snapshotChart'
 import './snapshot.css'
@@ -52,6 +58,62 @@ export function SnapshotPage({ mode }: SnapshotPageProps) {
   // 오늘의 판단 — 매수/매도/관망 단일 선택
   const [judgment, setJudgment] = useState<Judgment>('buy')
 
+  // ── 백엔드 연동 ──
+  const search = useSearch({ strict: false })
+  const snapshotId = isEdit ? search.id : undefined
+  const { data: detail } = useSnapshotDetail(snapshotId)
+
+  // 회고 메모/판단 — edit 시 서버 값으로 prefill
+  const [retrospective, setRetrospective] = useState('')
+  useEffect(() => {
+    if (detail) {
+      setRetrospective(detail.retrospective)
+      setJudgment(fromServerJudgment(detail.judgment))
+    }
+  }, [detail])
+
+  const createSnapshot = useCreateSnapshot()
+  const updateSnapshot = useUpdateSnapshot()
+  const saving = createSnapshot.isPending || updateSnapshot.isPending
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const handleSubmit = () => {
+    setFormError(null)
+    if (isEdit) {
+      if (snapshotId == null) {
+        setFormError('잘못된 접근입니다. (snapshotId 없음)')
+        return
+      }
+      updateSnapshot.mutate(
+        {
+          snapshotId,
+          judgment: toServerJudgment(judgment),
+          // 상세에서 받은 참고 스냅샷을 보존(목업 체크박스는 실제 id가 아니므로 서버 값 유지)
+          referenceSnapshotIds: detail?.referenceSnapshotIds ?? [],
+          retrospective,
+        },
+        { onSuccess: () => navigate({ to: '/captures' }) },
+      )
+    } else {
+      const stockCode = search.ticker
+      if (!stockCode) {
+        setFormError(
+          '스냅샷을 생성하려면 종목 정보가 필요합니다. 종목 상세에서 진입해 주세요.',
+        )
+        return
+      }
+      createSnapshot.mutate(
+        {
+          stockCode,
+          judgment: toServerJudgment(judgment),
+          referenceSnapshotIds: [],
+          retrospective,
+        },
+        { onSuccess: () => navigate({ to: '/captures' }) },
+      )
+    }
+  }
+
   // 이전 회고 페이저 — 과거 스냅샷들을 넘겨봄
   const [noteIdx, setNoteIdx] = useState(0)
   const note = pastSnapshots[noteIdx]
@@ -80,7 +142,9 @@ export function SnapshotPage({ mode }: SnapshotPageProps) {
         </button>
         <span className="crumb">
           {isEdit ? '내 스냅샷' : '관심 종목'}
-          <span className="sep">›</span>SK하이닉스<span className="sep">›</span>
+          <span className="sep">›</span>
+          {detail?.stockName ?? 'SK하이닉스'}
+          <span className="sep">›</span>
           <span className="cur">
             {isEdit ? '2026.03.12 14:00 · 스냅샷 조회·수정' : '스냅샷 생성'}
           </span>
@@ -397,14 +461,28 @@ export function SnapshotPage({ mode }: SnapshotPageProps) {
             <textarea
               className="cjTextarea"
               placeholder={TEXTAREA_PLACEHOLDER}
+              value={retrospective}
+              onChange={(e) => setRetrospective(e.target.value)}
             />
+            {formError && (
+              <p
+                style={{
+                  color: 'var(--color-brand-red, #FF3636)',
+                  fontSize: 12,
+                  margin: '4px 0 0',
+                }}
+              >
+                {formError}
+              </p>
+            )}
             <div className="cjFooter">
               <button
                 className="recordBtn"
                 type="button"
-                onClick={() => navigate({ to: '/captures' })}
+                disabled={saving}
+                onClick={handleSubmit}
               >
-                {isEdit ? '수정 하기' : '스냅샷 생성하기'}
+                {saving ? '저장 중…' : isEdit ? '수정 하기' : '스냅샷 생성하기'}
               </button>
             </div>
           </div>

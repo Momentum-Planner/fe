@@ -7,6 +7,7 @@ import { MomentumCard } from './MomentumCard'
 import { StabilityCard } from './StabilityCard'
 import { RsCard } from './RsCard'
 import { RankingList } from './RankingList'
+import type { Regime } from '@/entities/ranking'
 
 /** 돌파 성공 — rising line with an arrowhead. */
 function BreakoutSuccessIcon() {
@@ -66,8 +67,15 @@ const tabs: UnderlineTab[] = [
   },
 ]
 
+/** 탭 id('success' | 'prep') → 백엔드 레짐('success' | 'ready') 매핑. */
+const TAB_TO_REGIME: Record<string, Regime> = {
+  success: 'success',
+  prep: 'ready',
+}
+
 export function TrendsPage() {
   const [activeTab, setActiveTab] = useState('success')
+  const regime = TAB_TO_REGIME[activeTab] ?? 'success'
 
   return (
     <main className="flex flex-col gap-4 pt-9 pr-6 pb-6 pl-2">
@@ -86,7 +94,7 @@ export function TrendsPage() {
           </div>
         </div>
         <div className="flex">
-          <RankingList />
+          <RankingList regime={regime} />
         </div>
       </div>
     </main>

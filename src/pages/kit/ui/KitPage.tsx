@@ -176,8 +176,8 @@ export function KitPage() {
             <StabilityItemCard />
             <RsItemCard />
             <EpsCard />
-            <BaseStageCard stage="early" />
-            <BaseStageCard stage="late" />
+            <BaseStageCard b={{ stageLevel: 2 }} />
+            <BaseStageCard b={{ stageLevel: 3 }} />
           </div>
         </div>
       </Section>

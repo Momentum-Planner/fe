@@ -1,14 +1,22 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
+import { ApiError } from '@/shared/api'
+import {
+  useFindEmail,
+  useFindPassword,
+  useLogin,
+  useRegister,
+} from '@/entities/auth'
 
 /**
  * AuthModal — popup dialog with 4 screens (로그인 / 회원가입 / 이메일 찾기 /
- * 비밀번호 찾기) over a translucent scrim. Ported from the design's AuthModal.jsx.
+ * 비밀번호 찾기) over a translucent scrim. 실제 인증 API에 연결되어 있다.
  */
 
 type ScreenKey = 'login' | 'register' | 'find_email' | 'find_pw'
 
 type FieldSpec = {
+  name: string
   label: string
   placeholder: string
   type?: string
@@ -46,7 +54,14 @@ const EyeOn = () => (
   </svg>
 )
 
-function AuthField({ label, required, placeholder, type = 'text' }: FieldSpec) {
+function AuthField({
+  label,
+  required,
+  placeholder,
+  type = 'text',
+  value,
+  onChange,
+}: FieldSpec & { value: string; onChange: (v: string) => void }) {
   const [shown, setShown] = useState(false)
   const isSecret = type === 'password'
   return (
@@ -60,6 +75,8 @@ function AuthField({ label, required, placeholder, type = 'text' }: FieldSpec) {
           type={isSecret && !shown ? 'password' : 'text'}
           placeholder={placeholder}
           style={authStyles.input}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
         />
         {isSecret && (
           <button
@@ -83,8 +100,14 @@ const SCREENS: Record<
   login: {
     title: '로그인',
     fields: [
-      { label: '이메일', placeholder: '이메일을 입력하세요', type: 'email' },
       {
+        name: 'email',
+        label: '이메일',
+        placeholder: '이메일을 입력하세요',
+        type: 'email',
+      },
+      {
+        name: 'password',
         label: '비밀번호',
         placeholder: '비밀번호를 입력하세요',
         type: 'password',
@@ -95,33 +118,58 @@ const SCREENS: Record<
   register: {
     title: '회원가입',
     fields: [
-      { label: '이메일', placeholder: 'ooo을 입력하세요', type: 'email' },
-      { label: '비밀번호', placeholder: 'ooo을 입력하세요', type: 'password' },
       {
-        label: '비밀번호 확인',
-        required: true,
-        placeholder: 'ooo을 입력하세요',
+        name: 'email',
+        label: '이메일',
+        placeholder: '이메일을 입력하세요',
+        type: 'email',
+      },
+      {
+        name: 'password',
+        label: '비밀번호',
+        placeholder: '비밀번호를 입력하세요',
         type: 'password',
       },
-      { label: '이름', placeholder: 'ooo을 입력하세요' },
-      { label: '전화번호', placeholder: 'ooo을 입력하세요', type: 'tel' },
+      {
+        name: 'passwordConfirm',
+        label: '비밀번호 확인',
+        required: true,
+        placeholder: '비밀번호를 다시 입력하세요',
+        type: 'password',
+      },
+      { name: 'name', label: '이름', placeholder: '이름을 입력하세요' },
+      {
+        name: 'phoneNumber',
+        label: '전화번호',
+        placeholder: '전화번호를 입력하세요',
+        type: 'tel',
+      },
     ],
     submit: '회원가입 완료 및 로그인',
   },
   find_email: {
     title: '이메일 찾기',
     fields: [
-      { label: '전화번호', placeholder: 'ooo을 입력하세요', type: 'tel' },
-      { label: '이름', placeholder: 'ooo을 입력하세요' },
+      {
+        name: 'phoneNumber',
+        label: '전화번호',
+        placeholder: '전화번호를 입력하세요',
+        type: 'tel',
+      },
+      { name: 'name', label: '이름', placeholder: '이름을 입력하세요' },
     ],
     submit: '이메일 확인',
   },
   find_pw: {
     title: '비밀번호 찾기',
     fields: [
-      { label: '이메일', placeholder: 'ooo을 입력하세요', type: 'email' },
-      { label: '이름', placeholder: 'ooo을 입력하세요' },
-      { label: '전화번호', placeholder: '전화번호', type: 'tel' },
+      {
+        name: 'email',
+        label: '이메일',
+        placeholder: '이메일을 입력하세요',
+        type: 'email',
+      },
+      { name: 'name', label: '이름', placeholder: '이름을 입력하세요' },
     ],
     submit: '비밀번호 발송',
   },
@@ -133,15 +181,91 @@ type AuthModalProps = {
   onClose?: () => void
 }
 
+function errorMessage(err: unknown): string {
+  if (err instanceof ApiError) return err.message
+  return '요청에 실패했습니다. 잠시 후 다시 시도해 주세요.'
+}
+
 export function AuthModal({
   open = true,
   initial = 'login',
   onClose = () => {},
 }: AuthModalProps) {
   const [screen, setScreen] = useState<ScreenKey>(initial)
+  const [form, setForm] = useState<Record<string, string | undefined>>({})
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const login = useLogin()
+  const register = useRegister()
+  const findEmail = useFindEmail()
+  const findPassword = useFindPassword()
+
+  // 화면 전환 시 입력/메시지 초기화
+  useEffect(() => {
+    setForm({})
+    setNotice(null)
+    login.reset()
+    register.reset()
+    findEmail.reset()
+    findPassword.reset()
+  }, [screen])
+
   if (!open) return null
   const s = SCREENS[screen]
   const isLogin = screen === 'login'
+  const set = (name: string) => (v: string) =>
+    setForm((prev) => ({ ...prev, [name]: v }))
+
+  const pending =
+    login.isPending ||
+    register.isPending ||
+    findEmail.isPending ||
+    findPassword.isPending
+
+  const error =
+    (login.error && errorMessage(login.error)) ||
+    (register.error && errorMessage(register.error)) ||
+    (findEmail.error && errorMessage(findEmail.error)) ||
+    (findPassword.error && errorMessage(findPassword.error)) ||
+    null
+
+  const submit = () => {
+    setNotice(null)
+    const f = form
+    if (screen === 'login') {
+      login.mutate(
+        { email: f.email ?? '', password: f.password ?? '' },
+        { onSuccess: onClose },
+      )
+    } else if (screen === 'register') {
+      if ((f.password ?? '') !== (f.passwordConfirm ?? '')) {
+        setNotice('비밀번호가 일치하지 않습니다.')
+        return
+      }
+      register.mutate(
+        {
+          email: f.email ?? '',
+          password: f.password ?? '',
+          name: f.name ?? '',
+          phoneNumber: f.phoneNumber ?? '',
+        },
+        { onSuccess: onClose },
+      )
+    } else if (screen === 'find_email') {
+      findEmail.mutate(
+        { phoneNumber: f.phoneNumber ?? '', name: f.name ?? '' },
+        { onSuccess: (res) => setNotice(`가입된 이메일: ${res.email}`) },
+      )
+    } else {
+      findPassword.mutate(
+        { email: f.email ?? '', name: f.name ?? '' },
+        {
+          onSuccess: () =>
+            setNotice('임시 비밀번호를 안내했습니다. 이메일을 확인해 주세요.'),
+        },
+      )
+    }
+  }
 
   return (
     <div style={authStyles.scrim} onClick={onClose}>
@@ -188,16 +312,25 @@ export function AuthModal({
           )}
         </div>
 
-        {s.fields.map((f, i) => (
-          <AuthField key={screen + i} {...f} />
+        {s.fields.map((f) => (
+          <AuthField
+            key={screen + f.name}
+            {...f}
+            value={form[f.name] ?? ''}
+            onChange={set(f.name)}
+          />
         ))}
+
+        {notice && <div style={authStyles.notice}>{notice}</div>}
+        {error && <div style={authStyles.error}>{error}</div>}
 
         <button
           type="button"
-          style={authStyles.submit}
-          onMouseDown={(e) => e.preventDefault()}
+          style={{ ...authStyles.submit, opacity: pending ? 0.6 : 1 }}
+          disabled={pending}
+          onClick={submit}
         >
-          {s.submit}
+          {pending ? '처리 중…' : s.submit}
         </button>
 
         {isLogin ? (
@@ -313,6 +446,18 @@ const authStyles: Record<string, CSSProperties> = {
     cursor: 'pointer',
     color: 'rgba(255,255,255,0.55)',
     display: 'flex',
+  },
+  notice: {
+    fontSize: 13,
+    color: '#8C7CFF',
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  error: {
+    fontSize: 13,
+    color: 'var(--color-brand-red)',
+    marginTop: 4,
+    marginBottom: 4,
   },
   submit: {
     width: '100%',

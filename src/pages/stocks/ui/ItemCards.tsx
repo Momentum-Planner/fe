@@ -4,10 +4,38 @@
  * (scoped per card via .sdCard--<type>).
  */
 import { RegimeItemCard } from '@/shared/ui/RegimeItemCard'
+import { fromServerRegime } from '@/shared/lib/snapshots'
+import type {
+  BaseStageInsight,
+  EpsInsight,
+  FrogInPanInsight,
+  MomentumInsight,
+  MovingAverageInsight,
+  RegimeInsight,
+  RsInsight,
+  VolumeInsight,
+} from '@/entities/stock'
 import './stock-detail.css'
 
+// ─────────── 표시 헬퍼 ───────────
+const DASH = '—'
+const won = (v?: number | null) =>
+  v == null ? DASH : `₩ ${Math.round(v).toLocaleString()}`
+const signedPct = (v?: number | null) =>
+  v == null ? DASH : `${v > 0 ? '+' : ''}${Number(v.toFixed(1))}`
+const rankPct = (v?: number | null) => (v == null ? DASH : `${Math.round(v)}%`)
+/** 1e6 단위 약식 (예: 39_000_000 → 39M) */
+const millions = (v?: number | null) =>
+  v == null ? DASH : `${Math.round(v / 1_000_000)}M`
+const yymmdd = (iso?: string) => (iso ? iso.slice(2).replace(/-/g, '.') : DASH)
+
 /* 2 · 이동평균선 */
-export function MovelineCard() {
+export function MovelineCard({ ma }: { ma?: MovingAverageInsight }) {
+  const aboveCount = ma
+    ? [ma.isAboveMa50, ma.isMa50AboveMa150, ma.isMa150AboveMa200].filter(
+        Boolean,
+      ).length
+    : null
   return (
     <article className="sdCard sdCard--moveline">
       <div className="title">이동평균선 (vs 현재가)</div>
@@ -138,7 +166,7 @@ export function MovelineCard() {
         <div className="ratio">
           <span className="ratioLabel">현재가 &gt; 이동평균선</span>
           <span className="stat">
-            <span className="a">3</span>
+            <span className="a">{aboveCount ?? DASH}</span>
             <span className="slash">/</span>
             <span className="b">3</span>
           </span>
@@ -158,7 +186,7 @@ export function MovelineCard() {
 }
 
 /* 3 · 1년 모멘텀 */
-export function MomentumItemCard() {
+export function MomentumItemCard({ m }: { m?: MomentumInsight }) {
   return (
     <article className="sdCard sdCard--metric">
       <div className="title">1년 모멘텀</div>
@@ -166,23 +194,24 @@ export function MomentumItemCard() {
       <div className="body">
         <div>
           <div className="priceRow">
-            <span className="pillOut">₩ 52,000</span>
+            <span className="pillOut">{won(m?.yearAgoPrice)}</span>
             <span className="arrow" />
-            <span className="pillRed">₩ 67,000</span>
+            <span className="pillRed">{won(m?.currentPrice)}</span>
           </div>
           <div className="dateRow">
-            <span>25.03.13</span>
-            <span>26.03.14</span>
+            <span>{yymmdd(m?.yearAgoDate)}</span>
+            <span>{yymmdd(m?.currentDate)}</span>
           </div>
         </div>
         <div className="stat">
-          +28.4<span className="pct">%</span>
+          {signedPct(m?.yearlyPriceChangeRate)}
+          <span className="pct">%</span>
         </div>
       </div>
       <div className="foot">
-        <span className="desc">완만한 상승 흐름을 보입니다.</span>
+        <span className="desc">약 1년간의 가격 변화율입니다.</span>
         <span className="rank">
-          해당 기간 중 상위<b>12%</b>
+          해당 기간 중 상위<b>{rankPct(m?.percentileRank)}</b>
         </span>
       </div>
     </article>
@@ -190,7 +219,7 @@ export function MomentumItemCard() {
 }
 
 /* 4 · 현재 거래량 */
-export function VolumeCard() {
+export function VolumeCard({ v }: { v?: VolumeInsight }) {
   return (
     <article className="sdCard sdCard--volume">
       <div className="title">현재 거래량</div>
@@ -231,18 +260,23 @@ export function VolumeCard() {
         <div className="stats">
           <div className="row1">
             <span className="label">베이스 평균</span>
-            <span className="num gold">32M</span>
+            <span className="num gold">{millions(v?.baselineAvgVolume)}</span>
           </div>
           <div className="row2">
             <span className="label">현재</span>
-            <span className="num red">39M</span>
+            <span className="num red">{millions(v?.currentVolume)}</span>
           </div>
         </div>
       </div>
       <div className="foot">
-        <span className="desc">거래량이 가격 움직임을 뒷받침합니다.</span>
+        <span className="desc">베이스 평균 대비 현재 거래량입니다.</span>
         <span className="ratio">
-          현재 베이스 대비<b>1.12배</b>
+          현재 베이스 대비
+          <b>
+            {v?.volumeToBaselineRatio == null
+              ? DASH
+              : `${Number(v.volumeToBaselineRatio.toFixed(2))}배`}
+          </b>
         </span>
       </div>
     </article>
@@ -250,7 +284,7 @@ export function VolumeCard() {
 }
 
 /* 5 · 흐름안정도 */
-export function StabilityItemCard() {
+export function StabilityItemCard({ f }: { f?: FrogInPanInsight }) {
   return (
     <article className="sdCard sdCard--metric">
       <div className="title">흐름안정도</div>
@@ -285,7 +319,7 @@ export function StabilityItemCard() {
             fontSize="18"
             fill="#FF3636"
           >
-            180
+            {f?.yearlyUpDays ?? DASH}
           </text>
           <text
             x="42"
@@ -306,7 +340,7 @@ export function StabilityItemCard() {
             fontSize="18"
             fill="#34ADE4"
           >
-            72
+            {f?.yearlyDownDays ?? DASH}
           </text>
           <text
             x="202"
@@ -319,14 +353,16 @@ export function StabilityItemCard() {
             하락 일 수
           </text>
         </svg>
-        <div className="stat">0.43</div>
+        <div className="stat">
+          {f?.fipScore == null ? DASH : Number(f.fipScore.toFixed(2))}
+        </div>
       </div>
       <div className="foot">
         <span className="desc">
-          1년간, 상승일 비중이 높아 상승 흐름이 비교적 일관됩니다.
+          상승일/하락일 비중으로 본 흐름 안정도입니다.
         </span>
         <span className="rank">
-          해당 기간 중 상위<b>12%</b>
+          해당 기간 중 상위<b>{rankPct(f?.percentileRank)}</b>
         </span>
       </div>
     </article>
@@ -334,7 +370,13 @@ export function StabilityItemCard() {
 }
 
 /* 6 · RS */
-export function RsItemCard({ stock = 'SK하이닉스' }: { stock?: string } = {}) {
+export function RsItemCard({
+  stock = 'SK하이닉스',
+  rs,
+}: {
+  stock?: string
+  rs?: RsInsight
+} = {}) {
   return (
     <article className="sdCard sdCard--metric">
       <div className="title">RS</div>
@@ -390,13 +432,14 @@ export function RsItemCard({ stock = 'SK하이닉스' }: { stock?: string } = {}
           </div>
         </div>
         <div className="stat">
-          +12<span className="pct">%</span>
+          {signedPct(rs?.rsValue)}
+          <span className="pct">%</span>
         </div>
       </div>
       <div className="foot">
-        <span className="desc">KOSPI를 일관되게 상회하고 있습니다.</span>
+        <span className="desc">KOSPI 대비 상대강도(RS)입니다.</span>
         <span className="rank">
-          해당 기간 중 상위<b>8%</b>
+          해당 기간 중 상위<b>{rankPct(rs?.percentileRank)}</b>
         </span>
       </div>
     </article>
@@ -404,7 +447,7 @@ export function RsItemCard({ stock = 'SK하이닉스' }: { stock?: string } = {}
 }
 
 /* 7 · EPS */
-export function EpsCard() {
+export function EpsCard({ e }: { e?: EpsInsight }) {
   return (
     <article className="sdCard sdCard--metric">
       <div className="title">EPS</div>
@@ -476,13 +519,14 @@ export function EpsCard() {
           </g>
         </svg>
         <div className="stat">
-          +50.3<span className="pct">%</span>
+          {signedPct(e?.changeRateYoY)}
+          <span className="pct">%</span>
         </div>
       </div>
       <div className="foot">
-        <span className="desc">EPS가 안정적인 상승세를 보입니다.</span>
+        <span className="desc">전년 동기 대비 EPS 변화율입니다.</span>
         <span className="rank">
-          해당 기간 중 상위<b>36%</b>
+          해당 기간 중 상위<b>{rankPct(e?.percentileRank)}</b>
         </span>
       </div>
     </article>
@@ -490,12 +534,8 @@ export function EpsCard() {
 }
 
 /* 8 · 베이스 단계 */
-export function BaseStageCard({
-  stage = 'early',
-}: {
-  stage?: 'early' | 'late'
-} = {}) {
-  const late = stage === 'late'
+export function BaseStageCard({ b }: { b?: BaseStageInsight | null } = {}) {
+  const late = (b?.stageLevel ?? 0) >= 3
   return (
     <article className="sdCard sdCard--base">
       <div className="titleRow">
@@ -905,7 +945,7 @@ export function BaseStageCard({
         </div>
         <div className="right">
           <span className={late ? 'stage red' : 'stage yellow'}>
-            {late ? '3단계' : '2단계'}
+            {b?.stageLevel != null ? `${b.stageLevel}단계` : DASH}
           </span>
         </div>
       </div>
@@ -916,17 +956,39 @@ export function BaseStageCard({
   )
 }
 
-export function ItemGrid({ stock = 'SK하이닉스' }: { stock?: string } = {}) {
+type ItemGridProps = {
+  stock?: string
+  regime?: RegimeInsight
+  ma?: MovingAverageInsight
+  momentum?: MomentumInsight
+  volume?: VolumeInsight
+  fip?: FrogInPanInsight
+  rs?: RsInsight
+  eps?: EpsInsight
+  baseStage?: BaseStageInsight | null
+}
+
+export function ItemGrid({
+  stock = 'SK하이닉스',
+  regime,
+  ma,
+  momentum,
+  volume,
+  fip,
+  rs,
+  eps,
+  baseStage,
+}: ItemGridProps = {}) {
   return (
     <div className="itemGrid">
-      <RegimeItemCard regime="start" />
-      <MovelineCard />
-      <MomentumItemCard />
-      <VolumeCard />
-      <StabilityItemCard />
-      <RsItemCard stock={stock} />
-      <EpsCard />
-      <BaseStageCard />
+      <RegimeItemCard regime={fromServerRegime(regime?.regime ?? 'UNKNOWN')} />
+      <MovelineCard ma={ma} />
+      <MomentumItemCard m={momentum} />
+      <VolumeCard v={volume} />
+      <StabilityItemCard f={fip} />
+      <RsItemCard stock={stock} rs={rs} />
+      <EpsCard e={eps} />
+      <BaseStageCard b={baseStage} />
     </div>
   )
 }
