@@ -1,0 +1,155 @@
+/* ──────────────────────────────────────────────────────────────────
+   주식 레짐 아이템 카드 (돌파성공/준비/실패/하방이탈/방향미정).
+   Ported from design preview/regime-*.html. Self-contained (.ri root) so it
+   works both in the stock-detail item grid and the component kit.
+   ────────────────────────────────────────────────────────────────── */
+
+.ri {
+  width: 534px;
+  height: 230px;
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 16px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+  box-sizing: border-box;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.ri:hover {
+  transform: scale(1.02);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+.ri * {
+  box-sizing: border-box;
+}
+.ri .titleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ri .titleRow .icon svg {
+  display: block;
+  overflow: visible;
+}
+.ri .title {
+  font-size: var(--ic-title);
+  font-weight: 700;
+}
+.ri .title.red {
+  color: #ff3636;
+}
+.ri .title.blue {
+  color: #34ade4;
+}
+.ri .title.orange {
+  color: #f46b1a;
+}
+.ri .title.violet {
+  color: #7b6cff;
+}
+.ri .title.grey {
+  color: rgba(255, 255, 255, 0.55);
+}
+.ri .sub {
+  font-size: var(--ic-sub);
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+.ri .sub::before {
+  content: '· ';
+}
+.ri .body {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 24px;
+  align-items: center;
+  flex: 1;
+}
+.ri .chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 130px;
+}
+.ri .pillCol {
+  display: flex;
+  flex-direction: column;
+}
+.ri .pRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: var(--ic-value);
+}
+.ri .pRow:last-child {
+  border-bottom: none;
+}
+.ri .pRow .lhs {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--ic-value);
+  font-weight: 600;
+  color: #fff;
+}
+.ri .pRow .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 99px;
+}
+.ri .pRow .val {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+  font-size: var(--ic-value);
+  color: #fff;
+}
+.ri .dot.today-red {
+  background: #ff3636;
+}
+.ri .dot.today-blue {
+  background: #34ade4;
+}
+.ri .dot.resist {
+  background: #806015;
+}
+.ri .dot.support {
+  background: #eeb82d;
+}
+.ri .dot.grey {
+  background: rgba(255, 255, 255, 0.3);
+}
+.ri .pRow.grey .lhs {
+  color: rgba(255, 255, 255, 0.55);
+}
+.ri .pRow.grey .val {
+  color: rgba(255, 255, 255, 0.4);
+}
+.ri .foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.ri .desc {
+  font-size: var(--ic-foot);
+  color: rgba(255, 255, 255, 0.7);
+}
+.ri .pct {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 700;
+  font-size: var(--ic-foot-strong);
+  letter-spacing: -0.01em;
+}
+.ri .pct.red {
+  color: #ff3636;
+}
+.ri .pct.blue {
+  color: #34ade4;
+}

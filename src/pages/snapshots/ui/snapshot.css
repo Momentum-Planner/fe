@@ -1,0 +1,887 @@
+/* ──────────────────────────────────────────────────────────────────
+   스냅샷 생성 / 조회·수정 — page-scoped styles ported from the design.
+   All selectors are scoped under .snapshot-page to avoid colliding with
+   the app's Tailwind utilities (.card, .tag, .pill, .chip …).
+   ────────────────────────────────────────────────────────────────── */
+
+.snapshot-page {
+  min-height: 100vh;
+  background: var(--color-bg-page);
+  color: #fff;
+  font-family: var(--font-text);
+  box-sizing: border-box;
+}
+.snapshot-page * {
+  box-sizing: border-box;
+}
+
+/* ── Top bar ─────────────────────────────── */
+.snapshot-page .topbar {
+  padding: 24px 32px 12px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.snapshot-page .back {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+}
+.snapshot-page .crumb {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 500;
+}
+.snapshot-page .crumb .sep {
+  margin: 0 8px;
+  color: rgba(255, 255, 255, 0.3);
+}
+.snapshot-page .crumb .cur {
+  color: #fff;
+}
+
+.snapshot-page .layout {
+  padding: 0 32px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── Stock header (merged into chart card) ─── */
+.snapshot-page .stockHead {
+  padding: 4px 4px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.snapshot-page .stockLeft {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.snapshot-page .stockName {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.snapshot-page .stockName .code {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: 'DM Sans', sans-serif;
+}
+.snapshot-page .stockPrice {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 30px;
+  font-weight: 700;
+  color: #ff3636;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.snapshot-page .stockChg {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: #ff3636;
+}
+.snapshot-page .stockChg .chgPct {
+  padding: 3px 9px;
+  border-radius: 99px;
+  background: rgba(255, 54, 54, 0.15);
+  border: 1px solid rgba(255, 54, 54, 0.4);
+  margin-left: 6px;
+}
+.snapshot-page .stockRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.snapshot-page .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+  font-size: 13px;
+}
+.snapshot-page .seg {
+  display: inline-flex;
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 99px;
+}
+.snapshot-page .seg button {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 99px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.snapshot-page .seg button.on {
+  background: rgba(124, 71, 255, 0.25);
+  box-shadow: inset 0 0 0 1px rgba(123, 108, 255, 0.6);
+  color: #fff;
+}
+
+/* ── Big chart card (incl. stock header) ───── */
+.snapshot-page .chartCard {
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 16px;
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 680px;
+}
+.snapshot-page .chartTopRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 18px;
+}
+.snapshot-page .chartTitle {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.snapshot-page .chartTitle .badge {
+  padding: 3px 10px;
+  border-radius: 99px;
+  background: rgba(255, 54, 124, 0.15);
+  color: #ff6678;
+  border: 1px solid #ff367c;
+  font-size: 11px;
+  font-weight: 700;
+}
+.snapshot-page .chartTitle .span {
+  color: rgba(255, 255, 255, 0.55);
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+  font-size: 13px;
+}
+.snapshot-page .chartCtl {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: 13px;
+}
+.snapshot-page .period {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #fff;
+}
+.snapshot-page .period select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #fff;
+  font-family: inherit;
+  padding: 5px 26px 5px 10px;
+  font-size: 13px;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+.snapshot-page .toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  line-height: 1.1;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+}
+.snapshot-page .toggle.yellow {
+  color: #eeb82d;
+}
+.snapshot-page .toggle.green {
+  color: #2bdca0;
+}
+.snapshot-page .switch {
+  width: 38px;
+  height: 20px;
+  border-radius: 99px;
+  position: relative;
+  flex-shrink: 0;
+  transition: background 0.18s ease;
+}
+.snapshot-page .switch.yellow {
+  background: #eeb82d;
+}
+.snapshot-page .switch.green {
+  background: #2bdca0;
+}
+.snapshot-page .thumb {
+  position: absolute;
+  top: 2px;
+  left: 20px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  transition:
+    left 0.18s ease,
+    background 0.18s ease;
+}
+.snapshot-page .switch.yellow .thumb {
+  background: #a07922;
+}
+.snapshot-page .switch.green .thumb {
+  background: #1e8966;
+}
+.snapshot-page .switch.off {
+  background: rgba(255, 255, 255, 0.15);
+}
+.snapshot-page .switch.off .thumb {
+  left: 2px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* ── 실시간 재생/일시정지 버튼 ── */
+.snapshot-page .liveBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  border-radius: 99px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.55);
+  font-family: var(--font-text);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background 0.15s;
+}
+.snapshot-page .liveBtn svg {
+  display: block;
+}
+.snapshot-page .liveBtn.on svg {
+  animation: liveBlink 1.2s ease-in-out infinite;
+}
+@keyframes liveBlink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.snapshot-page .liveBtn.on {
+  color: #ff6b6b;
+  border-color: rgba(255, 54, 54, 0.75);
+  background: rgba(255, 54, 54, 0.26);
+  animation: liveGlow 1.8s ease-in-out infinite;
+}
+@keyframes liveGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 54, 54, 0);
+  }
+  50% {
+    box-shadow: 0 0 12px 0 rgba(255, 54, 54, 0.5);
+  }
+}
+
+/* ── MA legend chips ─── */
+.snapshot-page .maLegend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.snapshot-page .maChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 99px;
+  border: none;
+  background: transparent;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 600;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    color 0.15s,
+    background 0.15s;
+}
+.snapshot-page .maChip .maDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.25);
+  flex-shrink: 0;
+}
+.snapshot-page .maChip.on {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+}
+.snapshot-page .maChip.on.green1 .maDot {
+  background: #34de7b; /* 50일 — 초록 */
+  box-shadow: 0 0 6px #34de7b;
+}
+.snapshot-page .maChip.on.green2 .maDot {
+  background: #ff3636; /* 150일 — 빨강 */
+  box-shadow: 0 0 6px #ff3636;
+}
+.snapshot-page .maChip.on.green3 .maDot {
+  background: #f46b1a; /* 200일 — 주황 */
+  box-shadow: 0 0 6px #f46b1a;
+}
+
+.snapshot-page .chartArea {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+.snapshot-page .chartArea svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Compare panel (지표 디프) ──── */
+.snapshot-page .compare {
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 14px;
+  padding: 12px 18px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.snapshot-page .compareHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.75);
+  font-weight: 600;
+}
+.snapshot-page .compareHead .cnt {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 500;
+}
+.snapshot-page .compareHead .cnt b {
+  color: #ff6678;
+  font-weight: 700;
+}
+.snapshot-page .strip {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 10px;
+}
+.snapshot-page .chip {
+  background: rgba(255, 255, 255, 0.045);
+  border-radius: 11px;
+  padding: 13px clamp(11px, 1.1vw, 16px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.snapshot-page .chip .cLbl {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.snapshot-page .chip .cMain {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.snapshot-page .chip .cVal {
+  font-family: 'DM Sans', sans-serif;
+  font-size: clamp(16px, 1.25vw, 21px);
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.snapshot-page .chip .cVal.gold {
+  color: #eeb82d;
+}
+.snapshot-page .chip .cVal.regime {
+  font-family: var(--font-text);
+  font-size: clamp(14px, 1.05vw, 18px);
+  letter-spacing: -0.01em;
+}
+.snapshot-page .chip .cD {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.snapshot-page .chip .cD.up {
+  color: #ff6678;
+}
+.snapshot-page .chip .cD.gold {
+  color: #eeb82d;
+}
+.snapshot-page .chip .cD.flat {
+  color: rgba(255, 255, 255, 0.4);
+}
+.snapshot-page .chip .cD.tag {
+  color: #ff6678;
+  background: rgba(255, 54, 124, 0.16);
+  padding: 2px 8px;
+  border-radius: 99px;
+}
+.snapshot-page .chip .cFrom {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.38);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Bottom row: 3 columns ──── */
+.snapshot-page .bottom {
+  display: grid;
+  grid-template-columns: 300px 1fr 700px;
+  gap: 14px;
+}
+.snapshot-page .bCard {
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 14px;
+  padding: 16px 18px;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 300px;
+}
+.snapshot-page .bHead {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.75);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.snapshot-page .countChip {
+  padding: 1px 8px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(124, 108, 255, 0.18);
+  color: #b9b0ff;
+  border: 1px solid rgba(124, 108, 255, 0.4);
+  font-family: 'DM Sans', sans-serif;
+}
+
+/* Snapshots list */
+.snapshot-page .snapList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.snapshot-page .snapList::-webkit-scrollbar {
+  display: none;
+}
+.snapshot-page .snapItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  position: relative;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+}
+.snapshot-page .snapItem:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.snapshot-page .snapItem.active {
+  background: rgba(124, 71, 255, 0.12);
+  border-color: #7b6cff;
+}
+.snapshot-page .snapCheck {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.snapshot-page .snapItem.checked .snapCheck {
+  background: #7b6cff;
+}
+.snapshot-page .snapItem .snapCheck svg {
+  opacity: 0;
+}
+.snapshot-page .snapItem.checked .snapCheck svg {
+  opacity: 1;
+}
+.snapshot-page .snapMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+.snapshot-page .snapMeta .top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+}
+.snapshot-page .snapMeta .price {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  color: #fff;
+}
+.snapshot-page .snapMeta .delta-mini {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: auto;
+}
+.snapshot-page .snapMeta .delta-mini.up {
+  color: #ff6678;
+}
+.snapshot-page .snapMeta .delta-mini.down {
+  color: #34ade4;
+}
+.snapshot-page .tag {
+  padding: 2px 7px;
+  border-radius: 99px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-text);
+}
+/* Action color system: 매수=red · 매도=blue · 관망=yellow (신호등) */
+.snapshot-page .tag.buy {
+  background: rgba(255, 54, 54, 0.18);
+  color: #ff6678;
+  border: 1px solid #ff3636;
+}
+.snapshot-page .tag.sell {
+  background: rgba(52, 173, 228, 0.18);
+  color: #34ade4;
+  border: 1px solid #34ade4;
+}
+.snapshot-page .tag.hold {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+/* Past notes */
+.snapshot-page .noteMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 10px;
+}
+.snapshot-page .noteBody {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.65;
+  white-space: pre-line;
+  flex: 1;
+}
+.snapshot-page .noteFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+}
+.snapshot-page .noteFoot .nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.snapshot-page .noteFoot .navBtn {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Current judgment */
+.snapshot-page .cjHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.snapshot-page .cjTitle {
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.snapshot-page .cjTitle .nowDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff367c;
+  box-shadow: 0 0 8px #ff367c;
+}
+.snapshot-page .actBtns {
+  display: flex;
+  gap: 6px;
+}
+.snapshot-page .actBtn {
+  padding: 6px 18px;
+  border-radius: 99px;
+  font-size: 13px;
+  font-weight: 700;
+  background: transparent;
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  font-family: var(--font-text);
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background 0.15s;
+}
+.snapshot-page .actBtn.on.buy {
+  color: #ff6678;
+  border-color: #ff3636;
+  background: rgba(255, 54, 54, 0.18);
+}
+.snapshot-page .actBtn.on.sell {
+  color: #34ade4;
+  border-color: #34ade4;
+  background: rgba(52, 173, 228, 0.18);
+}
+.snapshot-page .actBtn.on.hold {
+  color: rgba(255, 255, 255, 0.85);
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.1);
+}
+.snapshot-page .refSection {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 14px;
+}
+.snapshot-page .refLabel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+}
+.snapshot-page .refLabel .count {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 11px;
+}
+.snapshot-page .refRow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  height: 38px;
+  align-items: center;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 0,
+    #000 calc(100% - 24px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    #000 0,
+    #000 calc(100% - 24px),
+    transparent 100%
+  );
+}
+.snapshot-page .refRow::-webkit-scrollbar {
+  display: none;
+}
+.snapshot-page .refChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 5px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+}
+.snapshot-page .refChip .pillSmall {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 10px;
+  color: #fff;
+  font-family: var(--font-text);
+  font-weight: 700;
+}
+.snapshot-page .refChip .x {
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  margin-left: 2px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  font: inherit;
+  line-height: 1;
+}
+.snapshot-page .refChip .x:hover {
+  color: #fff;
+}
+.snapshot-page .refEmpty {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+}
+.snapshot-page .refChip.add {
+  background: transparent;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.65);
+  cursor: pointer;
+}
+.snapshot-page .refChip.add:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+.snapshot-page .cjTextarea {
+  width: 100%;
+  height: 130px;
+  margin-top: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px 14px;
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  resize: none;
+  line-height: 1.55;
+}
+.snapshot-page .cjTextarea:focus {
+  outline: none;
+  border-color: rgba(124, 108, 255, 0.5);
+}
+.snapshot-page .cjTextarea::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+.snapshot-page .cjFooter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+.snapshot-page .draftBtn {
+  flex: 0 0 auto;
+  padding: 0 18px;
+  height: 42px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-family: var(--font-text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.snapshot-page .recordBtn {
+  flex: 1;
+  height: 42px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #366cff, #7936ff);
+  border: none;
+  color: #fff;
+  font-family: var(--font-text);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 0 18px rgba(121, 54, 255, 0.3);
+}
+
+/* edit-mode tweaks */
+.snapshot-page.mode-edit .cjTextarea {
+  height: 96px;
+  margin-top: 6px;
+}
+.snapshot-page.mode-edit .cjFooter {
+  margin-top: 8px;
+}

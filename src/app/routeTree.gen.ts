@@ -10,14 +10,24 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TrendsRouteImport } from './routes/trends'
+import { Route as SearchRouteImport } from './routes/search'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as MarketRouteImport } from './routes/market'
+import { Route as KitRouteImport } from './routes/kit'
 import { Route as CapturesRouteImport } from './routes/captures'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as StocksTickerRouteImport } from './routes/stocks.$ticker'
+import { Route as SnapshotsNewRouteImport } from './routes/snapshots.new'
+import { Route as SnapshotsEditRouteImport } from './routes/snapshots.edit'
 
 const TrendsRoute = TrendsRouteImport.update({
   id: '/trends',
   path: '/trends',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SearchRoute = SearchRouteImport.update({
+  id: '/search',
+  path: '/search',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProfileRoute = ProfileRouteImport.update({
@@ -30,6 +40,11 @@ const MarketRoute = MarketRouteImport.update({
   path: '/market',
   getParentRoute: () => rootRouteImport,
 } as any)
+const KitRoute = KitRouteImport.update({
+  id: '/kit',
+  path: '/kit',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CapturesRoute = CapturesRouteImport.update({
   id: '/captures',
   path: '/captures',
@@ -40,43 +55,109 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StocksTickerRoute = StocksTickerRouteImport.update({
+  id: '/stocks/$ticker',
+  path: '/stocks/$ticker',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SnapshotsNewRoute = SnapshotsNewRouteImport.update({
+  id: '/snapshots/new',
+  path: '/snapshots/new',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SnapshotsEditRoute = SnapshotsEditRouteImport.update({
+  id: '/snapshots/edit',
+  path: '/snapshots/edit',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/captures': typeof CapturesRoute
+  '/kit': typeof KitRoute
   '/market': typeof MarketRoute
   '/profile': typeof ProfileRoute
+  '/search': typeof SearchRoute
   '/trends': typeof TrendsRoute
+  '/snapshots/edit': typeof SnapshotsEditRoute
+  '/snapshots/new': typeof SnapshotsNewRoute
+  '/stocks/$ticker': typeof StocksTickerRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/captures': typeof CapturesRoute
+  '/kit': typeof KitRoute
   '/market': typeof MarketRoute
   '/profile': typeof ProfileRoute
+  '/search': typeof SearchRoute
   '/trends': typeof TrendsRoute
+  '/snapshots/edit': typeof SnapshotsEditRoute
+  '/snapshots/new': typeof SnapshotsNewRoute
+  '/stocks/$ticker': typeof StocksTickerRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/captures': typeof CapturesRoute
+  '/kit': typeof KitRoute
   '/market': typeof MarketRoute
   '/profile': typeof ProfileRoute
+  '/search': typeof SearchRoute
   '/trends': typeof TrendsRoute
+  '/snapshots/edit': typeof SnapshotsEditRoute
+  '/snapshots/new': typeof SnapshotsNewRoute
+  '/stocks/$ticker': typeof StocksTickerRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/captures' | '/market' | '/profile' | '/trends'
+  fullPaths:
+    | '/'
+    | '/captures'
+    | '/kit'
+    | '/market'
+    | '/profile'
+    | '/search'
+    | '/trends'
+    | '/snapshots/edit'
+    | '/snapshots/new'
+    | '/stocks/$ticker'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/captures' | '/market' | '/profile' | '/trends'
-  id: '__root__' | '/' | '/captures' | '/market' | '/profile' | '/trends'
+  to:
+    | '/'
+    | '/captures'
+    | '/kit'
+    | '/market'
+    | '/profile'
+    | '/search'
+    | '/trends'
+    | '/snapshots/edit'
+    | '/snapshots/new'
+    | '/stocks/$ticker'
+  id:
+    | '__root__'
+    | '/'
+    | '/captures'
+    | '/kit'
+    | '/market'
+    | '/profile'
+    | '/search'
+    | '/trends'
+    | '/snapshots/edit'
+    | '/snapshots/new'
+    | '/stocks/$ticker'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CapturesRoute: typeof CapturesRoute
+  KitRoute: typeof KitRoute
   MarketRoute: typeof MarketRoute
   ProfileRoute: typeof ProfileRoute
+  SearchRoute: typeof SearchRoute
   TrendsRoute: typeof TrendsRoute
+  SnapshotsEditRoute: typeof SnapshotsEditRoute
+  SnapshotsNewRoute: typeof SnapshotsNewRoute
+  StocksTickerRoute: typeof StocksTickerRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -86,6 +167,13 @@ declare module '@tanstack/react-router' {
       path: '/trends'
       fullPath: '/trends'
       preLoaderRoute: typeof TrendsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/search': {
+      id: '/search'
+      path: '/search'
+      fullPath: '/search'
+      preLoaderRoute: typeof SearchRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/profile': {
@@ -102,6 +190,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MarketRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/kit': {
+      id: '/kit'
+      path: '/kit'
+      fullPath: '/kit'
+      preLoaderRoute: typeof KitRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/captures': {
       id: '/captures'
       path: '/captures'
@@ -116,15 +211,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/stocks/$ticker': {
+      id: '/stocks/$ticker'
+      path: '/stocks/$ticker'
+      fullPath: '/stocks/$ticker'
+      preLoaderRoute: typeof StocksTickerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/snapshots/new': {
+      id: '/snapshots/new'
+      path: '/snapshots/new'
+      fullPath: '/snapshots/new'
+      preLoaderRoute: typeof SnapshotsNewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/snapshots/edit': {
+      id: '/snapshots/edit'
+      path: '/snapshots/edit'
+      fullPath: '/snapshots/edit'
+      preLoaderRoute: typeof SnapshotsEditRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CapturesRoute: CapturesRoute,
+  KitRoute: KitRoute,
   MarketRoute: MarketRoute,
   ProfileRoute: ProfileRoute,
+  SearchRoute: SearchRoute,
   TrendsRoute: TrendsRoute,
+  SnapshotsEditRoute: SnapshotsEditRoute,
+  SnapshotsNewRoute: SnapshotsNewRoute,
+  StocksTickerRoute: StocksTickerRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
