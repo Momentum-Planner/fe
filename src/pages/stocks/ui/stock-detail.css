@@ -1,0 +1,863 @@
+/* ──────────────────────────────────────────────────────────────────
+   종목 상세 — page-scoped styles ported from the design (stock-detail.html
+   + preview/item-*.html). Scoped under .stock-detail so the design's
+   generic class names don't collide with the app's Tailwind utilities.
+   ────────────────────────────────────────────────────────────────── */
+
+.stock-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 36px 24px 24px 8px;
+  min-width: 0;
+  color: #fff;
+}
+.stock-detail * {
+  box-sizing: border-box;
+}
+
+.stock-detail .topbar {
+  display: grid;
+  grid-template-columns: 1080px 1fr;
+  gap: 16px;
+  align-items: center;
+}
+.stock-detail .content {
+  display: grid;
+  grid-template-columns: 1080px 532px;
+  gap: 16px;
+  align-items: flex-start;
+}
+.stock-detail .rail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Chart card (1080×800) ── */
+.stock-detail .chartCard {
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 16px;
+  padding: 22px 26px 16px;
+  width: 1080px;
+  height: 800px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.stock-detail .chartHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.stock-detail .chartHead h2 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.stock-detail .chartHead h2 .code {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.45);
+  font-family: 'DM Sans', sans-serif;
+}
+.stock-detail .chartHead .price {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-top: 6px;
+  color: #ff3636;
+}
+.stock-detail .bookmark {
+  background: transparent;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  padding: 6px;
+}
+
+.stock-detail .controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 24px;
+  font-size: 13px;
+}
+.stock-detail .period {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+}
+.stock-detail .period select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #fff;
+  font-family: inherit;
+  padding: 5px 28px 5px 10px;
+  font-size: 13px;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+.stock-detail .toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  line-height: 1.1;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+}
+.stock-detail .toggle.yellow {
+  color: #eeb82d;
+}
+.stock-detail .toggle.green {
+  color: #2bdca0;
+}
+.stock-detail .switch {
+  width: 44px;
+  height: 22px;
+  border-radius: 99px;
+  position: relative;
+  flex-shrink: 0;
+  transition: background 0.18s ease;
+}
+.stock-detail .switch.yellow {
+  background: #eeb82d;
+}
+.stock-detail .switch.green {
+  background: #2bdca0;
+}
+.stock-detail .switch .thumb {
+  position: absolute;
+  top: 3px;
+  left: 25px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  transition:
+    left 0.18s ease,
+    background 0.18s ease;
+}
+.stock-detail .switch.yellow .thumb {
+  background: #a07922;
+}
+.stock-detail .switch.green .thumb {
+  background: #1e8966;
+}
+.stock-detail .switch.off {
+  background: rgba(255, 255, 255, 0.15);
+}
+.stock-detail .switch.off .thumb {
+  left: 3px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* MA legend chips (inline, snapshot-page style) */
+.stock-detail .maLegend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.stock-detail .maChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 99px;
+  border: none;
+  background: transparent;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 600;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    color 0.15s,
+    background 0.15s;
+}
+.stock-detail .maChip .maDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.25);
+  flex-shrink: 0;
+}
+.stock-detail .maChip.on {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+}
+.stock-detail .maChip.on.green1 .maDot {
+  background: #34de7b;
+  box-shadow: 0 0 6px #34de7b;
+}
+.stock-detail .maChip.on.green2 .maDot {
+  background: #ff3636;
+  box-shadow: 0 0 6px #ff3636;
+}
+.stock-detail .maChip.on.green3 .maDot {
+  background: #f46b1a;
+  box-shadow: 0 0 6px #f46b1a;
+}
+
+.stock-detail .chartArea {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.stock-detail .chartArea svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Snapshot rail ── */
+.stock-detail .rrCard {
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 16px;
+  padding: 22px 24px;
+  width: 532px;
+}
+.stock-detail .rrCard.snap {
+  display: flex;
+  flex-direction: column;
+}
+.stock-detail .rrHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.stock-detail .rrTitle {
+  font-size: 22px;
+  font-weight: 700;
+}
+.stock-detail .rrDate {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+}
+.stock-detail .addBox {
+  margin-top: 16px;
+  height: 202px;
+  border-radius: 14px;
+  background: #2a2a2a;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #fff;
+  cursor: pointer;
+}
+.stock-detail .addBox .plus {
+  font-size: 80px;
+  font-weight: 300;
+  line-height: 1;
+}
+.stock-detail .addBox .lbl {
+  font-size: 20px;
+  font-weight: 600;
+}
+.stock-detail .recordBtn {
+  margin-top: 16px;
+  width: 100%;
+  height: 52px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #366cff, #7936ff);
+  border: none;
+  color: #fff;
+  font-family: var(--font-text);
+  font-size: 16px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  box-shadow: 0 0 24px rgba(121, 54, 255, 0.35);
+}
+.stock-detail .rrCard.snapRail {
+  height: 800px;
+  display: flex;
+  flex-direction: column;
+}
+.stock-detail .pastList {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+.stock-detail .pastHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.stock-detail .pastHeadRight {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.stock-detail .recordMini {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  border-radius: 99px;
+  font-family: var(--font-text);
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  text-decoration: none;
+  background: linear-gradient(135deg, #366cff, #7936ff);
+  box-shadow: 0 0 18px rgba(121, 54, 255, 0.32);
+  transition:
+    filter 0.15s ease,
+    transform 0.1s ease;
+}
+.stock-detail .recordMini:hover {
+  filter: brightness(1.08);
+}
+.stock-detail .recordMini:active {
+  transform: translateY(1px);
+}
+.stock-detail .pastLegend {
+  display: flex;
+  gap: 16px;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+}
+.stock-detail .pastLegend span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.stock-detail .pastLegend .d {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 99px;
+}
+.stock-detail .pastLegend .red .d {
+  background: #ff3636;
+}
+.stock-detail .pastLegend .grn .d {
+  background: #2bdca0;
+}
+.stock-detail .pastLegend .gry .d {
+  background: rgba(255, 255, 255, 0.4);
+}
+.stock-detail .pastChev {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  margin-top: 14px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  padding: 6px 0;
+}
+
+/* ── Item card grid ── */
+.stock-detail .itemGrid {
+  display: grid;
+  grid-template-columns: 534px 534px;
+  gap: 16px;
+  margin-top: 16px;
+  width: 1084px;
+  padding-bottom: 32px;
+}
+
+/* shared item-card frame */
+.stock-detail .sdCard {
+  width: 534px;
+  height: 230px;
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 16px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.stock-detail .sdCard:hover {
+  transform: scale(1.02);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+.stock-detail .sdCard .title {
+  font-size: var(--ic-title);
+  font-weight: 700;
+}
+.stock-detail .sdCard .sub {
+  font-size: var(--ic-sub);
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+.stock-detail .sdCard .sub::before {
+  content: '· ';
+}
+.stock-detail .sdCard .body {
+  flex: 1;
+}
+
+/* ── Metric cards (모멘텀 · 흐름안정도 · RS · EPS) ── */
+.stock-detail .sdCard--metric .body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.stock-detail .sdCard--metric .stat {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+  font-size: var(--ic-stat);
+  line-height: 1;
+  color: #ff3636;
+  letter-spacing: -0.02em;
+  flex-shrink: 0;
+}
+.stock-detail .sdCard--metric .stat .pct {
+  font-size: var(--ic-stat-unit);
+  margin-left: 2px;
+}
+.stock-detail .sdCard--metric .foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+  font-size: var(--ic-foot);
+}
+.stock-detail .sdCard--metric .desc {
+  font-size: var(--ic-foot);
+  color: rgba(255, 255, 255, 0.6);
+  flex: 1;
+}
+.stock-detail .sdCard--metric .rank {
+  font-size: var(--ic-foot);
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+}
+.stock-detail .sdCard--metric .rank b {
+  color: #fff;
+  font-family: var(--font-number);
+  font-weight: 700;
+  font-size: var(--ic-foot-strong);
+  margin-left: 5px;
+}
+.stock-detail .sdCard--metric .priceRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: nowrap;
+  width: 200px;
+}
+.stock-detail .sdCard--metric .pillOut {
+  padding: 3px 9px;
+  border-radius: 99px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.85);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.stock-detail .sdCard--metric .pillRed {
+  padding: 3px 9px;
+  border-radius: 99px;
+  border: 1.5px solid #ff3636;
+  color: #fff;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.stock-detail .sdCard--metric .arrow {
+  flex: 1;
+  height: 1.5px;
+  background: rgba(255, 255, 255, 0.7);
+  position: relative;
+  max-width: 200px;
+}
+.stock-detail .sdCard--metric .arrow::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 7px solid rgba(255, 255, 255, 0.7);
+}
+.stock-detail .sdCard--metric .dateRow {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.45);
+  margin-top: 4px;
+  width: 200px;
+}
+.stock-detail .sdCard--metric .legend {
+  display: flex;
+  gap: 14px;
+  margin-top: 8px;
+  margin-bottom: 4px;
+  font-size: var(--ic-foot);
+  font-weight: 600;
+}
+.stock-detail .sdCard--metric .legend .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 99px;
+  border: 2px solid #fff;
+  display: inline-block;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+.stock-detail .sdCard--metric svg {
+  max-height: 130px;
+}
+
+/* ── 이동평균선 card ── */
+.stock-detail .sdCard--moveline .body {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 14px;
+  align-items: center;
+}
+.stock-detail .sdCard--moveline .chartArea svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 130px;
+}
+.stock-detail .sdCard--moveline .pillCol {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.stock-detail .sdCard--moveline .legendPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: var(--ic-label);
+  font-weight: 500;
+  background: transparent;
+}
+.stock-detail .sdCard--moveline .legendPill::before {
+  content: '◀';
+  font-size: 9px;
+}
+.stock-detail .sdCard--moveline .pillRed {
+  border: 1.5px solid #ff3636;
+  color: #ff3636;
+}
+.stock-detail .sdCard--moveline .pillCyan {
+  border: 1.5px solid #2bdcc0;
+  color: #2bdcc0;
+}
+.stock-detail .sdCard--moveline .pillGreen {
+  border: 1.5px solid #6bde39;
+  color: #6bde39;
+}
+.stock-detail .sdCard--moveline .ratio {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 14px;
+}
+.stock-detail .sdCard--moveline .ratioLabel {
+  font-size: var(--ic-label);
+  color: rgba(255, 255, 255, 0.75);
+}
+.stock-detail .sdCard--moveline .stat {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+  font-size: var(--ic-stat);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: baseline;
+}
+.stock-detail .sdCard--moveline .stat .a {
+  color: #ff3636;
+}
+.stock-detail .sdCard--moveline .stat .slash {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: var(--ic-stat);
+  padding: 0 4px;
+}
+.stock-detail .sdCard--moveline .stat .b {
+  color: #2bdcc0;
+}
+.stock-detail .sdCard--moveline .foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--ic-foot);
+}
+.stock-detail .sdCard--moveline .desc {
+  font-size: var(--ic-foot);
+  color: rgba(255, 255, 255, 0.65);
+  font-weight: 500;
+}
+.stock-detail .sdCard--moveline .dots {
+  display: flex;
+  gap: 10px;
+}
+.stock-detail .sdCard--moveline .dots .d {
+  width: 14px;
+  height: 14px;
+  border-radius: 99px;
+}
+.stock-detail .sdCard--moveline .dots .cyan {
+  background: #2bdcc0;
+}
+.stock-detail .sdCard--moveline .dots .grey {
+  background: #4a4a52;
+}
+.stock-detail .sdCard--moveline .dots .green {
+  background: #6bde39;
+}
+
+/* ── 현재 거래량 card ── */
+.stock-detail .sdCard--volume .body {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 24px;
+  align-items: center;
+}
+.stock-detail .sdCard--volume .chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 130px;
+}
+.stock-detail .sdCard--volume .stats {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+}
+.stock-detail .sdCard--volume .row1,
+.stock-detail .sdCard--volume .row2 {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+.stock-detail .sdCard--volume .label {
+  font-size: var(--ic-label);
+  color: rgba(255, 255, 255, 0.75);
+}
+.stock-detail .sdCard--volume .num {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+  font-size: var(--ic-stat);
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+.stock-detail .sdCard--volume .num.gold {
+  color: #eeb82d;
+}
+.stock-detail .sdCard--volume .num.red {
+  color: #ff3636;
+}
+.stock-detail .sdCard--volume .foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: var(--ic-foot);
+}
+.stock-detail .sdCard--volume .desc {
+  font-size: var(--ic-foot);
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 500;
+}
+.stock-detail .sdCard--volume .ratio {
+  font-size: var(--ic-foot);
+  color: rgba(255, 255, 255, 0.7);
+}
+.stock-detail .sdCard--volume .ratio b {
+  color: #fff;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 700;
+  font-size: var(--ic-foot-strong);
+  margin-left: 8px;
+  letter-spacing: -0.01em;
+}
+
+/* ── 돌파성공 (주식 레짐) card ── */
+.stock-detail .sdCard--regime .titleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.stock-detail .sdCard--regime .titleRow .icon svg {
+  display: block;
+  overflow: visible;
+}
+.stock-detail .sdCard--regime .title.red {
+  color: #ff3636;
+}
+.stock-detail .sdCard--regime .body {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 24px;
+  align-items: center;
+}
+.stock-detail .sdCard--regime .chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 130px;
+}
+.stock-detail .sdCard--regime .pillCol {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+.stock-detail .sdCard--regime .pRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: var(--ic-value);
+}
+.stock-detail .sdCard--regime .pRow:last-child {
+  border-bottom: none;
+}
+.stock-detail .sdCard--regime .pRow .lhs {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--ic-value);
+  font-weight: 600;
+  color: #fff;
+}
+.stock-detail .sdCard--regime .pRow .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 99px;
+}
+.stock-detail .sdCard--regime .pRow .val {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+  font-size: var(--ic-value);
+  color: #fff;
+}
+.stock-detail .sdCard--regime .dot.today-red {
+  background: #ff3636;
+}
+.stock-detail .sdCard--regime .dot.resist {
+  background: #806015;
+}
+.stock-detail .sdCard--regime .dot.support {
+  background: #eeb82d;
+}
+.stock-detail .sdCard--regime .foot {
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: 10px;
+  font-size: var(--ic-foot);
+}
+.stock-detail .sdCard--regime .desc {
+  font-size: var(--ic-foot);
+  color: rgba(255, 255, 255, 0.7);
+}
+.stock-detail .sdCard--regime .pct {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 700;
+  font-size: var(--ic-foot-strong);
+  letter-spacing: -0.01em;
+}
+.stock-detail .sdCard--regime .pct.red {
+  color: #ff3636;
+}
+
+/* ── 베이스 단계 card ── */
+.stock-detail .sdCard--base {
+  position: relative;
+}
+.stock-detail .sdCard--base .body {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px;
+  align-items: center;
+}
+.stock-detail .sdCard--base .left {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.stock-detail .sdCard--base .right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 120px;
+}
+.stock-detail .sdCard--base .chart {
+  margin-left: -20px;
+  width: 100%;
+}
+.stock-detail .sdCard--base .chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 130px;
+}
+.stock-detail .sdCard--base .stage {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+  font-size: var(--ic-stat);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.stock-detail .sdCard--base .stage.yellow {
+  color: #eeb82d;
+}
+.stock-detail .sdCard--base .stage.red {
+  color: #ff3636;
+}
+.stock-detail .sdCard--base .left .desc {
+  font-size: var(--ic-foot);
+  color: rgba(255, 255, 255, 0.7);
+}
+.stock-detail .sdCard--base .botSub {
+  position: absolute;
+  bottom: 18px;
+  right: 20px;
+  text-align: right;
+  font-size: var(--ic-foot);
+  color: rgba(255, 255, 255, 0.7);
+}

@@ -1,5 +1,259 @@
 @import 'tailwindcss';
 
+/* ──────────────────────────────────────────────────────────────────
+   불타기 (Bultagi) — Design System
+   colors + type + tokens, ported into Tailwind v4
+   ────────────────────────────────────────────────────────────────── */
+
+/* ── Fonts (self-hosted from ./fonts/) ───────────────────────────── */
+
+/* Pretendard — Korean primary + UI */
+@font-face {
+  font-family: 'Pretendard';
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+  src: url('./fonts/pretendard/Pretendard-Thin.otf') format('opentype');
+}
+@font-face {
+  font-family: 'Pretendard';
+  font-weight: 200;
+  font-style: normal;
+  font-display: swap;
+  src: url('./fonts/pretendard/Pretendard-ExtraLight.otf') format('opentype');
+}
+@font-face {
+  font-family: 'Pretendard';
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+  src: url('./fonts/pretendard/Pretendard-Light.otf') format('opentype');
+}
+@font-face {
+  font-family: 'Pretendard';
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url('./fonts/pretendard/Pretendard-Regular.otf') format('opentype');
+}
+@font-face {
+  font-family: 'Pretendard';
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  src: url('./fonts/pretendard/Pretendard-Medium.otf') format('opentype');
+}
+@font-face {
+  font-family: 'Pretendard';
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+  src: url('./fonts/pretendard/Pretendard-SemiBold.otf') format('opentype');
+}
+@font-face {
+  font-family: 'Pretendard';
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url('./fonts/pretendard/Pretendard-Bold.otf') format('opentype');
+}
+@font-face {
+  font-family: 'Pretendard';
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+  src: url('./fonts/pretendard/Pretendard-ExtraBold.otf') format('opentype');
+}
+@font-face {
+  font-family: 'Pretendard';
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+  src: url('./fonts/pretendard/Pretendard-Black.otf') format('opentype');
+}
+
+/* DM Sans — numerics in flow (prices, %, ranks) */
+@font-face {
+  font-family: 'DM Sans';
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url('./fonts/dm-sans/DMSans-Regular.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+  src: url('./fonts/dm-sans/DMSans-Italic.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  src: url('./fonts/dm-sans/DMSans-Medium.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+  src: url('./fonts/dm-sans/DMSans-MediumItalic.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url('./fonts/dm-sans/DMSans-Bold.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'DM Sans';
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+  src: url('./fonts/dm-sans/DMSans-BoldItalic.ttf') format('truetype');
+}
+
+/* Gotham — headline % statistic */
+@font-face {
+  font-family: 'Gotham';
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+  src: url('./fonts/gotham/Gotham-Light.otf') format('opentype');
+}
+@font-face {
+  font-family: 'Gotham';
+  font-weight: 400; /* Book */
+  font-style: normal;
+  font-display: swap;
+  src: url('./fonts/gotham/Gotham-Book.otf') format('opentype');
+}
+@font-face {
+  font-family: 'Gotham';
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  src: url('./fonts/gotham/Gotham-Medium.otf') format('opentype');
+}
+@font-face {
+  font-family: 'Gotham';
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url('./fonts/gotham/Gotham-Bold.otf') format('opentype');
+}
+
+/* ── Tailwind theme tokens ───────────────────────────────────────── */
+@theme {
+  /* Font families */
+  --font-text:
+    'Pretendard', 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif;
+  --font-number: 'DM Sans', 'Gotham', system-ui, sans-serif;
+  --font-display: 'Gotham', 'DM Sans', system-ui, sans-serif;
+
+  /* Surfaces / neutrals */
+  --color-bg-page: #383838; /* main page background (per design) */
+  --color-bg-page-top: #212121;
+  --color-bg-page-bottom: #282828;
+  --color-bg-surface: #1e1e1e;
+  --color-bg-elevated: #2c2c2c;
+  --color-bg-input: #0a0a0a;
+
+  /* Foreground */
+  --color-fg-primary: #ffffff;
+  --color-fg-secondary: rgba(255, 255, 255, 0.8);
+  --color-fg-tertiary: rgba(255, 255, 255, 0.6);
+  --color-fg-muted: #818ba6;
+  --color-fg-inverse: #212121;
+  --color-fg-disabled: rgba(255, 255, 255, 0.3);
+
+  /* Borders */
+  --color-border-subtle: rgba(255, 255, 255, 0.08);
+  --color-border-default: rgba(255, 255, 255, 0.16);
+
+  /* Brand accents */
+  --color-brand-red: #ff3636; /* candle up / KR up-color */
+  --color-brand-red-hi: #ff367c; /* pink-red highlight */
+  --color-brand-blue: #34ade4; /* candle down / KR down-color */
+  --color-brand-yellow: #eeb82d; /* S/R lines, 관망 */
+  --color-brand-violet: #7936ff;
+
+  /* Candle (Korean convention: red = up, blue = down) */
+  --color-candle-up: #ff3636;
+  --color-candle-down: #34ade4;
+
+  /* Semantic */
+  --color-success: #2dda81;
+  --color-warning: #eeb82d;
+
+  /* Radii */
+  --radius-pill: 100px;
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+  --radius-xs: 4px;
+
+  /* Shadows */
+  --shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.25);
+  --shadow-pop: 0 5px 25px 0 rgba(0, 0, 0, 0.1);
+  --shadow-glow-red: 0 0 24px rgba(255, 54, 124, 0.35);
+  --shadow-glow-blue: 0 0 24px rgba(121, 54, 255, 0.35);
+}
+
+/* ── Non-utility design tokens (gradients, motion) ───────────────── */
+:root {
+  /* ── Stock-detail item-card text sizes — single control point for all 8 cards ── */
+  --ic-title: 16px; /* card title (모멘텀, 돌파성공, RS …) */
+  --ic-sub: 11px; /* subtitle line */
+  --ic-stat: 40px; /* big headline number (+28.4%, 0.43, 42M, 2단계 …) */
+  --ic-stat-unit: 24px; /* % / unit beside the big number */
+  --ic-label: 13px; /* inline labels (베이스 평균, 50일 …) */
+  --ic-value: 13px; /* secondary values (rows) */
+  --ic-foot: 11px; /* footer desc / rank / small pills */
+  --ic-foot-strong: 16px; /* emphasized footer number (상위 12%) */
+
+  /* ── Main-dashboard card text sizes (모멘텀/흐름안정도/RS) — independent set ── */
+  --mc-title: 20px; /* card title */
+  --mc-sub: 12px; /* subtitle */
+  --mc-stat: 40px; /* big headline number (+28.4%, 0.43, +12%) */
+  --mc-stat-unit: 26px; /* % beside the big number */
+  --mc-label: 13px; /* legend / foot labels */
+  --mc-foot: 12px; /* footer desc / rank */
+  --mc-foot-strong: 16px; /* emphasized footer number (상위 12%) */
+  --mc-date: 11px; /* small date row (25.03.13 …) */
+
+  --grad-red: linear-gradient(135deg, #ff367c 0%, #ff3636 100%);
+  --grad-yellow: linear-gradient(135deg, #e1ee2d 0%, #eeb8ed 100%);
+  --grad-blue: linear-gradient(135deg, #366cff 0%, #7936ff 100%);
+  --grad-yellow-warm: linear-gradient(135deg, #ffcb94 0%, #eeb8ed 100%);
+  --grad-blue-bright: linear-gradient(135deg, #34ace4 0%, #346fe4 100%);
+  --grad-page: linear-gradient(180deg, #212121 0%, #282828 100%);
+  --grad-card: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.8) 0%,
+    rgba(10, 10, 10, 0.8) 100%
+  );
+  --grad-rs: linear-gradient(
+    180deg,
+    rgba(255, 147, 100, 0.3) 0%,
+    rgba(242, 95, 51, 0) 100%
+  );
+
+  /* RS chart line colors */
+  --rs-line: #f25f33;
+  --rs-compare: #9380f7;
+
+  /* Motion */
+  --ease-emphasis: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-std: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -10,79 +264,100 @@ body,
   min-height: 100%;
 }
 
-@font-face {
-  font-family: 'NumFont';
-  src: url('./fonts/DMSans-Variable.ttf') format('truetype');
-  unicode-range: U+0030-0039, U+002C, U+002E, U+0025; /* 0-9, ',', '.', '%' */
-  font-display: swap;
-}
-
-@theme {
-  --color-white: #ffffffcc;
-  --color-candle-blue: #34ade4;
-  --color-candle-red: #ff3636;
-
-  --gradation-yellow: linear-gradient(to right, #e1ee2d, #eeb82d);
-  --gradation-red: linear-gradient(-74deg, #ff367c, #ff3636);
-  --gradation-blue_deep: linear-gradient(to right, #366cff, #7936ff);
-  --gradation-yellow_bright: linear-gradient(to right, #ffcb94, #eeb82d);
-  --gradation-blue: linear-gradient(to right, #34ace4, #346fe4);
-
-  --color-opacity-100: #818ba600;
-  --opacity-black: linear-gradient(-44deg, #000000, #0a0a0a);
+html {
+  background: #000;
 }
 
 body {
   margin: 0;
-  font-family:
-    'NumFont',
-    'Pretendard Std Variable',
-    'Pretendard Std',
-    Pretendard,
-    -apple-system,
-    BlinkMacSystemFont,
-    system-ui,
-    Roboto,
-    'Helvetica Neue',
-    'Segoe UI',
-    'Apple Color Emoji',
-    'Segoe UI Emoji',
-    'Segoe UI Symbol',
-    sans-serif;
+  background: var(--color-bg-page);
+  color: var(--color-fg-primary);
+  font-family: var(--font-text);
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-@utility text-heading-18 {
-  font-weight: 600;
-  font-size: 18px;
-  line-height: 30px;
+/* hide scrollbar but keep scrolling */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
-@utility text-heading-24 {
+/* ── Reusable component utilities ────────────────────────────────── */
+
+/* card surface — lifts through gradient + soft shadow, never a border */
+@utility card {
+  background: var(--grad-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+/* gradient text */
+@utility text-grad-red {
+  background: var(--grad-red);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+@utility text-grad-blue {
+  background: var(--grad-blue);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+@utility text-grad-yellow {
+  background: var(--grad-yellow);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ── Semantic typography utilities ───────────────────────────────── */
+@utility t-display {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 48px;
+  line-height: 0.64;
+  letter-spacing: -0.01em;
+}
+@utility t-stat {
+  font-family: var(--font-number);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+@utility t-h1 {
+  font-family: var(--font-text);
   font-weight: 700;
   font-size: 24px;
   line-height: 30px;
 }
-
-@utility text-body {
+@utility t-h2 {
+  font-family: var(--font-text);
+  font-weight: 700;
+  font-size: 18px;
+  line-height: 30px;
+}
+@utility t-h3 {
+  font-family: var(--font-text);
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 1.4;
+}
+@utility t-body {
+  font-family: var(--font-text);
   font-weight: 400;
   font-size: 12px;
   line-height: 30px;
+  color: var(--color-fg-secondary);
 }
-
-@utility text-label-16 {
-  font-weight: 700;
-  font-size: 16px;
-}
-
-@utility text-label-18 {
-  font-weight: 600;
-  font-size: 18px;
-}
-
-@utility text-label-18r {
-  font-weight: 400;
-  font-size: 18px;
+@utility t-num {
+  font-family: var(--font-number);
+  font-variant-numeric: tabular-nums;
 }

@@ -1,7 +1,8 @@
 export function ProfilePage() {
   return (
-    <main className="p-8">
-      <h1 className="text-2xl font-bold text-(--sea-ink)">내 정보</h1>
+    <main className="flex flex-col gap-2 px-6 pt-9 pb-6">
+      <h1 className="t-h1 text-white">내 정보</h1>
+      <p className="text-[13px] text-white/50">준비 중입니다.</p>
     </main>
   )
 }
