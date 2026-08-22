@@ -1,12 +1,17 @@
 import { Info } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import { cn } from '@/shared/lib/cn'
-import { useBreakoutRanking } from '@/entities/ranking'
-import type { Regime } from '@/entities/ranking'
+import {
+  dedupeRanking,
+  sortRanking,
+  useMergedRanking,
+} from '@/entities/ranking'
 import { useRankingStream } from '@/entities/realtime'
 
+// 6:4로 좁아졌고 관심 패널이 열리면 더 좁아진다 — 지표 칸을 최소치로 잡고
+// 종목명이 남는 폭을 먹는다.
 const GRID =
-  'grid grid-cols-[28px_minmax(0,1fr)_92px_96px_116px] items-center gap-2'
+  'grid grid-cols-[24px_minmax(0,1fr)_74px_66px_100px] items-center gap-1.5'
 
 function formatSigned(value: number): string {
   return `${value > 0 ? '+' : ''}${value}`
@@ -20,28 +25,29 @@ interface RankingRow {
   fipScore: number
 }
 
-/** 랭킹 리스트 — ranked momentum table; the #1 row is highlighted. */
-export function RankingList({ regime = 'success' }: { regime?: Regime }) {
-  const {
-    data: restItems = [],
-    isLoading,
-    isError,
-  } = useBreakoutRanking(regime)
+/**
+ * 랭킹 리스트 — 돌파성공 + 돌파준비를 합친 하나의 목록. 1위 행만 강조한다.
+ * 레짐을 탭으로 고르지 않기로 해서 prop이 없다.
+ */
+export function RankingList() {
+  const { data: restItems, isLoading, isError } = useMergedRanking()
   // 실시간 ranking-update 가 오면 그것을 우선, 없으면 REST 스냅샷 사용.
-  const stream = useRankingStream(regime)
+  const success = useRankingStream('success')
+  const ready = useRankingStream('ready')
+  const live = success || ready ? [...(success ?? []), ...(ready ?? [])] : null
 
-  const items: RankingRow[] =
-    stream ??
-    restItems.map((r) => ({
-      stockName: r.stockName,
-      stockCode: r.stockCode,
-      currentPrice: r.currentPrice,
-      oneYearMomentum: r.oneYearMomentum,
-      fipScore: r.fipScore,
-    }))
+  const items: RankingRow[] = live
+    ? sortRanking(dedupeRanking(live))
+    : restItems.map((r) => ({
+        stockName: r.stockName,
+        stockCode: r.stockCode,
+        currentPrice: r.currentPrice,
+        oneYearMomentum: r.oneYearMomentum,
+        fipScore: r.fipScore,
+      }))
 
   return (
-    <section className="card flex w-full flex-col px-6 pt-6 pb-3">
+    <section className="card flex w-full min-w-0 flex-col px-5 pt-6 pb-3">
       <div className="flex items-center justify-between">
         <h3 className="text-[18px] font-bold text-white">랭킹 리스트</h3>
         <div className="group relative">
@@ -68,7 +74,7 @@ export function RankingList({ regime = 'success' }: { regime?: Regime }) {
         </div>
       </div>
       <div className="mt-1 text-[12px] text-white/50">
-        모멘텀 → FIP 순 · 상위 종목
+        모멘텀 → FIP 순 · 돌파성공 + 돌파준비 통합
       </div>
 
       <div
@@ -118,7 +124,9 @@ export function RankingList({ regime = 'success' }: { regime?: Regime }) {
             <span className="font-number text-[13px] text-white/50">
               {i + 1}
             </span>
-            <span className="font-medium text-white">{row.stockName}</span>
+            <span className="truncate font-medium text-white">
+              {row.stockName}
+            </span>
             <span className="font-number text-brand-red text-right font-bold">
               {formatSigned(row.oneYearMomentum)}%
             </span>
