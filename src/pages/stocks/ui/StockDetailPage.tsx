@@ -21,7 +21,6 @@ import {
   useVolumeInsight,
 } from '@/entities/stock'
 import { SnapshotCard } from '@/shared/ui/SnapshotCard'
-import { SearchBar } from '@/shared/ui/SearchBar'
 import { StockChart } from './StockChart'
 import { ItemGrid } from './ItemCards'
 import {
@@ -121,10 +120,6 @@ export function StockDetailPage() {
 
   return (
     <main className="stock-detail">
-      <header className="topbar">
-        <SearchBar />
-      </header>
-
       <div className="content">
         {/* Chart card */}
         <section className="chartCard">

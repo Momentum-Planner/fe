@@ -23,8 +23,8 @@ type NavEntry = {
 }
 
 const navItems: NavEntry[] = [
-  { to: '/trends', label: '오늘의 추세', icon: TrendingUp },
-  { to: '/captures', label: '내 스냅샷', icon: ImageIcon },
+  { to: '/trends', label: '랭킹', icon: TrendingUp },
+  { to: '/captures', label: '내 캡쳐', icon: ImageIcon },
 ]
 
 const navItemClass =
@@ -44,7 +44,7 @@ export function Sidebar() {
     <aside className="flex w-[260px] shrink-0 flex-col gap-6 bg-[rgba(0,0,0,0.8)] px-5 pt-8 pb-6">
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
 
-      {/* Brand — home button → 오늘의 추세 */}
+      {/* Brand — home button → 랭킹 */}
       <Link to="/trends" className="flex items-center gap-2 pl-1">
         <MomentumLogo size={20} />
         <span className="font-number text-[18px] font-bold tracking-[-0.01em] text-white">

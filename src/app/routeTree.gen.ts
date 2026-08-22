@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TrendsRouteImport } from './routes/trends'
+import { Route as StatsRouteImport } from './routes/stats'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as MarketRouteImport } from './routes/market'
@@ -23,6 +24,11 @@ import { Route as SnapshotsEditRouteImport } from './routes/snapshots.edit'
 const TrendsRoute = TrendsRouteImport.update({
   id: '/trends',
   path: '/trends',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StatsRoute = StatsRouteImport.update({
+  id: '/stats',
+  path: '/stats',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SearchRoute = SearchRouteImport.update({
@@ -78,6 +84,7 @@ export interface FileRoutesByFullPath {
   '/market': typeof MarketRoute
   '/profile': typeof ProfileRoute
   '/search': typeof SearchRoute
+  '/stats': typeof StatsRoute
   '/trends': typeof TrendsRoute
   '/snapshots/edit': typeof SnapshotsEditRoute
   '/snapshots/new': typeof SnapshotsNewRoute
@@ -90,6 +97,7 @@ export interface FileRoutesByTo {
   '/market': typeof MarketRoute
   '/profile': typeof ProfileRoute
   '/search': typeof SearchRoute
+  '/stats': typeof StatsRoute
   '/trends': typeof TrendsRoute
   '/snapshots/edit': typeof SnapshotsEditRoute
   '/snapshots/new': typeof SnapshotsNewRoute
@@ -103,6 +111,7 @@ export interface FileRoutesById {
   '/market': typeof MarketRoute
   '/profile': typeof ProfileRoute
   '/search': typeof SearchRoute
+  '/stats': typeof StatsRoute
   '/trends': typeof TrendsRoute
   '/snapshots/edit': typeof SnapshotsEditRoute
   '/snapshots/new': typeof SnapshotsNewRoute
@@ -117,6 +126,7 @@ export interface FileRouteTypes {
     | '/market'
     | '/profile'
     | '/search'
+    | '/stats'
     | '/trends'
     | '/snapshots/edit'
     | '/snapshots/new'
@@ -129,6 +139,7 @@ export interface FileRouteTypes {
     | '/market'
     | '/profile'
     | '/search'
+    | '/stats'
     | '/trends'
     | '/snapshots/edit'
     | '/snapshots/new'
@@ -141,6 +152,7 @@ export interface FileRouteTypes {
     | '/market'
     | '/profile'
     | '/search'
+    | '/stats'
     | '/trends'
     | '/snapshots/edit'
     | '/snapshots/new'
@@ -154,6 +166,7 @@ export interface RootRouteChildren {
   MarketRoute: typeof MarketRoute
   ProfileRoute: typeof ProfileRoute
   SearchRoute: typeof SearchRoute
+  StatsRoute: typeof StatsRoute
   TrendsRoute: typeof TrendsRoute
   SnapshotsEditRoute: typeof SnapshotsEditRoute
   SnapshotsNewRoute: typeof SnapshotsNewRoute
@@ -167,6 +180,13 @@ declare module '@tanstack/react-router' {
       path: '/trends'
       fullPath: '/trends'
       preLoaderRoute: typeof TrendsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/stats': {
+      id: '/stats'
+      path: '/stats'
+      fullPath: '/stats'
+      preLoaderRoute: typeof StatsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/search': {
@@ -242,6 +262,7 @@ const rootRouteChildren: RootRouteChildren = {
   MarketRoute: MarketRoute,
   ProfileRoute: ProfileRoute,
   SearchRoute: SearchRoute,
+  StatsRoute: StatsRoute,
   TrendsRoute: TrendsRoute,
   SnapshotsEditRoute: SnapshotsEditRoute,
   SnapshotsNewRoute: SnapshotsNewRoute,
