@@ -33,7 +33,7 @@ type NavEntry = {
  *   계획 잇기     계획 카드에서 들어감
  */
 const navItems: NavEntry[] = [
-  { to: '/trends', label: '랭킹', icon: TrendingUp },
+  { to: '/trends', label: '오늘의 추세', icon: TrendingUp },
   { to: '/captures', label: '거래 계획', icon: ClipboardList },
   { to: '/stats', label: '거래 통계', icon: BarChart3 },
 ]
@@ -59,7 +59,7 @@ export function TopBar() {
     >
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
 
-      {/* Brand — home button → 랭킹 */}
+      {/* Brand — home button → 오늘의 추세 */}
       <Link to="/trends" className="mr-4 flex items-center gap-2">
         <MomentumLogo size={20} />
         <span className="font-number text-[17px] font-bold tracking-[-0.01em] text-white">

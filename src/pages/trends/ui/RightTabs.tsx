@@ -4,10 +4,10 @@ import { useAccount } from '@/entities/auth'
 import { RankingList } from './RankingList'
 
 /**
- * /trends 우측 — 성격이 같은 목록 넷이 한 자리를 나눠 쓴다 (Q7+Q3).
+ * /trends 우측 — 성격이 같은 목록이 한 자리를 나눠 쓴다 (Q7+Q3).
  *
  * 기본 탭은 상황이 정하지만 **선택은 언제나 사용자 몫**이다.
- *   로그인 X 또는 활성 계획 0건  → 랭킹
+ *   로그인 X 또는 활성 계획 0건  → 오늘의 추세
  *   로그인 O · 활성 계획 ≥1건    → 오늘의 계획
  *
  * 💀 기본 탭이 곧 강제다 — 버튼으로 막는 게 아니라 먼저 보이는 것을 바꿔서 민다.
@@ -17,7 +17,7 @@ import { RankingList } from './RankingList'
 type TabId = 'rank' | 'plan'
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: 'rank', label: '랭킹' },
+  { id: 'rank', label: '오늘의 추세' },
   { id: 'plan', label: '오늘의 계획' },
 ]
 
