@@ -33,7 +33,7 @@ type NavEntry = {
  *   계획 잇기     계획 카드에서 들어감
  */
 const navItems: NavEntry[] = [
-  { to: '/trends', label: '오늘의 추세', icon: TrendingUp },
+  { to: '/trends', label: '오늘의 후보 & 계획', icon: TrendingUp },
   { to: '/captures', label: '거래 계획', icon: ClipboardList },
   { to: '/stats', label: '거래 통계', icon: BarChart3 },
 ]
@@ -59,7 +59,7 @@ export function TopBar() {
     >
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
 
-      {/* Brand — home button → 오늘의 추세 */}
+      {/* Brand — home button → 오늘의 후보 & 계획 */}
       <Link to="/trends" className="mr-4 flex items-center gap-2">
         <MomentumLogo size={20} />
         <span className="font-number text-[17px] font-bold tracking-[-0.01em] text-white">
@@ -81,10 +81,17 @@ export function TopBar() {
         ))}
       </nav>
 
-      <div className="ml-auto flex items-center gap-3">
+      {/*
+        무리 셋을 gap으로 가른다 — 성격이 다른 것이 균등 간격이면 한 덩어리로 보인다.
+        검색(전체 탐색) · 보유 중/관심(내 목록) · 계정(나)
+      */}
+      <div className="ml-auto flex items-center gap-5">
         <SearchBar size="sm" className="w-[280px]" />
-        <HoldingMenu />
-        <WatchMenu />
+
+        <div className="flex items-center gap-1">
+          <HoldingMenu />
+          <WatchMenu />
+        </div>
 
         {account?.isLoggedIn ? (
           <div className="flex h-9 items-center gap-1 rounded-full bg-white/[0.06] pr-1 pl-3">
