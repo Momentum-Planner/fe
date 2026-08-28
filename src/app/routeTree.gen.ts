@@ -13,8 +13,11 @@ import { Route as TrendsRouteImport } from './routes/trends'
 import { Route as StatsRouteImport } from './routes/stats'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as PlansRouteImport } from './routes/plans'
 import { Route as MarketRouteImport } from './routes/market'
 import { Route as KitRouteImport } from './routes/kit'
+import { Route as ChartLabHcRouteImport } from './routes/chart-lab-hc'
+import { Route as ChartLabRouteImport } from './routes/chart-lab'
 import { Route as CapturesRouteImport } from './routes/captures'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as StocksTickerRouteImport } from './routes/stocks.$ticker'
@@ -41,6 +44,11 @@ const ProfileRoute = ProfileRouteImport.update({
   path: '/profile',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlansRoute = PlansRouteImport.update({
+  id: '/plans',
+  path: '/plans',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MarketRoute = MarketRouteImport.update({
   id: '/market',
   path: '/market',
@@ -49,6 +57,16 @@ const MarketRoute = MarketRouteImport.update({
 const KitRoute = KitRouteImport.update({
   id: '/kit',
   path: '/kit',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChartLabHcRoute = ChartLabHcRouteImport.update({
+  id: '/chart-lab-hc',
+  path: '/chart-lab-hc',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ChartLabRoute = ChartLabRouteImport.update({
+  id: '/chart-lab',
+  path: '/chart-lab',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CapturesRoute = CapturesRouteImport.update({
@@ -80,8 +98,11 @@ const SnapshotsEditRoute = SnapshotsEditRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/captures': typeof CapturesRoute
+  '/chart-lab': typeof ChartLabRoute
+  '/chart-lab-hc': typeof ChartLabHcRoute
   '/kit': typeof KitRoute
   '/market': typeof MarketRoute
+  '/plans': typeof PlansRoute
   '/profile': typeof ProfileRoute
   '/search': typeof SearchRoute
   '/stats': typeof StatsRoute
@@ -93,8 +114,11 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/captures': typeof CapturesRoute
+  '/chart-lab': typeof ChartLabRoute
+  '/chart-lab-hc': typeof ChartLabHcRoute
   '/kit': typeof KitRoute
   '/market': typeof MarketRoute
+  '/plans': typeof PlansRoute
   '/profile': typeof ProfileRoute
   '/search': typeof SearchRoute
   '/stats': typeof StatsRoute
@@ -107,8 +131,11 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/captures': typeof CapturesRoute
+  '/chart-lab': typeof ChartLabRoute
+  '/chart-lab-hc': typeof ChartLabHcRoute
   '/kit': typeof KitRoute
   '/market': typeof MarketRoute
+  '/plans': typeof PlansRoute
   '/profile': typeof ProfileRoute
   '/search': typeof SearchRoute
   '/stats': typeof StatsRoute
@@ -122,8 +149,11 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/captures'
+    | '/chart-lab'
+    | '/chart-lab-hc'
     | '/kit'
     | '/market'
+    | '/plans'
     | '/profile'
     | '/search'
     | '/stats'
@@ -135,8 +165,11 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/captures'
+    | '/chart-lab'
+    | '/chart-lab-hc'
     | '/kit'
     | '/market'
+    | '/plans'
     | '/profile'
     | '/search'
     | '/stats'
@@ -148,8 +181,11 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/captures'
+    | '/chart-lab'
+    | '/chart-lab-hc'
     | '/kit'
     | '/market'
+    | '/plans'
     | '/profile'
     | '/search'
     | '/stats'
@@ -162,8 +198,11 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CapturesRoute: typeof CapturesRoute
+  ChartLabRoute: typeof ChartLabRoute
+  ChartLabHcRoute: typeof ChartLabHcRoute
   KitRoute: typeof KitRoute
   MarketRoute: typeof MarketRoute
+  PlansRoute: typeof PlansRoute
   ProfileRoute: typeof ProfileRoute
   SearchRoute: typeof SearchRoute
   StatsRoute: typeof StatsRoute
@@ -203,6 +242,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProfileRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/plans': {
+      id: '/plans'
+      path: '/plans'
+      fullPath: '/plans'
+      preLoaderRoute: typeof PlansRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/market': {
       id: '/market'
       path: '/market'
@@ -215,6 +261,20 @@ declare module '@tanstack/react-router' {
       path: '/kit'
       fullPath: '/kit'
       preLoaderRoute: typeof KitRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/chart-lab-hc': {
+      id: '/chart-lab-hc'
+      path: '/chart-lab-hc'
+      fullPath: '/chart-lab-hc'
+      preLoaderRoute: typeof ChartLabHcRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/chart-lab': {
+      id: '/chart-lab'
+      path: '/chart-lab'
+      fullPath: '/chart-lab'
+      preLoaderRoute: typeof ChartLabRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/captures': {
@@ -258,8 +318,11 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CapturesRoute: CapturesRoute,
+  ChartLabRoute: ChartLabRoute,
+  ChartLabHcRoute: ChartLabHcRoute,
   KitRoute: KitRoute,
   MarketRoute: MarketRoute,
+  PlansRoute: PlansRoute,
   ProfileRoute: ProfileRoute,
   SearchRoute: SearchRoute,
   StatsRoute: StatsRoute,

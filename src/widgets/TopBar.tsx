@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import {
   BarChart3,
+  CalendarCheck,
   ClipboardList,
   LogOut,
   TrendingUp,
@@ -19,21 +20,27 @@ import { useAccount, useLogout } from '@/entities/auth'
 export const TOPBAR_H = 56
 
 type NavEntry = {
-  to: '/trends' | '/captures' | '/stats'
+  to: '/trends' | '/plans' | '/captures' | '/stats'
   label: string
   icon: ComponentType<{ size?: number; strokeWidth?: number }>
 }
 
 /**
- * 메뉴가 셋뿐인 이유 (Q1) — 나머지는 전부 메뉴가 아니다.
- *   오늘의 계획   /trends 우측 탭
+ * 메뉴가 넷인 이유 — Q1 은 셋으로 잡았고 「오늘의 계획」이 `/trends` 우측 탭이었는데,
+ * 한 메뉴(「오늘의 후보 & 계획」)가 탭 둘을 덮는 게 헷갈려서 갈라 냈다.
+ * Q1-2 가 「재지 않고 감으로 넘긴 자리」라고 남겨둔 그 자리다.
+ *
+ * 여전히 메뉴가 아닌 것들:
  *   보유 중·관심  상단 바 드롭다운
  *   계획 작성     종목 상세에서 시작
  *   거래 기록     계획 카드에서 시작
  *   계획 잇기     계획 카드에서 들어감
+ *
+ * ⚠️ 「계획」이 두 칸에 겹친다 — 앞은 **오늘**, 뒤는 **전체**.
  */
 const navItems: NavEntry[] = [
-  { to: '/trends', label: '오늘의 후보 & 계획', icon: TrendingUp },
+  { to: '/trends', label: '오늘의 추세', icon: TrendingUp },
+  { to: '/plans', label: '오늘의 계획', icon: CalendarCheck },
   { to: '/captures', label: '거래 계획', icon: ClipboardList },
   { to: '/stats', label: '거래 통계', icon: BarChart3 },
 ]
@@ -59,7 +66,7 @@ export function TopBar() {
     >
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
 
-      {/* Brand — home button → 오늘의 후보 & 계획 */}
+      {/* Brand — home button → 오늘의 추세 */}
       <Link to="/trends" className="mr-4 flex items-center gap-2">
         <MomentumLogo size={20} />
         <span className="font-number text-[17px] font-bold tracking-[-0.01em] text-white">

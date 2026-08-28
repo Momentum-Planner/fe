@@ -26,7 +26,7 @@ interface RankingRow {
 }
 
 /**
- * 오늘의 후보 — 돌파성공 + 돌파준비를 합친 하나의 목록. 1위 행만 강조한다.
+ * 오늘의 추세 — 돌파성공 + 돌파준비를 합친 하나의 목록. 1위 행만 강조한다.
  * 궤적 ① 근거 노출의 자리다. 여기서 고른 종목이 ③ 계획 작성으로 넘어간다.
  * 레짐을 탭으로 고르지 않기로 해서 prop이 없다.
  */
@@ -50,7 +50,7 @@ export function RankingList() {
   return (
     <section className="card flex w-full min-w-0 flex-col px-5 pt-6 pb-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-[18px] font-bold text-white">오늘의 후보</h3>
+        <h3 className="text-[18px] font-bold text-white">오늘의 추세</h3>
         <div className="group relative">
           <button
             type="button"
