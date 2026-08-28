@@ -94,11 +94,8 @@ export function StockDetailPage() {
     ],
     [ma50, ma150, ma200],
   )
-  const baseBoxes = useMemo(
-    () => toBaseBoxes(bases ?? [], candles),
-    [bases, candles],
-  )
-  const lastClose = candles.at(-1)?.close ?? null
+  const baseBoxes = useMemo(() => toBaseBoxes(bases ?? []), [bases])
+  const lastClose = candles.at(-1)?.[4] ?? null
   const priceTags = useMemo(
     () => (lastClose != null ? [{ price: lastClose, color: '#FF367C' }] : []),
     [lastClose],
