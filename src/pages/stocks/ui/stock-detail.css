@@ -18,13 +18,13 @@
 
 .stock-detail .topbar {
   display: grid;
-  grid-template-columns: 1080px 1fr;
+  grid-template-columns: minmax(0, 1fr) 532px;
   gap: 16px;
   align-items: center;
 }
 .stock-detail .content {
   display: grid;
-  grid-template-columns: 1080px 532px;
+  grid-template-columns: minmax(0, 1fr) 532px;
   gap: 16px;
   align-items: flex-start;
 }
@@ -34,12 +34,13 @@
   gap: 16px;
 }
 
-/* ── Chart card (1080×800) ── */
+/* ── Chart card (유동 폭 × 800) ── */
 .stock-detail .chartCard {
   background: rgba(0, 0, 0, 0.8);
   border-radius: 16px;
   padding: 22px 26px 16px;
-  width: 1080px;
+  width: 100%;
+  min-width: 0;
   height: 800px;
   display: flex;
   flex-direction: column;
@@ -382,16 +383,18 @@
 /* ── Item card grid ── */
 .stock-detail .itemGrid {
   display: grid;
-  grid-template-columns: 534px 534px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   margin-top: 16px;
-  width: 1084px;
+  /* .content 의 좌측(차트) 열과 폭을 맞춘다 — 우측 레일 532 + gap 16 을 뺀 나머지 */
+  width: calc(100% - 548px);
   padding-bottom: 32px;
 }
 
 /* shared item-card frame */
 .stock-detail .sdCard {
-  width: 534px;
+  width: 100%;
+  min-width: 0;
   height: 230px;
   background: rgba(0, 0, 0, 0.8);
   border-radius: 16px;
