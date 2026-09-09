@@ -26,6 +26,52 @@ const MA_PERIOD: Record<string, number> = {
 /** 관심 종목 — 목이라 메모리에만 담는다. 새로고침하면 초기화된다. */
 const likes = new Set<string>(['000660'])
 
+/**
+ * 펀더멘털 세 축과 그 합계 (최종미지 ①-2) — **전부 목이다.**
+ *
+ *   수준  분기 EPS 증가율   40%↑ 3.0 · 25~40% 2.0 · 20~25% 1.5 · 0~20% 1.0
+ *   방향  가속 +1 · 유지 0 · 감속 −1
+ *   동반  EPS↑ · 매출↑ · 마진↑  각 1점 (3분기 관측 창)
+ *
+ * ⚠️ 백엔드 DTO 에 이 필드들이 하나도 없다. 분기 매출·마진 계열이 있어야
+ *    만들 수 있는데 그게 있는지도 아직 모른다 (Q6 미결).
+ *
+ * 종목코드 seed 로 뽑아 **새로고침해도 같은 값**이 나오게 한다.
+ */
+function fundamentals(code: string) {
+  const seed = seedOf(code)
+
+  // 수준 — 구간을 먼저 고르고 그 구간 «안»의 값을 뽑는다. 그래야 화면에
+  // 뜨는 증가율과 점수가 서로 안 어긋난다
+  const band = Math.floor(rand(seed, 7) * 4)
+  const [lo, span, level] = [
+    [0, 20, 1.0],
+    [20, 5, 1.5],
+    [25, 15, 2.0],
+    [40, 60, 3.0],
+  ][band]
+  const epsGrowth = +(lo + rand(seed, 10) * span).toFixed(0)
+
+  const direction = (['decel', 'flat', 'accel'] as const)[
+    Math.floor(rand(seed, 8) * 3)
+  ]
+  const dirPoint = { decel: -1, flat: 0, accel: 1 }[direction]
+
+  const up = {
+    eps: rand(seed, 11) > 0.35,
+    revenue: rand(seed, 12) > 0.45,
+    margin: rand(seed, 13) > 0.55,
+  }
+  const together = Number(up.eps) + Number(up.revenue) + Number(up.margin)
+
+  return {
+    epsGrowth,
+    direction,
+    up,
+    fundamentalScore: +(level + dirPoint + together).toFixed(1),
+  }
+}
+
 export const handlers = [
   // ─────────────── 차트 ───────────────
   http.get('/api/v1/stocks/:code/chart/daily', ({ params }) => {
@@ -33,14 +79,17 @@ export const handlers = [
     return ok({ candles })
   }),
 
-  http.get('/api/v1/stocks/:code/chart/moving-averages', ({ params, request }) => {
-    const period = new URL(request.url).searchParams.get('period') ?? 'MA_50'
-    const candles = makeCandles(String(params.code))
-    return ok({
-      period,
-      dataPoints: makeMovingAverage(candles, MA_PERIOD[period] ?? 50),
-    })
-  }),
+  http.get(
+    '/api/v1/stocks/:code/chart/moving-averages',
+    ({ params, request }) => {
+      const period = new URL(request.url).searchParams.get('period') ?? 'MA_50'
+      const candles = makeCandles(String(params.code))
+      return ok({
+        period,
+        dataPoints: makeMovingAverage(candles, MA_PERIOD[period] ?? 50),
+      })
+    },
+  ),
 
   http.get('/api/v1/stocks/:code/chart/bases', ({ params }) => {
     const candles = makeCandles(String(params.code))
@@ -65,12 +114,11 @@ export const handlers = [
           currentPrice: last.closePrice,
           supportLine: lastBase.supportPrice,
           resistanceLine: lastBase.resistancePrice,
-          changeRateFromReferenceLine:
-            +(
-              ((last.closePrice - lastBase.resistancePrice) /
-                lastBase.resistancePrice) *
-              100
-            ).toFixed(2),
+          changeRateFromReferenceLine: +(
+            ((last.closePrice - lastBase.resistancePrice) /
+              lastBase.resistancePrice) *
+            100
+          ).toFixed(2),
         })
 
       case 'moving-average': {
@@ -194,8 +242,9 @@ export const handlers = [
               100
             ).toFixed(2),
             fipScore: +(rand(seedOf(s.stockCode), 2) * 0.8 + 0.1).toFixed(2),
+            ...fundamentals(s.stockCode),
           }
-        }).sort((a, b) => b.oneYearMomentum - a.oneYearMomentum),
+        }).sort((a, b) => b.fundamentalScore - a.fundamentalScore),
       }),
     ),
   ),
@@ -204,9 +253,7 @@ export const handlers = [
   http.get('/api/v1/search/stocks', ({ request }) => {
     const q = (new URL(request.url).searchParams.get('query') ?? '').trim()
     const hits = q
-      ? STOCKS.filter(
-          (s) => s.stockName.includes(q) || s.stockCode.includes(q),
-        )
+      ? STOCKS.filter((s) => s.stockName.includes(q) || s.stockCode.includes(q))
       : []
     return ok({
       stocks: hits.map((s) => {

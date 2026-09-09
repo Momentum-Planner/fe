@@ -8,6 +8,7 @@ export interface RealtimeRankingItem {
   currentPrice: number | null
   oneYearMomentum: number
   fipScore: number
+  fundamentalScore?: number | null
 }
 
 /** SSE tick 이벤트. (TickResponse) */

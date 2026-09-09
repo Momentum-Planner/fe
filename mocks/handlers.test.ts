@@ -55,8 +55,12 @@ describe('차트', () => {
     }
     for (const c of candles) {
       expect(c.highPrice).toBeGreaterThanOrEqual(c.lowPrice)
-      expect(c.highPrice).toBeGreaterThanOrEqual(Math.max(c.openPrice, c.closePrice))
-      expect(c.lowPrice).toBeLessThanOrEqual(Math.min(c.openPrice, c.closePrice))
+      expect(c.highPrice).toBeGreaterThanOrEqual(
+        Math.max(c.openPrice, c.closePrice),
+      )
+      expect(c.lowPrice).toBeLessThanOrEqual(
+        Math.min(c.openPrice, c.closePrice),
+      )
     }
   })
 
@@ -159,7 +163,9 @@ describe('인사이트 8종', () => {
 
   it('eps 는 분기 4개를 준다', async () => {
     const r = await get('/api/v1/stocks/000660/insight/eps')
-    const d = r.data as { quarterlyEps: Array<{ quarter: string; eps: number }> }
+    const d = r.data as {
+      quarterlyEps: Array<{ quarter: string; eps: number }>
+    }
     expect(d.quarterlyEps).toHaveLength(4)
   })
 })
@@ -199,16 +205,16 @@ describe('관심 종목', () => {
 
 describe('랭킹 · 검색', () => {
   it.each(['breakout-success', 'breakout-ready'])(
-    '%s 랭킹은 모멘텀 내림차순이다',
+    '%s 랭킹은 펀더멘털 점수 내림차순이다',
     async (regime) => {
       const r = await get(`/api/v1/ranking/${regime}`)
       const { stocks } = r.data as {
-        stocks: Array<{ oneYearMomentum: number; currentPrice: number }>
+        stocks: Array<{ fundamentalScore: number; currentPrice: number }>
       }
       expect(stocks.length).toBeGreaterThan(0)
       for (let i = 1; i < stocks.length; i++) {
-        expect(stocks[i - 1].oneYearMomentum).toBeGreaterThanOrEqual(
-          stocks[i].oneYearMomentum,
+        expect(stocks[i - 1].fundamentalScore).toBeGreaterThanOrEqual(
+          stocks[i].fundamentalScore,
         )
       }
     },

@@ -119,7 +119,7 @@ export type RankingRow = {
   price: number
 }
 
-/** 오늘의 추세 목록 행 (돌파 성공). */
+/** 오늘의 후보 목록 행 (돌파 성공). */
 export const rankingRows: RankingRow[] = [
   {
     name: 'SK하이닉스',

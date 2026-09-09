@@ -9,12 +9,26 @@ export const rankingKeys = {
 
 const MERGED_REGIMES: Regime[] = ['success', 'ready']
 
-/** 모멘텀 → FIP 순. 랭킹 화면이 쓰는 유일한 정렬이다. */
+/**
+ * 펀더멘털 점수 순. 랭킹 화면이 쓰는 유일한 정렬이다 (①-2).
+ *
+ * 모멘텀 → FIP 순이던 것을 갈아끼웠다 (Q6) — 카드 셋이 EPS·매출·마진으로
+ * 바뀌었는데 정렬만 옛 기준에 남아 있어서 **보이는 근거와 줄 세운 근거가
+ * 달랐다.** 점수가 없는 행(백엔드 미구현)은 뒤로 민다.
+ */
 export function sortRanking<
-  T extends { oneYearMomentum: number; fipScore: number },
+  T extends {
+    oneYearMomentum: number
+    fipScore: number
+    fundamentalScore?: number | null
+  },
 >(items: T[]): T[] {
+  const score = (x: T) => x.fundamentalScore ?? -1
   return [...items].sort(
-    (a, b) => b.oneYearMomentum - a.oneYearMomentum || b.fipScore - a.fipScore,
+    (a, b) =>
+      score(b) - score(a) ||
+      b.oneYearMomentum - a.oneYearMomentum ||
+      b.fipScore - a.fipScore,
   )
 }
 

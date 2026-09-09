@@ -11,6 +11,19 @@ export interface RankingItem {
   currentPrice: number | null
   oneYearMomentum: number
   fipScore: number
+  /**
+   * ①-2 의 세 축과 그 합계.
+   *
+   *   수준  epsGrowth   분기 EPS 증가율 (%)
+   *   방향  direction   증가율이 가속 / 유지 / 감속
+   *   동반  up          EPS · 매출 · 마진이 함께 오르는가 (각 1점)
+   *
+   * ⚠️ **백엔드 DTO 에 넷 다 없다** — msw 목만 채운다. 그래서 전부 nullable 이다.
+   */
+  epsGrowth: number | null
+  direction: 'accel' | 'flat' | 'decel' | null
+  up: { eps: boolean; revenue: boolean; margin: boolean } | null
+  fundamentalScore: number | null
 }
 
 export interface RankingResponse {

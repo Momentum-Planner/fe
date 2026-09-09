@@ -1,7 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import {
   BarChart3,
-  CalendarCheck,
   ClipboardList,
   LogOut,
   TrendingUp,
@@ -11,7 +10,6 @@ import { useState } from 'react'
 import type { ComponentType } from 'react'
 import { MomentumLogo } from '@/shared/ui/MomentumLogo'
 import { SearchBar } from '@/shared/ui/SearchBar'
-import { HoldingMenu } from '@/widgets/HoldingMenu'
 import { WatchMenu } from '@/widgets/WatchMenu'
 import { AuthModal } from '@/widgets/AuthModal'
 import { useAccount, useLogout } from '@/entities/auth'
@@ -20,15 +18,14 @@ import { useAccount, useLogout } from '@/entities/auth'
 export const TOPBAR_H = 56
 
 type NavEntry = {
-  to: '/trends' | '/plans' | '/captures' | '/stats'
+  to: '/trends' | '/captures' | '/stats'
   label: string
   icon: ComponentType<{ size?: number; strokeWidth?: number }>
 }
 
 /**
- * 메뉴가 넷인 이유 — Q1 은 셋으로 잡았고 「오늘의 계획」이 `/trends` 우측 탭이었는데,
- * 한 메뉴(「오늘의 후보 & 계획」)가 탭 둘을 덮는 게 헷갈려서 갈라 냈다.
- * Q1-2 가 「재지 않고 감으로 넘긴 자리」라고 남겨둔 그 자리다.
+ * 「오늘의 계획」을 뺐다 (2026-09-09) — 안 쓰기로 했다.
+ * ⚠️ Q3 이 이 줄을 「종목 · 계획 · 거래 기록 · 계좌」로 바꾸기로 했다. 아직 안 옮겼다.
  *
  * 여전히 메뉴가 아닌 것들:
  *   보유 중·관심  상단 바 드롭다운
@@ -36,17 +33,15 @@ type NavEntry = {
  *   거래 기록     계획 카드에서 시작
  *   계획 잇기     계획 카드에서 들어감
  *
- * ⚠️ 「계획」이 두 칸에 겹친다 — 앞은 **오늘**, 뒤는 **전체**.
  */
 const navItems: NavEntry[] = [
-  { to: '/trends', label: '오늘의 추세', icon: TrendingUp },
-  { to: '/plans', label: '오늘의 계획', icon: CalendarCheck },
+  { to: '/trends', label: '오늘의 후보', icon: TrendingUp },
   { to: '/captures', label: '거래 계획', icon: ClipboardList },
   { to: '/stats', label: '거래 통계', icon: BarChart3 },
 ]
 
 const itemClass =
-  'flex items-center gap-2 rounded-[10px] px-3 py-2 text-[14px] text-white/60 transition-colors hover:text-white/90'
+  'flex shrink-0 items-center gap-2 rounded-[10px] px-3 py-2 text-[clamp(12.5px,1.2vw,14px)] whitespace-nowrap text-white/60 transition-colors hover:text-white/90'
 
 /**
  * 세로 사이드바를 대신하는 가로 바 (Q0 = C안).
@@ -66,15 +61,15 @@ export function TopBar() {
     >
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
 
-      {/* Brand — home button → 오늘의 추세 */}
-      <Link to="/trends" className="mr-4 flex items-center gap-2">
+      {/* Brand — home button → 오늘의 후보 */}
+      <Link to="/trends" className="mr-4 flex shrink-0 items-center gap-2">
         <MomentumLogo size={20} />
-        <span className="font-number text-[17px] font-bold tracking-[-0.01em] text-white">
+        <span className="font-number text-[clamp(15px,1.4vw,17px)] font-bold tracking-[-0.01em] whitespace-nowrap text-white">
           Momentum
         </span>
       </Link>
 
-      <nav className="flex items-center gap-1">
+      <nav className="flex shrink-0 items-center gap-1">
         {navItems.map(({ to, label, icon: Icon }) => (
           <Link
             key={to}
@@ -90,19 +85,22 @@ export function TopBar() {
 
       {/*
         무리 셋을 gap으로 가른다 — 성격이 다른 것이 균등 간격이면 한 덩어리로 보인다.
-        검색(전체 탐색) · 보유 중/관심(내 목록) · 계정(나)
+        검색(전체 탐색) · 관심(내 목록) · 계정(나)
       */}
-      <div className="ml-auto flex items-center gap-5">
-        <SearchBar size="sm" className="w-[280px]" />
+      <div className="ml-auto flex min-w-0 items-center gap-3 lg:gap-5">
+        {/* 폭이 모자라면 여기가 줄어든다 — 검색어 칸은 좁아져도 읽히지만
+            로그인·메뉴는 글자가 접히면 못 읽는다 */}
+        <SearchBar size="sm" className="w-[280px] min-w-[104px]" />
 
-        <div className="flex items-center gap-1">
-          <HoldingMenu />
+        {/* 「보유 중」 드롭다운은 Q4 에서 뺐다 — 보유 목록은 계좌에 붙는다.
+            관심만 남는다 (Q0 이 「가로를 안 먹고 모든 화면에서 같은 자리」로 고른 것) */}
+        <div className="flex shrink-0 items-center gap-1">
           <WatchMenu />
         </div>
 
         {account?.isLoggedIn ? (
-          <div className="flex h-9 items-center gap-1 rounded-full bg-white/[0.06] pr-1 pl-3">
-            <span className="flex items-center gap-1.5 truncate text-[13px] font-semibold text-white">
+          <div className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-white/[0.06] pr-1 pl-3">
+            <span className="flex items-center gap-1.5 truncate text-[clamp(12px,1.05vw,13px)] font-semibold whitespace-nowrap text-white">
               <User size={15} strokeWidth={2} />
               {account.nickname ?? '회원'}
             </span>
@@ -123,7 +121,7 @@ export function TopBar() {
           <button
             type="button"
             onClick={() => setAuthOpen(true)}
-            className="flex h-9 items-center rounded-full border border-white/30 bg-white/[0.12] px-4 text-[14px] font-semibold text-white transition-colors hover:border-white/45 hover:bg-white/[0.18]"
+            className="flex h-9 shrink-0 items-center rounded-full border border-white/30 bg-white/[0.12] px-4 text-[clamp(13px,1.15vw,14px)] font-semibold whitespace-nowrap text-white transition-colors hover:border-white/45 hover:bg-white/[0.18]"
           >
             로그인
           </button>

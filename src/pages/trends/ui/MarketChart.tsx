@@ -14,13 +14,15 @@ import {
   marketCandles,
 } from '../model/marketData'
 
+// 머리글을 한 줄로 접어 47px 을 되찾았고 그만큼을 차트에 돌려줬다.
+// 차트 «폭»은 Q0 이 지킨 값이라 건드리지 않는다 — 이 상수는 세로만 잡는다.
 const HEIGHT = 440
 
 /** lightweight-charts 는 초, Highcharts 는 밀리초를 쓴다. */
 const ms = (t: unknown) => (t as number) * 1000
 
 /**
- * 오늘의 추세 화면의 캔들 차트 (한국식 — 상승 빨강 / 하락 파랑).
+ * 오늘의 후보 화면의 캔들 차트 (한국식 — 상승 빨강 / 하락 파랑).
  *
  * 설정은 전부 `shared/lib/chartOptions` 에서 온다. 이유는 `docs/결정/Q11_차트_바탕.md`.
  * 지지/저항 박스는 annotation 이라 축 값에 붙어 있다 — 예전처럼 스크롤할 때마다
