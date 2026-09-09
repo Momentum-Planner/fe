@@ -1,4 +1,5 @@
 import { http, HttpResponse } from 'msw'
+import { PLANS, toListItem } from './data/plans'
 import {
   STOCKS,
   makeBases,
@@ -248,6 +249,86 @@ export const handlers = [
       }),
     ),
   ),
+
+  // ─────────────── 계정 ───────────────
+  // ⚠️ 목이다. 사용자 축(계획 · 거래 기록 · 계좌) 화면은 로그인 상태여야 내용이 뜨는데,
+  //    백엔드가 안 떠 있으면 dev 에서 그 화면들을 «볼 수가 없다».
+  http.get('/api/v1/auth/account', () =>
+    ok({ isLoggedIn: true, nickname: '개발자', email: 'dev@example.com' }),
+  ),
+
+  // ─────────────── 계획 ───────────────
+  // ⚠️ 백엔드에 TradePlan API 가 없다. 이 둘이 유일한 구현이다.
+  http.get('/api/v1/plans', ({ request }) => {
+    const q = new URL(request.url).searchParams
+    const statuses = q.get('statuses')?.split(',').filter(Boolean) ?? []
+    const stockCode = q.get('stockCode')
+    const from = q.get('from')
+    const to = q.get('to')
+
+    // 「오늘」과 「전체」는 같은 컬렉션의 기간 필터다 (Q3)
+    const plans = PLANS.filter(
+      (p) =>
+        (statuses.length === 0 || statuses.includes(p.status)) &&
+        (!stockCode || p.stockCode === stockCode) &&
+        (!from || p.writtenAt >= from) &&
+        (!to || p.writtenAt <= to),
+    )
+      .sort(
+        (a, b) => b.writtenAt.localeCompare(a.writtenAt) || b.planId - a.planId,
+      )
+      .map(toListItem)
+
+    return ok({ plans })
+  }),
+
+  // 종목 포지션 (③). ④의 자료가 「스냅샷 + ③의 손절가·위험노출·보유 수량 + 계좌 총액」이라
+  // 계획 화면이 이 값 없이는 「지금 어디에 서 있나」를 못 보여준다.
+  // ⚠️ StockPosition API 도 백엔드에 없다.
+  http.get('/api/v1/stocks/:code/position', ({ params }) => {
+    const code = String(params.code)
+    const running = PLANS.find(
+      (p) => p.stockCode === code && p.status === 'RUNNING',
+    )
+    if (!running)
+      return ok({
+        stockCode: code,
+        quantity: 0,
+        avgPrice: 0,
+        stopPrice: null,
+        riskExposure: 0,
+      })
+    // 손절가는 종목이 «자기 필드로 안 든다» — 실행 중 계획의 PlannedStop 이 곧 그 값이다
+    const filled = running.records.filter((r) => r.side === 'BUY')
+    const qty = filled.reduce((n, r) => n + r.quantity, 0)
+    const avg = qty
+      ? Math.round(filled.reduce((n, r) => n + r.price * r.quantity, 0) / qty)
+      : running.entryPrice
+    return ok({
+      stockCode: code,
+      quantity: qty,
+      avgPrice: avg,
+      stopPrice: running.stopPrice,
+      riskExposure: running.riskAfter,
+    })
+  }),
+
+  http.get('/api/v1/plans/:planId', ({ params }) => {
+    const plan = PLANS.find((p) => p.planId === Number(params.planId))
+    if (!plan)
+      return HttpResponse.json(
+        {
+          meta: {
+            result: 'FAIL',
+            errorCode: 'NOT_FOUND',
+            message: '계획이 없습니다',
+          },
+          data: null,
+        },
+        { status: 404 },
+      )
+    return ok(plan)
+  }),
 
   // ─────────────── 검색 ───────────────
   http.get('/api/v1/search/stocks', ({ request }) => {
