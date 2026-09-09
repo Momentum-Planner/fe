@@ -361,3 +361,12 @@ body {
   font-family: var(--font-number);
   font-variant-numeric: tabular-nums;
 }
+
+/* 계획 사슬 뷰포트 — 막대를 «숨긴다». 끄는 것이 조작이라 막대는 군더더기다 */
+.chain-pan {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.chain-pan::-webkit-scrollbar {
+  display: none;
+}

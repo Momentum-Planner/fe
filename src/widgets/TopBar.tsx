@@ -18,7 +18,7 @@ import { useAccount, useLogout } from '@/entities/auth'
 export const TOPBAR_H = 56
 
 type NavEntry = {
-  to: '/trends' | '/captures' | '/stats'
+  to: '/trends' | '/plans' | '/stats'
   label: string
   icon: ComponentType<{ size?: number; strokeWidth?: number }>
 }
@@ -36,7 +36,7 @@ type NavEntry = {
  */
 const navItems: NavEntry[] = [
   { to: '/trends', label: '오늘의 후보', icon: TrendingUp },
-  { to: '/captures', label: '거래 계획', icon: ClipboardList },
+  { to: '/plans', label: '거래 계획', icon: ClipboardList },
   { to: '/stats', label: '거래 통계', icon: BarChart3 },
 ]
 

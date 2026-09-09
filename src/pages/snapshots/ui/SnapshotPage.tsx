@@ -92,7 +92,7 @@ export function SnapshotPage({ mode }: SnapshotPageProps) {
           referenceSnapshotIds: detail?.referenceSnapshotIds ?? [],
           retrospective,
         },
-        { onSuccess: () => navigate({ to: '/captures' }) },
+        { onSuccess: () => navigate({ to: '/plans' }) },
       )
     } else {
       const stockCode = search.ticker
@@ -109,7 +109,7 @@ export function SnapshotPage({ mode }: SnapshotPageProps) {
           referenceSnapshotIds: [],
           retrospective,
         },
-        { onSuccess: () => navigate({ to: '/captures' }) },
+        { onSuccess: () => navigate({ to: '/plans' }) },
       )
     }
   }
