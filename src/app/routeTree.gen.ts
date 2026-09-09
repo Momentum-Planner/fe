@@ -15,7 +15,6 @@ import { Route as SearchRouteImport } from './routes/search'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as PlansRouteImport } from './routes/plans'
 import { Route as MarketRouteImport } from './routes/market'
-import { Route as KitRouteImport } from './routes/kit'
 import { Route as ChartLabHcRouteImport } from './routes/chart-lab-hc'
 import { Route as ChartLabRouteImport } from './routes/chart-lab'
 import { Route as CapturesRouteImport } from './routes/captures'
@@ -52,11 +51,6 @@ const PlansRoute = PlansRouteImport.update({
 const MarketRoute = MarketRouteImport.update({
   id: '/market',
   path: '/market',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const KitRoute = KitRouteImport.update({
-  id: '/kit',
-  path: '/kit',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ChartLabHcRoute = ChartLabHcRouteImport.update({
@@ -100,7 +94,6 @@ export interface FileRoutesByFullPath {
   '/captures': typeof CapturesRoute
   '/chart-lab': typeof ChartLabRoute
   '/chart-lab-hc': typeof ChartLabHcRoute
-  '/kit': typeof KitRoute
   '/market': typeof MarketRoute
   '/plans': typeof PlansRoute
   '/profile': typeof ProfileRoute
@@ -116,7 +109,6 @@ export interface FileRoutesByTo {
   '/captures': typeof CapturesRoute
   '/chart-lab': typeof ChartLabRoute
   '/chart-lab-hc': typeof ChartLabHcRoute
-  '/kit': typeof KitRoute
   '/market': typeof MarketRoute
   '/plans': typeof PlansRoute
   '/profile': typeof ProfileRoute
@@ -133,7 +125,6 @@ export interface FileRoutesById {
   '/captures': typeof CapturesRoute
   '/chart-lab': typeof ChartLabRoute
   '/chart-lab-hc': typeof ChartLabHcRoute
-  '/kit': typeof KitRoute
   '/market': typeof MarketRoute
   '/plans': typeof PlansRoute
   '/profile': typeof ProfileRoute
@@ -151,7 +142,6 @@ export interface FileRouteTypes {
     | '/captures'
     | '/chart-lab'
     | '/chart-lab-hc'
-    | '/kit'
     | '/market'
     | '/plans'
     | '/profile'
@@ -167,7 +157,6 @@ export interface FileRouteTypes {
     | '/captures'
     | '/chart-lab'
     | '/chart-lab-hc'
-    | '/kit'
     | '/market'
     | '/plans'
     | '/profile'
@@ -183,7 +172,6 @@ export interface FileRouteTypes {
     | '/captures'
     | '/chart-lab'
     | '/chart-lab-hc'
-    | '/kit'
     | '/market'
     | '/plans'
     | '/profile'
@@ -200,7 +188,6 @@ export interface RootRouteChildren {
   CapturesRoute: typeof CapturesRoute
   ChartLabRoute: typeof ChartLabRoute
   ChartLabHcRoute: typeof ChartLabHcRoute
-  KitRoute: typeof KitRoute
   MarketRoute: typeof MarketRoute
   PlansRoute: typeof PlansRoute
   ProfileRoute: typeof ProfileRoute
@@ -254,13 +241,6 @@ declare module '@tanstack/react-router' {
       path: '/market'
       fullPath: '/market'
       preLoaderRoute: typeof MarketRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/kit': {
-      id: '/kit'
-      path: '/kit'
-      fullPath: '/kit'
-      preLoaderRoute: typeof KitRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/chart-lab-hc': {
@@ -320,7 +300,6 @@ const rootRouteChildren: RootRouteChildren = {
   CapturesRoute: CapturesRoute,
   ChartLabRoute: ChartLabRoute,
   ChartLabHcRoute: ChartLabHcRoute,
-  KitRoute: KitRoute,
   MarketRoute: MarketRoute,
   PlansRoute: PlansRoute,
   ProfileRoute: ProfileRoute,

@@ -6,7 +6,7 @@ export { Highcharts }
 /**
  * 불타기 차트의 공용 Highcharts 설정.
  *
- * ⚠️ 여기 값 하나하나에 이유가 있다 — `docs/결정/Q11_차트_바탕.md` 의
+ * ⚠️ 여기 값 하나하나에 이유가 있다 — `docs/결정/Q2_차트_바탕.md` 의
  * 「설정과 그 이유」 표가 이 파일이다. 기본값으로 되돌리면 그때 잰 숫자가 무너진다.
  *
  * 지표 모듈(`indicators-all`)은 일부러 안 넣었다. 지금 두 화면이 그리는 이동평균선은
@@ -100,7 +100,9 @@ export function baseStockOptions({
       gridLineWidth: 0,
       lineColor: GRID,
       tickColor: GRID,
-      labels: { style: { color: TEXT_DIM, fontFamily: FONT, fontSize: '11px' } },
+      labels: {
+        style: { color: TEXT_DIM, fontFamily: FONT, fontSize: '11px' },
+      },
       crosshair: { color: 'rgba(255,255,255,0.2)', dashStyle: 'Dash' },
     },
     tooltip: {
@@ -123,9 +125,12 @@ export function priceAxis(
     gridLineColor: GRID,
     gridLineDashStyle: 'Dash',
     lineWidth: 0,
+    // 축 바깥에 둔다. `align: 'right', x: -6` 으로 플롯 안에 겹쳐 놓으면 가로를
+    // 60px 쯤 아끼지만, 끝봉이 라벨 위로 올라타 가격을 가린다 — 끝점이 계속
+    // 움직이는 화면이라 항상 겹친다.
     labels: {
-      align: 'right',
-      x: -6,
+      align: 'left',
+      x: 6,
       style: { color: TEXT_DIM, fontFamily: FONT, fontSize: '11px' },
     },
     ...extra,
@@ -139,13 +144,15 @@ export function priceAxis(
 export function baseBoxAnnotation(
   boxes: Array<{ from: number; to: number; low: number; high: number }>,
 ): Highcharts.AnnotationsOptions {
-  return {
-    draggable: '',
-    shapes: boxes.map((b) => ({
+  // 세 조각으로 나눈다 — 닫힌 사각형 하나로 그리면 좌우 변까지 선이 생긴다.
+  // 저항선(위)·지지선(아래)은 «가격»이라 선이 뜻을 갖지만, 좌우는 «구간의 시작과 끝»
+  // 이라 선을 그으면 그 날짜에 뭔가 있는 것처럼 읽힌다.
+  const shapes = boxes.flatMap((b) => [
+    // ① 바탕 — 채우기만. 테두리 없음
+    {
       type: 'path',
       fill: SR_FILL,
-      stroke: SR_LINE,
-      strokeWidth: 1.5,
+      strokeWidth: 0,
       points: [
         { x: b.from, y: b.high, xAxis: 0, yAxis: 0 },
         { x: b.to, y: b.high, xAxis: 0, yAxis: 0 },
@@ -153,6 +160,30 @@ export function baseBoxAnnotation(
         { x: b.from, y: b.low, xAxis: 0, yAxis: 0 },
         { x: b.from, y: b.high, xAxis: 0, yAxis: 0 },
       ],
-    })),
-  } as Highcharts.AnnotationsOptions
+    },
+    // ② 저항선 (위)
+    {
+      type: 'path',
+      fill: 'none',
+      stroke: SR_LINE,
+      strokeWidth: 1.5,
+      points: [
+        { x: b.from, y: b.high, xAxis: 0, yAxis: 0 },
+        { x: b.to, y: b.high, xAxis: 0, yAxis: 0 },
+      ],
+    },
+    // ③ 지지선 (아래)
+    {
+      type: 'path',
+      fill: 'none',
+      stroke: SR_LINE,
+      strokeWidth: 1.5,
+      points: [
+        { x: b.from, y: b.low, xAxis: 0, yAxis: 0 },
+        { x: b.to, y: b.low, xAxis: 0, yAxis: 0 },
+      ],
+    },
+  ])
+
+  return { draggable: '', shapes } as Highcharts.AnnotationsOptions
 }
