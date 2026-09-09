@@ -10,25 +10,36 @@ export const rankingKeys = {
 const MERGED_REGIMES: Regime[] = ['success', 'ready']
 
 /**
- * 펀더멘털 점수 순. 랭킹 화면이 쓰는 유일한 정렬이다 (①-2).
+ * 펀더멘털 순. 랭킹 화면이 쓰는 유일한 정렬이다 (①-2).
  *
- * 모멘텀 → FIP 순이던 것을 갈아끼웠다 (Q6) — 카드 셋이 EPS·매출·마진으로
- * 바뀌었는데 정렬만 옛 기준에 남아 있어서 **보이는 근거와 줄 세운 근거가
- * 달랐다.** 점수가 없는 행(백엔드 미구현)은 뒤로 민다.
+ * **모멘텀·FIP 를 안 쓴다.** 옛 순위 기준이라 Q6 에서 화면에서는 걷어냈는데
+ * 정렬의 2·3차 기준으로는 남아 있었다 — 화면은 「펀더멘털 순위」라고 쓰고
+ * 실제로는 모멘텀이 1위와 2위를 갈랐다.
+ *
+ * 동점은 **펀더멘털 안에서만** 가른다. 점수가 세 축을 하나로 더해 버려서
+ * 값이 스무 칸도 안 나오고, 그래서 동점은 예외가 아니라 기본이다 (Q7 미결).
+ *
+ *   ① 점수          0~7
+ *   ② 동반 개수      EPS·매출·마진 중 함께 오른 수 — 책 C §4 코드 33 에 가까운 쪽
+ *   ③ EPS 증가율     수준의 원값
+ *
+ * 값이 없는 행(백엔드 미구현)은 각 단계에서 뒤로 민다.
  */
-export function sortRanking<
-  T extends {
-    oneYearMomentum: number
-    fipScore: number
-    fundamentalScore?: number | null
-  },
->(items: T[]): T[] {
+type Sortable = {
+  fundamentalScore?: number | null
+  up?: { eps: boolean; revenue: boolean; margin: boolean } | null
+  epsGrowth?: number | null
+}
+
+export function sortRanking<T extends Sortable>(items: T[]): T[] {
   const score = (x: T) => x.fundamentalScore ?? -1
+  const together = (x: T) =>
+    x.up ? Number(x.up.eps) + Number(x.up.revenue) + Number(x.up.margin) : -1
+  const eps = (x: T) => x.epsGrowth ?? -Infinity
+
   return [...items].sort(
     (a, b) =>
-      score(b) - score(a) ||
-      b.oneYearMomentum - a.oneYearMomentum ||
-      b.fipScore - a.fipScore,
+      score(b) - score(a) || together(b) - together(a) || eps(b) - eps(a),
   )
 }
 
