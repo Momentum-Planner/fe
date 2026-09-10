@@ -85,13 +85,13 @@ export function PlanChain({
   const boxRef = useRef<HTMLDivElement>(null)
   const panRef = useRef<HTMLDivElement>(null)
   /**
-   * 사슬 오른쪽에 두는 «빈 자리».
+   * 사슬 «양옆»에 두는 빈 자리.
    *
-   * 콘텐츠가 `w-max` 라 마지막 마디 뒤에 아무것도 없다 — 스크롤이 끝까지 가도
-   * 마지막 마디는 오른쪽에 남는다. 「고른 마디를 왼쪽으로」가 마지막 마디에서만
-   * 안 먹던 이유다. 칸 폭만큼 빈 자리를 두면 어느 마디든 왼쪽까지 온다.
+   * 고른 마디를 «한가운데»로 데려오려면 첫 마디 앞과 마지막 마디 뒤에 각각 반 칸씩
+   * 자리가 있어야 한다. 콘텐츠가 `w-max` 라 그냥 두면 양 끝 마디는 가운데까지
+   * 못 온다 — 스크롤이 끝에서 멈춘다.
    */
-  const [tailPad, setTailPad] = useState(0)
+  const [pad, setPad] = useState(0)
   const nodeRefs = useRef(new Map<number, HTMLElement>())
   const [edges, setEdges] = useState<
     { x1: number; y1: number; x2: number; y2: number }[]
@@ -136,7 +136,7 @@ export function PlanChain({
     }
     const sizePad = () => {
       const pan = panRef.current
-      if (pan) setTailPad(Math.max(0, pan.clientWidth - CARD_W - LEAD))
+      if (pan) setPad(Math.max(0, (pan.clientWidth - CARD_W) / 2))
     }
     // 첫 값은 동기로 읽는다 — 콜백만 기다리면 첫 프레임에 선이 없다
     measure()
@@ -151,35 +151,53 @@ export function PlanChain({
   }, [key])
 
   /**
-   * **고른 마디를 사슬의 왼쪽으로 끌어온다.**
+   * **고른 마디를 사슬의 한가운데로 데려온다.**
    *
-   * 사슬이 폭보다 길면 계획을 눌러도 그 마디가 오른쪽 끝에 걸쳐 있거나 화면 밖에
-   * 있다. 차트는 그 시점으로 옮겨갔는데 사슬은 안 움직이니 둘이 따로 논다.
-   * 왼쪽에 세우면 «그 계획과 그 뒤에 이어진 것»이 오른쪽으로 펼쳐진다.
+   * 사슬이 폭보다 길면 계획을 눌러도 그 마디가 끝에 걸쳐 있거나 화면 밖에 있다.
+   * 차트는 그 시점을 가운데로 가져오는데 사슬만 안 움직이면 둘이 따로 논다.
+   * 가운데에 세우면 **앞뒤가 같이 보인다** — 왼쪽이 「여기까지 온 길」,
+   * 오른쪽이 「여기서 갈라진 것」이다. 차트의 축과 같은 규칙이다.
    *
    * `scrollIntoView` 를 안 쓰는 이유 — 조상 스크롤까지 전부 움직여서 페이지가
    * 같이 튄다. 이 칸만 민다.
    */
   useEffect(() => {
-    let raf = 0
+    let timer = 0
+    let tries = 0
     const go = () => {
       const box = panRef.current
       const el = nodeRefs.current.get(currentId)
-      // 마디가 아직 안 붙었으면 다음 프레임에 다시 — 목록이 늦게 오는 경우가 있다
-      if (!box || !el) {
-        raf = requestAnimationFrame(go)
+      // 칸에 폭이 아직 없거나(레이아웃 전) 마디가 안 붙었으면 조금 뒤에 다시
+      if (!box || !el || box.clientWidth === 0) {
+        if (tries++ < 30) timer = window.setTimeout(go, 32)
         return
       }
       const br = box.getBoundingClientRect()
       const er = el.getBoundingClientRect()
+      // 마디의 «중심»을 칸의 «중심»에 맞춘다
+      const delta = er.left + er.width / 2 - (br.left + br.width / 2)
+      /**
+       * ⚠️ 탭이 «안 보이면 부드러운 스크롤이 안 끝난다.** smooth 애니메이션도
+       * rAF 로 도는데 hidden 상태에서는 rAF 가 멈춘다 — 몇 px 만 가고 그대로 선다.
+       * 보고 있을 때만 부드럽게, 아니면 즉시 옮긴다.
+       */
       box.scrollTo({
-        left: box.scrollLeft + (er.left - br.left) - LEAD,
-        behavior: 'smooth',
+        left: box.scrollLeft + delta,
+        behavior: document.hidden ? 'auto' : 'smooth',
       })
     }
-    raf = requestAnimationFrame(go)
-    return () => cancelAnimationFrame(raf)
-  }, [currentId, plans])
+    go()
+    return () => window.clearTimeout(timer)
+    /**
+     * ⚠️ `requestAnimationFrame` 을 안 쓴다 — **백그라운드 탭에서는 rAF 가 아예
+     *    안 돈다.** 탭을 옮겨 놓고 계획을 열면 사슬이 영영 제자리에 있게 된다.
+     *    `setTimeout` 은 느려질 뿐 멈추지는 않는다.
+     *
+     * ⚠️ `pad` 가 의존성에 «있어야» 한다. 첫 렌더에는 0 이라 양옆 빈 자리가 없고,
+     *    그 상태에서 가운데로 가려면 왼쪽으로 가야 하는데 이미 0 이라 클램프되고
+     *    끝난다. `ResizeObserver` 가 pad 를 정한 «뒤» 한 번 더 돌아야 한다.
+     */
+  }, [currentId, plans, pad])
 
   const cells = [
     ...spine.map((p) => ({ key: p.planId, list: [p, ...dropped(p.planId)] })),
@@ -194,7 +212,7 @@ export function PlanChain({
         <div
           ref={boxRef}
           className="relative flex w-max items-start gap-7"
-          style={{ paddingRight: tailPad }}
+          style={{ paddingLeft: pad, paddingRight: pad }}
         >
           {cells.map(({ key: k, list }) => (
             <div key={k} className="flex flex-col gap-2">
@@ -309,9 +327,7 @@ function PanBox({
   )
 }
 
-/** 왼쪽에 남기는 여백 — 딱 붙이면 앞 마디로 이어지는 화살표가 잘린다 */
-const LEAD = 20
-/** 마디 폭. 오른쪽 빈 자리를 잴 때 쓴다 */
+/** 마디 폭. 양옆 빈 자리를 잴 때 쓴다 */
 const CARD_W = 176
 
 /**

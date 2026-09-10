@@ -108,11 +108,24 @@ export function PlanChart({
 
     // 보이는 구간은 **고른 계획을 따라간다** — 작성일이 한가운데에 선다
     const writtenT = toTime(writtenAt)
-    const { from, to, overscroll } = viewWindow(
-      data.map((d) => d[0]),
-      writtenT,
-      VISIBLE_BARS,
+    const times = data.map((d) => d[0])
+    const { from, to, padBars } = viewWindow(times, writtenT, VISIBLE_BARS)
+
+    /**
+     * 오른쪽 여유 — **값이 빈 봉**을 뒤에 붙인다. ordinal 축은 「x 가 있는 점」을
+     * 세므로 한 칸씩 자리를 차지하고, y 가 없어 그려지지는 않는다.
+     * 이렇게 해야 앵커가 어느 계획이든 같은 자리(2/3)에 선다.
+     */
+    const stepMs =
+      times.length > 20
+        ? (times[times.length - 1] - times[times.length - 21]) / 20
+        : 86_400_000
+    const lastT = times[times.length - 1]
+    const padPoints: Array<[number, null]> = Array.from(
+      { length: padBars },
+      (_, i) => [lastT + (i + 1) * stepMs, null],
     )
+    const axisMax = padBars > 0 ? padPoints[padPoints.length - 1][0] : to
 
     // 고른 선은 stopPrice 로 따로 그리므로 여기서 뺀다 — 같은 자리에 두 번 긋지 않는다
     const others = candidates.filter((c) => !c.chosen)
@@ -125,9 +138,8 @@ export function PlanChart({
       xAxis: {
         ...baseX,
         min: from,
-        max: to,
-        // 모자란 오른쪽은 «여유»로 — 범위를 데이터 밖으로 넘기면 ordinal 매핑이 깨진다
-        overscroll,
+        max: axisMax,
+
         /**
          * **빈 여유에는 날짜를 안 찍는다.**
          *
@@ -264,6 +276,25 @@ export function PlanChart({
       ],
       series: [
         { type: 'candlestick', id: 'candles', name: '일봉', data, yAxis: 0 },
+        /**
+         * 오른쪽 여유 — **자리만 차지하는 시리즈**다.
+         *
+         * ordinal 축은 «모든 시리즈의 x» 를 모아 칸을 만든다. 그래서 값이 빈 점을
+         * 뒤에 놓으면 그만큼 칸이 생기고, 캔들 시리즈는 안 건드리므로
+         * `linkedTo: 'candles'` 인 지표(이평선·MACD…)의 계산도 그대로다.
+         *
+         * ⚠️ 캔들 «안»에 빈 봉을 섞으면 지표가 그 빈 값까지 먹어 선이 망가진다.
+         *    한 번 그렇게 했다가 이평선이 어긋났다.
+         */
+        {
+          type: 'line',
+          id: 'pad',
+          data: padPoints,
+          yAxis: 0,
+          enableMouseTracking: false,
+          showInLegend: false,
+          dataGrouping: { enabled: false },
+        },
         {
           // ⚠️ id 가 «있어야» 한다 — OBV·매물대가 `volumeSeriesID` 로 이 시리즈를 찾는다.
           // 못 찾으면 그 지표만 빠지는 게 아니라 «차트가 통째로 예외를 던진다»

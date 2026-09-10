@@ -177,6 +177,12 @@ export interface PlanDetail extends PlanListItem {
   /** 등록 시점 계좌총액. **이것만 복사한다** — 참조로는 그 시점을 못 되살린다 */
   accountTotal: number
   /**
+   * 등록 시점 «현금». 계좌 총액 = 현금 + 평가액 이므로 총액만으로는 살 수 있는지
+   * 알 수 없다. **기록상 현금보다 큰 매수는 막는다** — 살 돈이 있는지를 증권사 앱에
+   * 미루지 않는다 (④-1-3).
+   */
+  accountCash: number
+  /**
    * 이 계획의 1R. **실행될 때 박히고 그 뒤로 안 변한다** —
    * 손절가를 올려도 R배수의 분모는 이 값이다. 실행 전이면 null
    */
@@ -193,6 +199,14 @@ export interface PlanDetail extends PlanListItem {
   records: PlanRecord[]
   /** 손절폭 상한 % — min(평균수익 ÷ 손익비, 10%) */
   stopLimit: number
+  /**
+   * 그 상한이 «어디서 나왔나».
+   *
+   * 숫자만 있으면 2.36% 가 하늘에서 떨어진 값으로 읽힌다 — 상한을 정하는 것은
+   * 차트가 아니라 «내 평균 수익»이다(④-1-1-2). 통계가 없으면 `null` 이고 그때는
+   * 10% 가 그대로 상한이다.
+   */
+  stopLimitBasis: { avgWin: number; targetRR: number } | null
 }
 
 export interface PlanListResponse {

@@ -18,6 +18,13 @@ import type {
 
 /** 계좌총액. 계획이 등록 시점 값을 «얼려» 간다 — 위험노출의 분모다 (F7). */
 const ACCOUNT_TOTAL = 80_000_000
+/** 그중 «현금». 나머지는 평가액이다 — 살 수 있는지는 이 값이 정한다 (④-1-3) */
+const ACCOUNT_CASH = 21_500_000
+/**
+ * 손절폭 상한의 근거 — min(평균수익 4.72% ÷ 손익비 목표 2, 10%) = 2.36%.
+ * ⑦이 내놓는 값이라 사용자마다 다르고, 표본이 모자라면 null 이 되어 10% 가 상한이다.
+ */
+const STOP_LIMIT_BASIS = { avgWin: 4.72, targetRR: 2 }
 
 /** 손절 구간 한 벌을 만든다. v1 은 비중 100 · 순번 1 하나뿐이다. */
 const singleStop = (
@@ -127,6 +134,9 @@ type Seed = Omit<
   | 'riskAfter'
   | 'fillRate'
   | 'accountTotal'
+  // 계좌 값과 상한 근거는 사용자에 하나다 — 계획마다 박으면 어긋난다
+  | 'accountCash'
+  | 'stopLimitBasis'
   // 머리줄용 둘은 스냅샷에서 «꺼내» 온다 — 손으로 또 박으면 어긋날 자리가 생긴다
   | 'entryState'
   | 'fundamentalScore'
@@ -572,6 +582,8 @@ export const PLANS: PlanDetail[] = SEEDS.map((s) => {
   return {
     ...rest,
     accountTotal: ACCOUNT_TOTAL,
+    accountCash: ACCOUNT_CASH,
+    stopLimitBasis: STOP_LIMIT_BASIS,
     stopPrice: lowestStop(s),
     quantity,
     riskAfter: riskAfter(s),

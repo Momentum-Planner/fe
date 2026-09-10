@@ -43,6 +43,9 @@ import { RiskBar } from './RiskBar'
  */
 const won = (n: number) => n.toLocaleString('ko-KR')
 
+/** 손절폭의 «절대» 상한. 통계가 없어도 이 위로는 안 간다 (④-1-1-2) */
+const HARD_LIMIT = 10
+
 export function PlanDetailPage({ planId }: { planId: number }) {
   const { data: plan, isLoading, isError } = usePlanDetail(planId)
   const { data: position } = useStockPosition(plan?.stockCode)
@@ -67,6 +70,13 @@ export function PlanDetailPage({ planId }: { planId: number }) {
   if (isError || !plan) return <Empty>계획을 찾지 못했습니다.</Empty>
 
   const walked = plan.status === 'RUNNING' || plan.status === 'DONE'
+  /** 이 계획의 손절폭 % — 상한과 재는 값이다 */
+  const stopWidth =
+    plan.entryPrice > 0
+      ? (Math.abs(plan.entryPrice - plan.stopPrice) / plan.entryPrice) * 100
+      : 0
+  /** ⚠️ 수수료가 빠져 있다 — 요율이 아직 안 정해졌다 (④-3 은 「× 수량 + 수수료」다) */
+  const needCash = plan.entryPrice * plan.quantity
   const held = position?.quantity ?? 0
 
   return (
@@ -121,7 +131,13 @@ export function PlanDetailPage({ planId }: { planId: number }) {
       </section>
 
       {/* ── 두 단 · 축이 없는 것들 ─────────────────────────────────────── */}
-      <div className="grid grid-cols-[minmax(0,1fr)_392px] items-start gap-3">
+      {/* 차트 : 계획 정보 = 1fr : 448px.
+          Q0 이 잰 826px 은 «차트가 유일한 주인공이던 때»의 값이다 — 그때는 오른쪽에
+          계획 정보가 없었다. 지금은 「진입가를 차트에서 고르고 그 결과를 옆에서 읽는」
+          구조라 두 칸이 같이 읽혀야 하고, 계획 정보가 172px 짜리 두 칸으로 쪼개져
+          경고 문구(「✕ 현금 …보다 …크다」)가 잘리고 있었다.
+          차트는 770px 로 줄지만 90봉이면 봉당 8.5px 이라 Q0 이 걱정한 516px 과 멀다. */}
+      <div className="grid grid-cols-[minmax(0,1fr)_448px] items-start gap-3">
         {/* 차트가 «주»다 — 종목 상세를 대체하는 화면이므로 차트가 그 폭을 가져야 한다.
             Q0 이 잰 값이 826px 이고, 여기 1fr 이 그 근처에 선다 */}
         <section className="card min-w-0 px-3 py-3">
@@ -171,22 +187,50 @@ export function PlanDetailPage({ planId }: { planId: number }) {
           </div>
 
           {/* ── 1층 · 진입 → 스톱가격 → 수량.  «순서가 거꾸로 되지 않는다» (④-1) ──
-              좌→우가 곧 그 순서다. 세로로 쌓으면 결론(위험노출)이 맨 밑으로 밀린다 */}
+              좌→우가 곧 그 순서다. 세로로 쌓으면 결론(위험노출)이 맨 밑으로 밀린다.
+
+              ㉣ 경고 셋은 «각자 재는 자리»에 붙는다 — 한군데 모으면 무엇을 고쳐야
+              하는지가 사라진다. 손절폭은 스톱가격 칸, 현금은 수량 칸. */}
           <div className="mt-2 grid grid-cols-2 gap-2">
-            <Cell label="진입 예상가" value={won(plan.entryPrice)} sub="" />
+            <Cell label="진입 예상가" value={won(plan.entryPrice)} />
             <Cell
               label="스톱가격"
               value={won(plan.stopPrice)}
               sub={
                 plan.initialStopWidth
-                  ? `1R ${won(plan.initialStopWidth)}`
-                  : `상한 ${plan.stopLimit}%`
+                  ? `1R ${won(plan.initialStopWidth)} · ${stopWidth.toFixed(2)}%`
+                  : `${stopWidth.toFixed(2)}%`
+              }
+              // ⚠ 「손절폭 10% 초과 — 그 종목은 포기한다」. 막지는 않는다
+              warn={
+                stopWidth > HARD_LIMIT
+                  ? `⚠ 손절폭 ${HARD_LIMIT}% 초과 — 포기하는 자리다`
+                  : stopWidth > plan.stopLimit
+                    ? `⚠ 상한 ${plan.stopLimit}% 초과`
+                    : undefined
               }
             />
             <Cell
               label="수량"
               value={`${plan.quantity}주`}
-              sub={`필요 현금 ${won(plan.entryPrice * plan.quantity)}`}
+              sub={`필요 현금 ${won(needCash)}`}
+              // ✕ 「기록상 현금보다 큰 매수는 막는다」 — 살 돈이 있는지를
+              //   증권사 앱에 미루지 않는다 (④-1-3)
+              block={
+                plan.side === 'BUY' && needCash > plan.accountCash
+                  ? `✕ 현금 ${won(plan.accountCash)} 보다 ${won(needCash - plan.accountCash)} 크다`
+                  : undefined
+              }
+            />
+            <Cell
+              label="손절폭 상한"
+              value={`${plan.stopLimit}%`}
+              // 상한이 «어디서 왔나» — 정하는 것은 차트가 아니라 내 평균 수익이다
+              sub={
+                plan.stopLimitBasis
+                  ? `평균수익 ${plan.stopLimitBasis.avgWin}% ÷ 손익비 ${plan.stopLimitBasis.targetRR}`
+                  : `통계 없음 — ${HARD_LIMIT}%`
+              }
             />
           </div>
 
@@ -266,7 +310,7 @@ export function PlanDetailPage({ planId }: { planId: number }) {
           {/* ── 3층 · 온디맨드.  가로로 늘어놓는다 — 접혀 있어도 세로 자리를 안 먹게 ── */}
           <div className="mt-3.5 flex flex-wrap gap-x-5 gap-y-2 border-t border-white/[0.07] pt-3">
             <Fold
-              title={`후보 선 ${plan.stopCandidates.length}개`}
+              title={`후보 선 ${plan.stopCandidates.length}개 · 상한 ${plan.stopLimit}%`}
               open={plan.status === 'PLANNED'}
             >
               <div className="flex flex-col gap-0.5">
@@ -419,24 +463,55 @@ const Tag = ({
   </span>
 )
 
-/** 1층 한 칸. 진입 → 스톱가격 → 수량이 같은 폭으로 나란히 선다 */
+/**
+ * 1층 한 칸.
+ *
+ * 경고가 «두 종»이다 — `warn` 은 넘어도 가는 것(⚠), `block` 은 막는 것(✕).
+ * 색만으로 가르지 않는다. 기호가 형태로 갈리므로 색이 무너져도 남는다 (디자인 2장 ⑨).
+ */
 const Cell = ({
   label,
   value,
   sub,
+  warn,
+  block,
 }: {
   label: string
   value: string
   sub?: string
+  warn?: string
+  block?: string
 }) => (
-  <div className="min-w-0 rounded-[10px] bg-white/[0.04] px-3 py-2">
+  <div
+    className={cn(
+      'min-w-0 rounded-[10px] px-3 py-2',
+      block
+        ? 'bg-brand-red/[0.10] ring-brand-red/40 ring-1'
+        : 'bg-white/[0.04]',
+    )}
+  >
     <div className="text-[11px] text-white/40">{label}</div>
-    <div className="font-number mt-0.5 truncate text-[16px] font-bold text-white">
+    <div
+      className={cn(
+        'font-number mt-0.5 truncate text-[16px] font-bold',
+        block ? 'text-brand-red' : 'text-white',
+      )}
+    >
       {value}
     </div>
     {sub && (
       <div className="font-number mt-0.5 truncate text-[11px] text-white/35">
         {sub}
+      </div>
+    )}
+    {(block ?? warn) && (
+      <div
+        className={cn(
+          'font-number mt-1 text-[11px]',
+          block ? 'text-brand-red' : 'text-warning',
+        )}
+      >
+        {block ?? warn}
       </div>
     )}
   </div>
