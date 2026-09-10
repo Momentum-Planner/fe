@@ -161,15 +161,24 @@ export function PlanChain({
    * 같이 튄다. 이 칸만 민다.
    */
   useEffect(() => {
-    const box = panRef.current
-    const el = nodeRefs.current.get(currentId)
-    if (!box || !el) return
-    const br = box.getBoundingClientRect()
-    const er = el.getBoundingClientRect()
-    box.scrollTo({
-      left: box.scrollLeft + (er.left - br.left) - LEAD,
-      behavior: 'smooth',
-    })
+    let raf = 0
+    const go = () => {
+      const box = panRef.current
+      const el = nodeRefs.current.get(currentId)
+      // 마디가 아직 안 붙었으면 다음 프레임에 다시 — 목록이 늦게 오는 경우가 있다
+      if (!box || !el) {
+        raf = requestAnimationFrame(go)
+        return
+      }
+      const br = box.getBoundingClientRect()
+      const er = el.getBoundingClientRect()
+      box.scrollTo({
+        left: box.scrollLeft + (er.left - br.left) - LEAD,
+        behavior: 'smooth',
+      })
+    }
+    raf = requestAnimationFrame(go)
+    return () => cancelAnimationFrame(raf)
   }, [currentId, plans])
 
   const cells = [
