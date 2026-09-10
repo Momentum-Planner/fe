@@ -1,6 +1,8 @@
 import { Link } from '@tanstack/react-router'
 import { cn } from '@/shared/lib/cn'
+import { REGIME_LABEL, fromServerRegime } from '@/shared/lib/snapshots'
 import { RegimeBadge } from '@/shared/ui/RegimeBadge'
+import { useRegimeInsight } from '@/entities/stock'
 import {
   ENTRY_STATE_LABEL,
   PLAN_STATUS_LABEL,
@@ -47,6 +49,19 @@ export function PlanDetailPage({ planId }: { planId: number }) {
   const { data: siblings = [] } = usePlanList(
     plan ? { stockCode: plan.stockCode } : {},
   )
+  /**
+   * 레짐은 **«오늘» 판정**이다 — 계획을 눌러도 안 바뀐다.
+   *
+   * 머리줄은 「이 종목이 «지금» 어디에 서 있나」를 답하는 자리다. 보유 수량·평균
+   * 단가가 지금 값인데 레짐만 그날 값이면 한 줄 안에서 시점이 갈린다 — 어느 게 어느
+   * 시점인지 매번 물어야 한다 (디자인 4장 ⑤ · ⑧).
+   * 「그날 어땠나」는 2층 근거 블록이 스냅샷으로 답한다.
+   */
+  const { data: regime } = useRegimeInsight(
+    plan?.stockCode ?? '',
+    undefined,
+    !!plan,
+  )
 
   if (isLoading) return <Empty>불러오는 중…</Empty>
   if (isError || !plan) return <Empty>계획을 찾지 못했습니다.</Empty>
@@ -72,7 +87,7 @@ export function PlanDetailPage({ planId }: { planId: number }) {
         </Link>
 
         {/* 레짐 배지 — 스냅샷 카드가 쓰던 «그» 배지다. 색은 레짐마다 정해져 있다 */}
-        <RegimeBadge regime={plan.snapshot.regime} />
+        {regime && <RegimeBadge regime={fromServerRegime(regime.regime)} />}
 
         {held > 0 ? (
           <>
@@ -227,6 +242,8 @@ export function PlanDetailPage({ planId }: { planId: number }) {
             </div>
             <div className="flex flex-wrap gap-1.5">
               <Tag>{ENTRY_STATE_LABEL[plan.snapshot.entryState]}</Tag>
+              {/* 그날 레짐. 머리줄의 배지는 «오늘» 것이라 값이 다를 수 있다 */}
+              <Tag>{REGIME_LABEL[plan.snapshot.regime]}</Tag>
               <Tag>펀더 {plan.snapshot.fundamentalScore}/7</Tag>
               <Tag>
                 진입 위치 {plan.snapshot.entryPosition > 0 ? '+' : ''}

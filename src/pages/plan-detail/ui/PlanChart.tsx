@@ -17,6 +17,7 @@ import {
   specOf,
 } from './indicators'
 import type { Layer } from './indicators'
+import { viewWindow } from './viewWindow'
 import type { StopCandidate } from '@/entities/plan'
 
 /**
@@ -105,43 +106,45 @@ export function PlanChart({
     // 세로는 «칸마다 픽셀»로 쌓는다 — %로 나누면 지표를 켤 때마다 가격 칸이 줄어든다
     const box = panes(own.length)
 
-    /**
-     * 보이는 구간은 **고른 계획을 따라간다.**
-     *
-     * 사슬에서 다른 마디를 누르면 진입가·스톱가격만 바뀌는 게 아니라 «그때»로
-     * 옮겨가야 한다 — 8월 계획을 보면서 9월 캔들만 보고 있으면 진입선이 화면 밖
-     * 어딘가에 떠 있고, 「그날 왜 여기서 사려 했나」에 답이 안 나온다.
-     *
-     * 작성일을 «한가운데»에 둔다. 왼쪽이 그날까지 지나온 길, 오른쪽이 그 뒤에 실제로
-     * 어떻게 됐나 — 계획을 고르면 그 시점이 눈의 한가운데로 온다.
-     */
+    // 보이는 구간은 **고른 계획을 따라간다** — 작성일이 한가운데에 선다
     const writtenT = toTime(writtenAt)
-    const idx = data.findIndex((d) => d[0] >= writtenT)
-    const anchor = idx < 0 ? data.length - 1 : idx
-    const back = Math.round(VISIBLE_BARS * 0.5)
-    const fwd = VISIBLE_BARS - back
-    let lo = anchor - back
-    let hi = anchor + fwd
-    if (hi > data.length - 1) {
-      lo -= hi - (data.length - 1)
-      hi = data.length - 1
-    }
-    if (lo < 0) {
-      hi = Math.min(data.length - 1, hi - lo)
-      lo = 0
-    }
-    const from = data[lo][0]
-    const to = data[hi][0]
+    const { from, to, overscroll } = viewWindow(
+      data.map((d) => d[0]),
+      writtenT,
+      VISIBLE_BARS,
+    )
 
     // 고른 선은 stopPrice 로 따로 그리므로 여기서 뺀다 — 같은 자리에 두 번 긋지 않는다
     const others = candidates.filter((c) => !c.chosen)
 
+    // 공용 바탕의 X축 설정. 타입이 `XAxisOptions | XAxisOptions[]` 라 한 번 좁혀 둔다
+    const baseX = baseStockOptions().xAxis as Highcharts.XAxisOptions
+
     const chart = Highcharts.stockChart(el, {
       ...baseStockOptions({ height: box.total }),
       xAxis: {
-        ...baseStockOptions().xAxis,
+        ...baseX,
         min: from,
         max: to,
+        // 모자란 오른쪽은 «여유»로 — 범위를 데이터 밖으로 넘기면 ordinal 매핑이 깨진다
+        overscroll,
+        /**
+         * **빈 여유에는 날짜를 안 찍는다.**
+         *
+         * ordinal 축은 데이터 구간에서 주말을 «압축»하는데, 여유 구간은 압축할
+         * 데이터가 없어 실제 시간 그대로 벌어진다 — 같은 14일이 왼쪽에서는 10칸,
+         * 오른쪽에서는 14칸이 되어 «최근으로 갈수록 늘어나 보인다».
+         *
+         * 게다가 거기 찍히는 것은 «아직 오지 않은 날짜»라, 봉이 있는 것처럼 읽힌다.
+         * 아무것도 없는 자리이므로 라벨도 없는 것이 맞다.
+         */
+        labels: {
+          ...baseX.labels,
+          formatter(this: Highcharts.AxisLabelsFormatterContextObject) {
+            if (Number(this.value) > data[data.length - 1][0]) return ''
+            return this.axis.defaultLabelFormatter.call(this)
+          },
+        },
         // 계획을 «세운 날». 진입선·스톱선이 가격을 말하고 이 선이 시점을 말한다
         plotLines: [
           {
@@ -150,11 +153,18 @@ export function PlanChart({
             width: 1,
             dashStyle: 'Dash',
             zIndex: 3,
+            /**
+             * ⚠️ 라벨을 «차트 위»로 올린다. 기본 자리(축 바로 위)는 X축 날짜가
+             * 서는 자리라 두 글자가 그대로 포개진다 — 「9월 8일」 위에 「8월 17일」이
+             * 겹쳐 찍히던 것이 이것이다.
+             */
             label: {
               text: `계획 ${writtenAt.slice(5)}`,
+              verticalAlign: 'top',
+              textAlign: 'left',
               rotation: 0,
               y: 12,
-              x: 5,
+              x: 6,
               style: { color: 'rgba(255,255,255,0.45)', fontSize: '10px' },
             },
           },

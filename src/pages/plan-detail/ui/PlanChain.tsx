@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { cn } from '@/shared/lib/cn'
 import { PLAN_STATUS_LABEL } from '@/entities/plan'
@@ -83,8 +83,16 @@ export function PlanChain({
    * 그래야 마디가 위아래로 어긋나도 «마디에서 마디로» 간다.
    */
   const boxRef = useRef<HTMLDivElement>(null)
+  const panRef = useRef<HTMLDivElement>(null)
+  /**
+   * 사슬 오른쪽에 두는 «빈 자리».
+   *
+   * 콘텐츠가 `w-max` 라 마지막 마디 뒤에 아무것도 없다 — 스크롤이 끝까지 가도
+   * 마지막 마디는 오른쪽에 남는다. 「고른 마디를 왼쪽으로」가 마지막 마디에서만
+   * 안 먹던 이유다. 칸 폭만큼 빈 자리를 두면 어느 마디든 왼쪽까지 온다.
+   */
+  const [tailPad, setTailPad] = useState(0)
   const nodeRefs = useRef(new Map<number, HTMLElement>())
-  const dotRefs = useRef(new Map<number, HTMLElement>())
   const [edges, setEdges] = useState<
     { x1: number; y1: number; x2: number; y2: number }[]
   >([])
@@ -107,8 +115,6 @@ export function PlanChain({
           if (!a || !c) return []
           const ra = a.getBoundingClientRect()
           const rc = c.getBoundingClientRect()
-          const da = dotRefs.current.get(from)?.getBoundingClientRect()
-          const dc = dotRefs.current.get(to)?.getBoundingClientRect()
           /**
            * **x 는 카드의 가장자리, y 는 점의 높이.**
            *
@@ -116,25 +122,55 @@ export function PlanChain({
            * 갈래로 내려가는 대각선이 앞 마디의 제목 위를 지나가 글자를 긋는다.
            * 카드 바깥에서 시작해 카드 바깥에서 끝나면 마디 사이 여백만 지난다.
            */
-          const midY = (r: DOMRect, d?: DOMRect) =>
-            (d ? d.top + d.height / 2 : r.top + r.height / 2) - b.top
+          const midY = (r: DOMRect) => r.top + r.height / 2 - b.top
           return [
             {
               x1: ra.right - b.left,
-              y1: midY(ra, da),
+              y1: midY(ra),
               x2: rc.left - b.left,
-              y2: midY(rc, dc),
+              y2: midY(rc),
             },
           ]
         }),
       )
     }
+    const sizePad = () => {
+      const pan = panRef.current
+      if (pan) setTailPad(Math.max(0, pan.clientWidth - CARD_W - LEAD))
+    }
     // 첫 값은 동기로 읽는다 — 콜백만 기다리면 첫 프레임에 선이 없다
     measure()
-    const ro = new ResizeObserver(measure)
+    sizePad()
+    const ro = new ResizeObserver(() => {
+      measure()
+      sizePad()
+    })
     ro.observe(box)
+    if (panRef.current) ro.observe(panRef.current)
     return () => ro.disconnect()
   }, [key])
+
+  /**
+   * **고른 마디를 사슬의 왼쪽으로 끌어온다.**
+   *
+   * 사슬이 폭보다 길면 계획을 눌러도 그 마디가 오른쪽 끝에 걸쳐 있거나 화면 밖에
+   * 있다. 차트는 그 시점으로 옮겨갔는데 사슬은 안 움직이니 둘이 따로 논다.
+   * 왼쪽에 세우면 «그 계획과 그 뒤에 이어진 것»이 오른쪽으로 펼쳐진다.
+   *
+   * `scrollIntoView` 를 안 쓰는 이유 — 조상 스크롤까지 전부 움직여서 페이지가
+   * 같이 튄다. 이 칸만 민다.
+   */
+  useEffect(() => {
+    const box = panRef.current
+    const el = nodeRefs.current.get(currentId)
+    if (!box || !el) return
+    const br = box.getBoundingClientRect()
+    const er = el.getBoundingClientRect()
+    box.scrollTo({
+      left: box.scrollLeft + (er.left - br.left) - LEAD,
+      behavior: 'smooth',
+    })
+  }, [currentId, plans])
 
   const cells = [
     ...spine.map((p) => ({ key: p.planId, list: [p, ...dropped(p.planId)] })),
@@ -143,12 +179,13 @@ export function PlanChain({
   ]
 
   return (
-    <PanBox>
+    <PanBox boxRef={panRef}>
       {/* 사슬이 칸보다 «작을 때» 위에 붙지 않고 가운데 선다 */}
       <div className="flex min-h-full w-max flex-col justify-center">
         <div
           ref={boxRef}
-          className="relative flex w-max items-start gap-7 pr-6"
+          className="relative flex w-max items-start gap-7"
+          style={{ paddingRight: tailPad }}
         >
           {cells.map(({ key: k, list }) => (
             <div key={k} className="flex flex-col gap-2">
@@ -160,10 +197,6 @@ export function PlanChain({
                   bind={(el) => {
                     if (el) nodeRefs.current.set(p.planId, el)
                     else nodeRefs.current.delete(p.planId)
-                  }}
-                  bindDot={(el) => {
-                    if (el) dotRefs.current.set(p.planId, el)
-                    else dotRefs.current.delete(p.planId)
                   }}
                 />
               ))}
@@ -199,8 +232,16 @@ export function PlanChain({
  * 마우스를 누른 채 움직이면 `scrollLeft/Top` 을 반대로 민다.
  * 노드는 링크라, «끌었으면» 클릭을 취소한다 — 안 그러면 끌 때마다 계획이 열린다.
  */
-function PanBox({ children }: { children: React.ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null)
+function PanBox({
+  children,
+  boxRef,
+}: {
+  children: React.ReactNode
+  /** 고른 마디를 왼쪽으로 끌어오려면 밖에서 이 칸을 스크롤해야 한다 */
+  boxRef?: React.RefObject<HTMLDivElement | null>
+}) {
+  const own = useRef<HTMLDivElement>(null)
+  const ref = boxRef ?? own
   const drag = useRef<{ x: number; y: number; l: number; t: number } | null>(
     null,
   )
@@ -259,15 +300,23 @@ function PanBox({ children }: { children: React.ReactNode }) {
   )
 }
 
+/** 왼쪽에 남기는 여백 — 딱 붙이면 앞 마디로 이어지는 화살표가 잘린다 */
+const LEAD = 20
+/** 마디 폭. 오른쪽 빈 자리를 잴 때 쓴다 */
+const CARD_W = 176
+
 /**
- * 마디의 «점». 상태는 색이 지고, 폐기만 형태가 다르다 —
- * 색이 무너져도 「안 가기로 한 것」은 남아야 한다 (디자인 2장 ⑨).
+ * 상태의 색. **점을 빼고 «상태 글씨»가 진다.**
+ *
+ * 점은 선을 이을 지점이 필요해서 뒀던 것인데, 선이 카드 가장자리에서 나가게 되면서
+ * 할 일이 없어졌다. 색을 쓸 거면 「실행 중」이라는 «글자 자체»가 지는 게 맞다 —
+ * 같은 자리에서 이름과 색이 한 번에 읽히고(디자인 7장), 색이 무너져도 글자가 남는다.
  */
-const DOT: Record<string, string> = {
-  RUNNING: 'bg-brand-red',
-  PLANNED: 'border-brand-blue/70 border bg-transparent',
-  DONE: 'bg-white/45',
-  CLOSED: 'bg-white/12',
+const TONE: Record<string, string> = {
+  RUNNING: 'text-brand-red',
+  PLANNED: 'text-brand-blue',
+  DONE: 'text-white/50',
+  CLOSED: 'text-white/30',
 }
 
 /**
@@ -281,14 +330,11 @@ function ChainNode({
   p,
   current,
   bind,
-  bindDot,
 }: {
   p: PlanListItem
   current: boolean
   /** 카드 자체 — 선이 «여기 바깥»에서 시작하고 끝난다 */
   bind?: (el: HTMLElement | null) => void
-  /** 점 — 선의 높이를 정한다 */
-  bindDot?: (el: HTMLElement | null) => void
 }) {
   const droppedNode = p.status === 'CLOSED'
   return (
@@ -297,12 +343,13 @@ function ChainNode({
       to="/plans/$planId"
       params={{ planId: String(p.planId) }}
       draggable={false}
+      style={{ width: CARD_W }}
       // 고른 마디가 «확실히» 갈려야 한다 — 차트가 그리로 옮겨갔는데 사슬에서
       // 어느 것을 눌렀는지 흐리면 둘이 이어지지 않는다
       className={cn(
         // ⚠️ 바탕이 «불투명»해야 뒤의 선이 안 비친다. `bg-white/x` 로는 안 된다 —
         // 반투명이라 선이 그대로 비쳐 보인다. 세 상태 다 불투명 토큰을 쓴다
-        'group relative z-10 block w-[176px] shrink-0 rounded-lg px-2.5 py-2 transition-colors',
+        'group relative z-10 block shrink-0 rounded-lg px-2.5 py-2 transition-colors',
         current
           ? 'bg-bg-elevated ring-1 ring-white/25'
           : 'bg-bg-input hover:bg-bg-surface',
@@ -316,23 +363,6 @@ function ChainNode({
         <span className={current ? 'text-white/45' : 'text-white/25'}>
           {p.side === 'BUY' ? '매수' : '매도'}
         </span>
-      </div>
-      {/* 선이 «이 점»에서 저 점으로 간다 — 측정 대상이 마디가 아니라 점이다 */}
-      <div
-        ref={bindDot}
-        className="my-1 flex h-3 w-3 items-center justify-center"
-      >
-        {droppedNode ? (
-          <span className="text-[11px] leading-none text-white/35">✕</span>
-        ) : (
-          <span
-            className={cn(
-              'h-2.5 w-2.5 rounded-full',
-              DOT[p.status],
-              current && 'ring-2 ring-white/35',
-            )}
-          />
-        )}
       </div>
       <div
         className={cn(
@@ -351,9 +381,17 @@ function ChainNode({
         <span>{p.entryPrice.toLocaleString('ko-KR')}</span>
         <span className="text-white/25">·</span>
         <span>{p.quantity}주</span>
+        {/* 실행 중만 점이 붙는다 — 「지금 살아 있는 계획」은 종목당 하나뿐이다 (④-2) */}
         <span
-          className={cn('ml-auto', current ? 'text-white/45' : 'text-white/25')}
+          className={cn(
+            'ml-auto flex items-center gap-1',
+            TONE[p.status],
+            droppedNode && 'line-through',
+          )}
         >
+          {p.status === 'RUNNING' && (
+            <span className="bg-brand-red h-1.5 w-1.5 rounded-full" />
+          )}
           {PLAN_STATUS_LABEL[p.status]}
         </span>
       </div>
