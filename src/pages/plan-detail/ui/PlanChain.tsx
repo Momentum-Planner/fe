@@ -16,6 +16,11 @@ import type { PlanListItem } from '@/entities/plan'
  *   **과거는 한 줄**   이미 결정된 것이라 갈라지지 않는다
  *   **미래는 갈래**    실행 전 계획 여럿. 하나만 실현되고 나머지는 사용자가 닫는다 (④-3)
  *
+ * **X축을 차트와 «공유하지 않는다».** 날짜 비례로 놓아 봤더니 계획이 몇 달에 몰려
+ * 있을 때 카드가 줄줄이 겹쳤다 — 점은 값이라 못 미는데(3장 ⑦) 카드만 밀면 어느 점의
+ * 이름인지가 흐려진다. 그래서 사슬은 «순서»로 균등하게 놓고, 대신 **마디를 누르면
+ * 차트가 그 계획의 작성일로 옮겨간다.** 시점을 잇는 일을 배치가 아니라 인터랙션이 한다.
+ *
  * ⚠️ 핸드북 3-2 의 화살표 표에 **자기참조가 없다.** A↔B 두 오브젝트만 다룬다.
  *    표대로 밀면 「계획 싱글 → 계획 컬렉션」이 되는데 그러면 사슬이 안 보인다.
  *    화면 «안»의 표현이라 4부(배치) 쪽인데 거기도 안을 안 다룬다 — 비어 있는 자리다.
@@ -56,7 +61,9 @@ export function PlanChain({
     branches.set(at, list)
   }
 
-  const tail = spine[spine.length - 1]
+  // 줄기가 비면 undefined 다. `at(-1)` 이라야 타입이 그것을 말한다 —
+  // `spine[spine.length - 1]` 은 `noUncheckedIndexedAccess` 가 꺼져 있어 늘 truthy 로 읽힌다
+  const tail = spine.at(-1)
   const tips = tail
     ? (branches.get(tail.planId) ?? []).filter((p) => p.status === 'PLANNED')
     : []
@@ -77,6 +84,7 @@ export function PlanChain({
    */
   const boxRef = useRef<HTMLDivElement>(null)
   const nodeRefs = useRef(new Map<number, HTMLElement>())
+  const dotRefs = useRef(new Map<number, HTMLElement>())
   const [edges, setEdges] = useState<
     { x1: number; y1: number; x2: number; y2: number }[]
   >([])
@@ -99,12 +107,23 @@ export function PlanChain({
           if (!a || !c) return []
           const ra = a.getBoundingClientRect()
           const rc = c.getBoundingClientRect()
+          const da = dotRefs.current.get(from)?.getBoundingClientRect()
+          const dc = dotRefs.current.get(to)?.getBoundingClientRect()
+          /**
+           * **x 는 카드의 가장자리, y 는 점의 높이.**
+           *
+           * 점에서 곧장 이으면 점이 카드 «안»에 있으므로 선이 카드를 가로지른다.
+           * 갈래로 내려가는 대각선이 앞 마디의 제목 위를 지나가 글자를 긋는다.
+           * 카드 바깥에서 시작해 카드 바깥에서 끝나면 마디 사이 여백만 지난다.
+           */
+          const midY = (r: DOMRect, d?: DOMRect) =>
+            (d ? d.top + d.height / 2 : r.top + r.height / 2) - b.top
           return [
             {
               x1: ra.right - b.left,
-              y1: ra.top + ra.height / 2 - b.top,
+              y1: midY(ra, da),
               x2: rc.left - b.left,
-              y2: rc.top + rc.height / 2 - b.top,
+              y2: midY(rc, dc),
             },
           ]
         }),
@@ -129,7 +148,7 @@ export function PlanChain({
       <div className="flex min-h-full w-max flex-col justify-center">
         <div
           ref={boxRef}
-          className="relative flex w-max items-center gap-9 pr-[168px] pb-[72px]"
+          className="relative flex w-max items-start gap-7 pr-6"
         >
           {cells.map(({ key: k, list }) => (
             <div key={k} className="flex flex-col gap-2">
@@ -142,12 +161,17 @@ export function PlanChain({
                     if (el) nodeRefs.current.set(p.planId, el)
                     else nodeRefs.current.delete(p.planId)
                   }}
+                  bindDot={(el) => {
+                    if (el) dotRefs.current.set(p.planId, el)
+                    else dotRefs.current.delete(p.planId)
+                  }}
                 />
               ))}
             </div>
           ))}
 
-          <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
+          {/* 선은 카드 «뒤»에 깔린다 (z-0 · 카드는 z-10) — 겹치면 카드가 이긴다 */}
+          <svg className="pointer-events-none absolute inset-0 z-0 h-full w-full overflow-visible">
             {edges.map((e, i) => {
               const dx = Math.max(18, (e.x2 - e.x1) * 0.55)
               return (
@@ -235,64 +259,103 @@ function PanBox({ children }: { children: React.ReactNode }) {
   )
 }
 
-const TONE: Record<string, string> = {
-  RUNNING: 'border-brand-red/50 bg-brand-red/10',
-  PLANNED: 'border-brand-blue/45 bg-brand-blue/10',
-  DONE: 'border-white/8 bg-white/[0.03]',
-  CLOSED: 'border-white/8 bg-white/[0.02]',
+/**
+ * 마디의 «점». 상태는 색이 지고, 폐기만 형태가 다르다 —
+ * 색이 무너져도 「안 가기로 한 것」은 남아야 한다 (디자인 2장 ⑨).
+ */
+const DOT: Record<string, string> = {
+  RUNNING: 'bg-brand-red',
+  PLANNED: 'border-brand-blue/70 border bg-transparent',
+  DONE: 'bg-white/45',
+  CLOSED: 'bg-white/12',
 }
 
-const CHIP: Record<string, string> = {
-  RUNNING: 'bg-brand-red/15 text-brand-red',
-  PLANNED: 'bg-brand-blue/15 text-brand-blue',
-  DONE: 'bg-white/[0.07] text-white/55',
-  CLOSED: 'bg-white/[0.07] text-white/45',
-}
-
+/**
+ * 사슬 마디 — **테두리를 뺐다.**
+ *
+ * 박스가 여덟 개 나란히 서면 «테두리끼리» 먼저 보인다. 마디를 가르는 일은 이미
+ * 가로 자리가 하고 있으므로 선이 중복이다 —
+ * *"영역을 나누려면 선이 아니라 여백·음영·인접도"* (디자인 9장 ⑫).
+ */
 function ChainNode({
   p,
   current,
   bind,
+  bindDot,
 }: {
   p: PlanListItem
   current: boolean
+  /** 카드 자체 — 선이 «여기 바깥»에서 시작하고 끝난다 */
   bind?: (el: HTMLElement | null) => void
+  /** 점 — 선의 높이를 정한다 */
+  bindDot?: (el: HTMLElement | null) => void
 }) {
+  const droppedNode = p.status === 'CLOSED'
   return (
     <Link
       ref={bind}
       to="/plans/$planId"
       params={{ planId: String(p.planId) }}
       draggable={false}
+      // 고른 마디가 «확실히» 갈려야 한다 — 차트가 그리로 옮겨갔는데 사슬에서
+      // 어느 것을 눌렀는지 흐리면 둘이 이어지지 않는다
       className={cn(
-        'block w-[168px] shrink-0 rounded-[12px] border px-3 py-2.5 transition-colors',
-        TONE[p.status],
-        current && 'ring-1 ring-white/45',
-        !current && 'hover:bg-white/[0.07]',
+        // ⚠️ 바탕이 «불투명»해야 뒤의 선이 안 비친다. `bg-white/x` 로는 안 된다 —
+        // 반투명이라 선이 그대로 비쳐 보인다. 세 상태 다 불투명 토큰을 쓴다
+        'group relative z-10 block w-[176px] shrink-0 rounded-lg px-2.5 py-2 transition-colors',
+        current
+          ? 'bg-bg-elevated ring-1 ring-white/25'
+          : 'bg-bg-input hover:bg-bg-surface',
+        droppedNode && !current && 'opacity-55',
       )}
     >
-      <div className="flex items-center gap-1.5 whitespace-nowrap">
+      <div className="font-number flex items-baseline gap-1.5 text-[10px] whitespace-nowrap">
+        <span className={current ? 'text-white/60' : 'text-white/30'}>
+          {p.writtenAt.slice(5)}
+        </span>
+        <span className={current ? 'text-white/45' : 'text-white/25'}>
+          {p.side === 'BUY' ? '매수' : '매도'}
+        </span>
+      </div>
+      {/* 선이 «이 점»에서 저 점으로 간다 — 측정 대상이 마디가 아니라 점이다 */}
+      <div
+        ref={bindDot}
+        className="my-1 flex h-3 w-3 items-center justify-center"
+      >
+        {droppedNode ? (
+          <span className="text-[11px] leading-none text-white/35">✕</span>
+        ) : (
+          <span
+            className={cn(
+              'h-2.5 w-2.5 rounded-full',
+              DOT[p.status],
+              current && 'ring-2 ring-white/35',
+            )}
+          />
+        )}
+      </div>
+      <div
+        className={cn(
+          'truncate text-[12px]',
+          current ? 'font-semibold text-white' : 'text-white/70',
+        )}
+      >
+        {p.title}
+      </div>
+      <div
+        className={cn(
+          'font-number mt-0.5 flex items-baseline gap-1.5 text-[11px] whitespace-nowrap',
+          current ? 'text-white/65' : 'text-white/40',
+        )}
+      >
+        <span>{p.entryPrice.toLocaleString('ko-KR')}</span>
+        <span className="text-white/25">·</span>
+        <span>{p.quantity}주</span>
         <span
-          className={cn('rounded px-1.5 py-0.5 text-[11px]', CHIP[p.status])}
+          className={cn('ml-auto', current ? 'text-white/45' : 'text-white/25')}
         >
           {PLAN_STATUS_LABEL[p.status]}
         </span>
-        <span className="text-[11px] text-white/45">
-          {p.side === 'BUY' ? '매수' : '매도'}
-        </span>
-        <span className="font-number ml-auto text-[10px] text-white/25">
-          {p.writtenAt.slice(5)}
-        </span>
-      </div>
-      <div className="mt-1.5 truncate text-[12px] font-semibold text-white">
-        {p.title}
-      </div>
-      <div className="font-number mt-1 text-[13px] whitespace-nowrap text-white/85">
-        {p.entryPrice.toLocaleString('ko-KR')}
-      </div>
-      <div className="font-number mt-0.5 flex items-baseline gap-1 text-[11px] whitespace-nowrap text-white/45">
-        <span>↓ {p.stopPrice.toLocaleString('ko-KR')}</span>
-        <span className="ml-auto text-white/35">{p.quantity}주</span>
       </div>
     </Link>
   )

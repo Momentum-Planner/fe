@@ -53,6 +53,10 @@ const SNAPSHOTS = {
     fundamentalScore: 5,
     damageScore: 0,
     entryPosition: 1.8,
+    regime: 'start',
+    damageAt: '2026-08-24 14:32',
+    trendPassed: 8,
+    trendFailed: [],
   },
   90455: {
     dailyScreeningResultId: 90455,
@@ -61,6 +65,10 @@ const SNAPSHOTS = {
     fundamentalScore: 4,
     damageScore: 0,
     entryPosition: 0.4,
+    regime: 'prep',
+    damageAt: '2026-09-08 15:20',
+    trendPassed: 8,
+    trendFailed: [],
   },
   87310: {
     dailyScreeningResultId: 87310,
@@ -69,6 +77,10 @@ const SNAPSHOTS = {
     fundamentalScore: 3,
     damageScore: 0,
     entryPosition: -4.1,
+    regime: 'prep',
+    damageAt: '2026-06-01 15:30',
+    trendPassed: 7,
+    trendFailed: ['200일선 상승'],
   },
   88790: {
     dailyScreeningResultId: 88790,
@@ -77,6 +89,10 @@ const SNAPSHOTS = {
     fundamentalScore: 6,
     damageScore: 1,
     entryPosition: 2.2,
+    regime: 'start',
+    damageAt: '2026-07-11 13:05',
+    trendPassed: 8,
+    trendFailed: [],
   },
   90201: {
     dailyScreeningResultId: 90201,
@@ -85,6 +101,10 @@ const SNAPSHOTS = {
     fundamentalScore: 2,
     damageScore: 1,
     entryPosition: -6.4,
+    regime: 'none',
+    damageAt: '2026-09-01 11:48',
+    trendPassed: 6,
+    trendFailed: ['200일선 상승', 'RS 70 이상'],
   },
   90440: {
     dailyScreeningResultId: 90440,
@@ -93,6 +113,10 @@ const SNAPSHOTS = {
     fundamentalScore: 5,
     damageScore: 0,
     entryPosition: 9.6,
+    regime: 'start',
+    damageAt: '2026-09-07 15:30',
+    trendPassed: 8,
+    trendFailed: [],
   },
 } satisfies Record<number, PlanSnapshot>
 

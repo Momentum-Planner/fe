@@ -1,5 +1,6 @@
 import Highcharts from 'highcharts/esm/highstock'
 import 'highcharts/esm/modules/annotations'
+import 'highcharts/esm/indicators/indicators-all'
 
 export { Highcharts }
 
@@ -9,10 +10,42 @@ export { Highcharts }
  * ⚠️ 여기 값 하나하나에 이유가 있다 — `docs/결정/Q2_차트_바탕.md` 의
  * 「설정과 그 이유」 표가 이 파일이다. 기본값으로 되돌리면 그때 잰 숫자가 무너진다.
  *
- * 지표 모듈(`indicators-all`)은 일부러 안 넣었다. 지금 두 화면이 그리는 이동평균선은
- * 백엔드(`/chart/moving-averages`)가 계산해 주므로 라인 시리즈면 충분하고,
- * 45종을 통째로 넣으면 번들만 157KB 늘어난다. 프론트 계산 지표가 필요해지면 그때 붙인다.
+ * 지표 모듈(`indicators-all`)을 넣었다 (2026-09-10). 계획 화면이 MACD·RSI·스토캐스틱을
+ * 켤 수 있어야 하는데, 이들은 «캔들만 있으면 프론트에서 계산되는» 지표라 백엔드를
+ * 기다릴 이유가 없다. 개별 import 로 30~40KB 만 무는 길도 있었지만, 지표를 하나 더
+ * 볼 때마다 코드를 고치게 되므로 전부 넣는 쪽을 택했다.
+ *
+ * 실측 — `indicators-all` 이 **별도 청크 456KB (gzip 158KB)** 로 갈린다. 이 파일을
+ * 부르는 화면(차트가 있는 곳)에서만 받는다. 첫 화면 번들은 그대로다.
+ *
+ * ⚠️ 두 화면이 이동평균을 «다르게» 얻는다 — 종목 상세는 백엔드
+ * (`/chart/moving-averages`, 50·150·200 세 기간만), 계획 화면은 이 모듈로 프론트에서
+ * 계산한다. 계획 화면은 사용자가 기간을 아무 값이나 넣을 수 있어야 해서다.
+ * 같은 캔들로 같은 SMA 를 계산하므로 값은 같지만, 「20일선 이탈」 같은 «판정»은
+ * 여전히 백엔드 값으로만 난다.
  */
+
+/**
+ * 시리즈 기본 팔레트.
+ *
+ * Highcharts 는 색을 «안 주면» 자기 기본 10색을 순서대로 칠하는데, 그 팔레트가
+ * 파스텔 톤이라 이 어두운 화면에서 대비가 약하고 `styles.css` 의 토큰과도 어긋난다.
+ * 그렇다고 시리즈마다 색을 손으로 주면 지표를 하나 늘릴 때마다 색을 정해야 한다.
+ *
+ * **기본값 자체를 한 번 바꾼다** — 그 뒤로는 색을 안 줘도 우리 색이 나온다.
+ */
+export const SERIES_COLORS = [
+  '#34DE7B',
+  '#FF3636',
+  '#F46B1A',
+  '#7B6CFF',
+  '#34ADE4',
+  '#FFD166',
+  '#FF6678',
+  '#EEB82D',
+] as const
+
+Highcharts.setOptions({ colors: [...SERIES_COLORS] })
 
 export const CANDLE_UP = '#FF3636'
 export const CANDLE_DOWN = '#34ADE4'

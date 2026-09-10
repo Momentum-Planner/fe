@@ -5,6 +5,8 @@
  *    msw 목이 유일한 구현이다. 실제 DTO 가 생기면 여기부터 대조한다.
  */
 
+import type { Regime } from '@/shared/lib/snapshots'
+
 /** 계획 상태 넷. 「얼마나 샀나」가 아니라 「아직 들고 있나」가 가른다. */
 export type PlanStatus = 'PLANNED' | 'RUNNING' | 'DONE' | 'CLOSED'
 
@@ -23,7 +25,9 @@ export const PLAN_STATUS_LABEL: Record<PlanStatus, string> = {
   PLANNED: '대기',
   RUNNING: '실행 중',
   DONE: '실행 완료',
-  CLOSED: '폐쇄',
+  // 「미실행」이 아니다 — ④-2 의 전이가 «실행 전 · 실행 중 → 폐기» 라
+  // 체결이 붙은 계획도 여기로 온다. 「미실행」이면 화면이 거짓말을 한다 (2026-09-10)
+  CLOSED: '폐기',
 }
 
 export const ENTRY_STATE_LABEL: Record<EntryState, string> = {
@@ -78,10 +82,27 @@ export interface PlanSnapshot {
   entryState: EntryState
   /** 펀더멘털 점수 0~7 */
   fundamentalScore: number
-  /** 훼손 점수 0~2 */
+  /**
+   * 훼손 점수 0~2.
+   * ⚠️ **이 값만 출처가 다르다** — ⑤-3 가 «장중 실시간»으로 찍는다 (④-0).
+   * 나머지 스냅샷 값은 전부 `date` 의 배치 한 행에서 온다.
+   */
   damageScore: number
+  /** 그 훼손 점수를 찍은 시각. 날짜가 다른 값에만 날짜를 붙인다 */
+  damageAt: string
   /** 진입 위치 % — 피봇 대비 */
   entryPosition: number
+  /** 레짐 (④-0). 종목 상세가 뱃지로 띄우던 그 값이다 */
+  regime: Regime
+  /** 트렌드 템플릿 8조건 중 통과 개수 */
+  trendPassed: number
+  /**
+   * 어긋난 조건의 «이름». 8칸 도트를 안 쓰는 이유 —
+   * 도트는 「세 번째 칸이 왜 비었나」를 다시 묻게 만든다. ①-1 게이트가 8/8 을
+   * 요구하므로 계획이 선 종목은 대개 8/8 이고, **어긋난 것만 이름으로** 쓰면
+   * 정상일 때는 한 줄로 끝난다.
+   */
+  trendFailed: string[]
 }
 
 /** 목록 한 줄. 싱글이 가진 것 중 «줄 세우는 데 필요한 것»만 남긴 것이다. */
