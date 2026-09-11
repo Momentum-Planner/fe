@@ -1,4 +1,41 @@
 export type Regime = 'start' | 'prep' | 'fail' | 'drop' | 'none'
+
+/**
+ * 진입 상태 (②) — 살 수 있는 셋과 못 사는 하나.
+ * ⚠️ 진입 불가의 «사유 넷»은 아직 안 실렸다 (「눌림 생성 실패」 등).
+ */
+export type EntryState = 'EARLY' | 'BREAKOUT' | 'PULLBACK' | 'BLOCKED'
+
+/**
+ * 하루치 스크리닝 판정 — `DailyScreeningResult` 한 행 (⑤-2).
+ *
+ * **종목 × 일자로 쌓인다. 덮어쓰지 않는다.** 그래서 계획이 이 행을
+ * `dailyScreeningResultId` 로 «참조»할 수 있다 — 복사하지 않아도 그날 값이
+ * 나중에 안 변한다 (F4).
+ *
+ * ⚠️ 여기 두는 이유 — 이 행은 **종목 축**(전 사용자 공용)인데 계획도 종목도 쓴다.
+ *    FSD 에서 같은 층의 슬라이스끼리는 서로 못 부르므로 `shared` 가 제자리다.
+ *    `Regime` 이 이미 같은 이유로 여기 있다.
+ */
+export interface DailyScreening {
+  dailyScreeningResultId: number
+  /** 판정이 난 날 (LocalDate) */
+  date: string
+  entryState: EntryState
+  /** 펀더멘털 점수 0~7 (①-2) */
+  fundamentalScore: number
+  /** 훼손 점수 0~2. ⚠️ 이 값만 «장중 실시간»으로 찍힌다 (⑤-3) */
+  damageScore: number
+  /** 그 훼손 점수를 찍은 시각. 날짜가 다른 값에만 날짜를 붙인다 */
+  damageAt: string
+  /** 진입 위치 % — 피봇 대비 */
+  entryPosition: number
+  regime: Regime
+  /** 트렌드 템플릿 8조건 중 통과 개수 */
+  trendPassed: number
+  /** 어긋난 조건의 «이름». 정상(8/8)이면 빈 배열이라 한 줄로 끝난다 */
+  trendFailed: string[]
+}
 export type Judgment = 'buy' | 'sell' | 'hold'
 
 export const REGIME_LABEL: Record<Regime, string> = {

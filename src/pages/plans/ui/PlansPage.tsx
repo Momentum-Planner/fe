@@ -57,12 +57,17 @@ export function PlansPage() {
             b.writtenAt.localeCompare(a.writtenAt),
         )
         return {
-          head: sorted[0],
+          // 그룹은 «계획이 있어서» 만들어지므로 첫 줄이 늘 있다. 타입은 그것을
+          // 모르니 빈 그룹을 아래에서 걸러낸다
+          head: sorted.at(0),
           plans: sorted,
-          // 실행 전이 둘 이상이면 갈래다 — 하나만 실현되고 나머지는 사용자가 닫는다
+          // 대기이 둘 이상이면 갈래다 — 하나만 실현되고 나머지는 사용자가 닫는다
           branch: sorted.filter((p) => p.status === 'PLANNED').length,
         }
       })
+      .filter((g): g is typeof g & { head: NonNullable<typeof g.head> } =>
+        Boolean(g.head),
+      )
       .sort(
         (a, b) =>
           STATUS_RANK[a.head.status] - STATUS_RANK[b.head.status] ||
@@ -163,13 +168,12 @@ export function PlansPage() {
                   {g.plans.map((p) => (
                     <div
                       key={p.planId}
-                      className="grid grid-cols-[56px_34px_minmax(0,1fr)_74px_120px] items-center gap-2 py-1.5 text-[13px]"
+                      // 매수·매도 칸을 뺐다 — **계획에 그런 구분이 없다.**
+                      // 파는 일은 계획 «안»(스톱가격·갱신 규칙)에 있다
+                      className="grid grid-cols-[56px_minmax(0,1fr)_74px_120px] items-center gap-2 py-1.5 text-[13px]"
                     >
                       <span className="rounded-md bg-white/[0.07] px-1.5 py-0.5 text-center text-[11px] text-white/70">
                         {PLAN_STATUS_LABEL[p.status]}
-                      </span>
-                      <span className="text-center text-[12px] text-white/50">
-                        {p.side === 'BUY' ? '매수' : '매도'}
                       </span>
                       <span className="font-number text-white/85">
                         {p.entryPrice.toLocaleString('ko-KR')}

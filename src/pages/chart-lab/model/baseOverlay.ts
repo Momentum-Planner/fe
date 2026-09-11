@@ -34,6 +34,7 @@ export function registerBaseBox() {
     createPointFigures: ({ coordinates }) => {
       if (coordinates.length < 2) return []
       const [a, b] = coordinates
+      if (!a || !b) return []
       // ② 좌표는 이미 픽셀이다 — 스크롤·줌·리사이즈가 나면 라이브러리가 다시 불러준다
       const x = Math.min(a.x, b.x)
       const y = Math.min(a.y, b.y)

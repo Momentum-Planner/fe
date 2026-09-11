@@ -3,10 +3,13 @@ import { chartApi } from '../api/chartApi'
 import type { ChartRange } from '../api/chartApi'
 import { insightApi } from '../api/insightApi'
 import { likeApi } from '../api/likeApi'
+import { screeningApi } from '../api/screeningApi'
 import type { MovingAveragePeriod } from './types'
 
 export const stockKeys = {
   all: ['stock'] as const,
+  screening: (code: string, r?: { from?: string; to?: string }) =>
+    [...stockKeys.all, 'screening', code, r ?? null] as const,
   chart: (code: string) => [...stockKeys.all, 'chart', code] as const,
   daily: (code: string, r?: ChartRange) =>
     [...stockKeys.chart(code), 'daily', r ?? null] as const,
@@ -173,5 +176,25 @@ export function useRemoveLike(memberId: number | null | undefined) {
       likeApi.removeLike(memberId as number, stockCode),
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: stockKeys.likes(memberId) }),
+  })
+}
+
+/**
+ * 하루치 스크리닝 판정 목록 (⑤-2).
+ *
+ * 계획의 「근거 날짜」를 고르는 자리가 이 목록이다 — 날짜를 «쓰는» 것이 아니라
+ * 판정을 «고르는» 것이라, 고를 수 있는 날이 무엇인지를 화면이 알아야 한다 (④).
+ */
+export function useScreening(
+  stockCode: string | null | undefined,
+  range?: { from?: string; to?: string },
+) {
+  return useQuery({
+    queryKey: stockKeys.screening(stockCode as string, range),
+    queryFn: () => screeningApi.getList(stockCode as string, range),
+    enabled: !!stockCode,
+    select: (res) => res.results,
+    // 종목 축이라 사용자와 무관하고 하루 한 번만 바뀐다
+    staleTime: 5 * 60_000,
   })
 }

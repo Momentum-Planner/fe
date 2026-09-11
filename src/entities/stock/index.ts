@@ -2,7 +2,10 @@ export { chartApi } from './api/chartApi'
 export type { ChartRange } from './api/chartApi'
 export { insightApi } from './api/insightApi'
 export { likeApi } from './api/likeApi'
+export { screeningApi } from './api/screeningApi'
+export type { ScreeningListResponse } from './api/screeningApi'
 export {
+  useScreening,
   stockKeys,
   useDailyCandles,
   useMovingAverages,

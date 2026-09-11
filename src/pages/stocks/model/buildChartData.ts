@@ -6,7 +6,8 @@ const DOWN = 'rgba(52,173,228,0.55)'
 
 /** 'YYYY-MM-DD' → UTC 밀리초. Highcharts 는 timestamp 를 쓴다. */
 export function toTime(tradeDate: string): number {
-  const [y, m, d] = tradeDate.split('-').map(Number)
+  // `split` 결과는 길이를 모르므로 셋 다 undefined 를 낀다 — 바닥값을 둔다
+  const [y = 0, m = 1, d = 1] = tradeDate.split('-').map(Number)
   return Date.UTC(y, m - 1, d)
 }
 
@@ -14,7 +15,9 @@ const byDate = <T extends { tradeDate: string }>(rows: T[]) =>
   [...rows].sort((a, b) => a.tradeDate.localeCompare(b.tradeDate))
 
 /** 일봉 → 캔들 시리즈 [t, o, h, l, c]. */
-export function toCandles(candles: DailyCandle[]): Array<[number, number, number, number, number]> {
+export function toCandles(
+  candles: DailyCandle[],
+): Array<[number, number, number, number, number]> {
   return byDate(candles).map((c) => [
     toTime(c.tradeDate),
     c.openPrice,

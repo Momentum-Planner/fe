@@ -29,8 +29,10 @@ function synth(
     const base = endPrice * (0.55 + (0.45 * i) / count)
     const open = base + wiggle(i)
     const close = base + wiggle(i + 2.4) // 몸통이 보이게 위상차를 벌린다
-    const high = Math.max(open, close) * (1 + 0.006 + 0.004 * Math.abs(Math.sin(i / 3)))
-    const low = Math.min(open, close) * (1 - 0.006 - 0.004 * Math.abs(Math.sin(i / 5)))
+    const high =
+      Math.max(open, close) * (1 + 0.006 + 0.004 * Math.abs(Math.sin(i / 3)))
+    const low =
+      Math.min(open, close) * (1 - 0.006 - 0.004 * Math.abs(Math.sin(i / 5)))
     out.push({
       timestamp,
       open: Math.round(open),
@@ -70,11 +72,13 @@ export function resample(bars: KLineData[], size: number): KLineData[] {
   const out: KLineData[] = []
   for (let i = 0; i < bars.length; i += size) {
     const group = bars.slice(i, i + size)
-    if (group.length === 0) continue
+    const head = group.at(0)
+    const tail = group.at(-1)
+    if (!head || !tail) continue
     out.push({
-      timestamp: group[0].timestamp,
-      open: group[0].open,
-      close: group[group.length - 1].close,
+      timestamp: head.timestamp,
+      open: head.open,
+      close: tail.close,
       high: Math.max(...group.map((b) => b.high)),
       low: Math.min(...group.map((b) => b.low)),
       volume: group.reduce((s, b) => s + (b.volume ?? 0), 0),
@@ -101,16 +105,22 @@ export function findBases(bars: KLineData[]): BaseBox[] {
     [0.86, 0.91],
     [0.94, 0.99],
   ]
-  return spans.map(([a, b]) => {
+  return spans.flatMap(([a, b]) => {
+    if (a === undefined || b === undefined) return []
     const from = Math.floor(bars.length * a)
     const to = Math.floor(bars.length * b)
     const slice = bars.slice(from, to)
-    return {
-      startTime: bars[from].timestamp,
-      endTime: bars[to - 1].timestamp,
-      supportPrice: Math.min(...slice.map((c) => c.low)),
-      resistancePrice: Math.max(...slice.map((c) => c.high)),
-    }
+    const head = slice.at(0)
+    const tail = slice.at(-1)
+    if (!head || !tail) return []
+    return [
+      {
+        startTime: head.timestamp,
+        endTime: tail.timestamp,
+        supportPrice: Math.min(...slice.map((c) => c.low)),
+        resistancePrice: Math.max(...slice.map((c) => c.high)),
+      },
+    ]
   })
 }
 

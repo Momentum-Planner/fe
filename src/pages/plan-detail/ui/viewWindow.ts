@@ -36,13 +36,13 @@ export type Window = {
 }
 
 /**
- * 앵커가 설 «자리». 0.5 면 한가운데, 0.67 이면 오른쪽에서 1/3 지점이다.
+ * 앵커가 설 «자리». 1 이면 오른쪽 끝, 0.5 면 한가운데다.
  *
- * 기본을 2/3 로 둔 이유 — 계획을 세운 근거는 «그날까지의 모양»에 있다(베이스 · 수축 ·
- * 이평선). 그것이 넓게 보여야 「왜 여기서 사려 했나」가 읽힌다. 그 뒤는 결과라
- * 3분의 1이면 충분하다.
+ * 기본이 **오른쪽 끝**인 이유 — 계획을 세울 때 사용자가 실제로 본 화면이 그것이다.
+ * 그날 차트를 열면 그날이 마지막 봉이고, 오른쪽에는 아직 아무것도 없었다.
+ * 뒤에 무슨 일이 있었는지를 같이 그리면 «그때는 몰랐던 것»이 판단에 섞인다.
  */
-const ANCHOR_AT = 2 / 3
+const ANCHOR_AT = 1
 
 export function viewWindow(
   times: number[],
@@ -70,5 +70,11 @@ export function viewWindow(
   if (lo < 0) lo = 0
   // 왼쪽이 모자라면 그냥 첫 봉에서 시작한다. 데이터 이전은 «없는» 것이지
   // 비어 있는 것이 아니라, 여유를 만들어 주면 거짓이 된다
-  return { from: times[lo], to: times[hi], padBars }
+  const from = times[lo]
+  const to = times[hi]
+  // `lo` · `hi` 를 위에서 범위 안으로 눌렀으므로 여기 오면 둘 다 있다.
+  // 그래도 «타입이 그것을 모르므로» 한 번 가른다 — 빈 배열은 위에서 이미 빠졌다
+  if (from === undefined || to === undefined)
+    return { from: anchor, to: anchor, padBars: 0 }
+  return { from, to, padBars }
 }

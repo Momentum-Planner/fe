@@ -250,7 +250,9 @@ export function makeLayer(
   at = 0,
 ): Layer {
   seq += 1
-  const color = spec.color ?? SERIES_COLORS[at % SERIES_COLORS.length]
+  // 나머지 연산이라 항상 범위 안인데 «타입은 그것을 모른다» — 첫 색을 바닥으로 둔다
+  const color =
+    spec.color ?? SERIES_COLORS[at % SERIES_COLORS.length] ?? SERIES_COLORS[0]
   const params: Record<string, number | number[]> = {}
   for (const p of spec.params) {
     const v = p.key === 'period' && override != null ? override : p.def
@@ -274,9 +276,9 @@ export function makeLayer(
 
 /** `#RRGGBB` 를 알파 붙은 rgba 로. 밴드 채우기에 쓴다 */
 export function withAlpha(hex: string, a: number): string {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex)
-  if (!m) return hex
-  const n = parseInt(m[1], 16)
+  const body = /^#?([0-9a-f]{6})$/i.exec(hex)?.[1]
+  if (!body) return hex
+  const n = parseInt(body, 16)
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`
 }
 
@@ -319,7 +321,9 @@ export const VOLUME_SERIES_ID = 'volume'
  * 화면이 먼저 말을 한다 — 판정이 실제로 쓰는 셋만 켠다.
  */
 export function defaultLayers(): Layer[] {
-  const sma = INDICATORS[0]
+  // 사전의 첫 항목이 이동평균선이다 — 이름으로 찾아야 순서가 바뀌어도 안 깨진다
+  const sma = INDICATORS.find((d) => d.id === 'sma')
+  if (!sma) return []
   return [50, 150, 200].map((n, i) => makeLayer(sma, n, i))
 }
 

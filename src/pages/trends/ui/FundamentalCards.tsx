@@ -32,7 +32,10 @@ function useWidth<T extends HTMLElement>() {
     if (!el) return
     // 첫 값은 동기로 읽는다 — ResizeObserver 콜백만 기다리면 첫 프레임에 그림이 없다
     setW(el.getBoundingClientRect().width)
-    const ro = new ResizeObserver(([e]) => setW(e.contentRect.width))
+    const ro = new ResizeObserver((entries) => {
+      const e = entries[0]
+      if (e) setW(e.contentRect.width)
+    })
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
@@ -136,7 +139,10 @@ const WIN = 3
  */
 function windowDelta(all: number[]) {
   const t = all.slice(-WIN)
-  return t[t.length - 1] - t[0]
+  const head = t.at(0)
+  const tail = t.at(-1)
+  // 표본이 없으면 «변화도 없다». 0 이 그 사실이다
+  return head === undefined || tail === undefined ? 0 : tail - head
 }
 
 const fmtDelta = (d: number) =>

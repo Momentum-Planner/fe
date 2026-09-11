@@ -44,8 +44,7 @@ async function isLoggedIn(): Promise<boolean> {
   // 부트스트랩이 이미 같은 키로 요청을 걸어 뒀다 — 여기서는 그 결과만 기다린다.
   const pending = queryClient
     .getQueryCache()
-    .find<Account>({ queryKey: authKeys.account() })
-    ?.promise
+    .find<Account>({ queryKey: authKeys.account() })?.promise
 
   const account = await Promise.race([pending ?? timeout, timeout]).catch(
     () => null,

@@ -83,11 +83,11 @@ const designedCandles: CandlestickData[] = rawCandles.map(
 
 /** Generated past history prepended so dragging the chart left reveals older data. */
 const HISTORY_LEN = 160
-const history = makeHistory(
-  HISTORY_LEN,
-  designedCandles[0].time as number,
-  designedCandles[0].open,
-)
+// 손으로 박은 상수 배열이라 첫 봉이 늘 있다. 타입만 그것을 모른다
+const firstDesigned = designedCandles[0]
+const history = firstDesigned
+  ? makeHistory(HISTORY_LEN, firstDesigned.time as number, firstDesigned.open)
+  : []
 
 export const marketCandles: CandlestickData[] = [...history, ...designedCandles]
 

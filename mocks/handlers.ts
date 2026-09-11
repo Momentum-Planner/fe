@@ -1,5 +1,15 @@
 import { http, HttpResponse } from 'msw'
-import { PLANS, toListItem } from './data/plans'
+import { at } from '@/shared/lib/at'
+import { makeScreening } from './data/screening'
+import {
+  PLANS,
+  closePlan,
+  createPlan,
+  deletePlan,
+  patchPlan,
+  planDefaults,
+  toListItem,
+} from './data/plans'
 import {
   STOCKS,
   makeBases,
@@ -17,6 +27,18 @@ const ok = <T>(data: T) =>
     meta: { result: 'SUCCESS', errorCode: null, message: null },
     data,
   })
+
+/**
+ * 실패 응답. 같은 래퍼를 쓰되 `result: 'FAIL'` 이다 — `client.ts` 가 그것을 보고 던진다.
+ *
+ * **코드를 나눠 붙인다** — 「못 지운다」와 「없다」가 같은 응답이면 화면이
+ * 무엇을 말해야 할지 모른다 (디자인 4장 ⑤ — 없는 이유가 다르면 표식도 다르다).
+ */
+const fail = (status: number, errorCode: string, message: string) =>
+  HttpResponse.json(
+    { meta: { result: 'FAIL', errorCode, message }, data: null },
+    { status },
+  )
 
 const MA_PERIOD: Record<string, number> = {
   MA_50: 50,
@@ -44,18 +66,21 @@ function fundamentals(code: string) {
 
   // 수준 — 구간을 먼저 고르고 그 구간 «안»의 값을 뽑는다. 그래야 화면에
   // 뜨는 증가율과 점수가 서로 안 어긋난다
-  const band = Math.floor(rand(seed, 7) * 4)
-  const [lo, span, level] = [
+  // 튜플로 못박는다 — 배열 리터럴이면 인덱싱 결과가 `undefined` 를 낀다
+  const BANDS = [
     [0, 20, 1.0],
     [20, 5, 1.5],
     [25, 15, 2.0],
     [40, 60, 3.0],
-  ][band]
+  ] as const satisfies ReadonlyArray<readonly [number, number, number]>
+  const band = Math.floor(rand(seed, 7) * 4)
+  const [lo, span, level] = at([...BANDS], band)
   const epsGrowth = +(lo + rand(seed, 10) * span).toFixed(0)
 
-  const direction = (['decel', 'flat', 'accel'] as const)[
-    Math.floor(rand(seed, 8) * 3)
-  ]
+  const direction = at(
+    [...(['decel', 'flat', 'accel'] as const)],
+    Math.floor(rand(seed, 8) * 3),
+  )
   const dirPoint = { decel: -1, flat: 0, accel: 1 }[direction]
 
   const up = {
@@ -103,10 +128,10 @@ export const handlers = [
     const kind = String(params.kind)
     const seed = seedOf(code)
     const candles = makeCandles(code)
-    const last = candles[candles.length - 1]
-    const yearAgo = candles[Math.max(0, candles.length - 240)]
+    const last = at(candles, -1)
+    const yearAgo = at(candles, Math.max(0, candles.length - 240))
     const bases = makeBases(candles)
-    const lastBase = bases[bases.length - 1]
+    const lastBase = at(bases, -1)
 
     switch (kind) {
       case 'regime':
@@ -189,8 +214,8 @@ export const handlers = [
           eps = eps * (1 + (rand(seed, 8 + i) - 0.3) * 0.35)
           return { quarter: q, eps: Math.round(eps) }
         })
-        const first = quarterlyEps[0].eps
-        const lastEps = quarterlyEps[quarterlyEps.length - 1].eps
+        const first = at(quarterlyEps, 0).eps
+        const lastEps = at(quarterlyEps, -1).eps
         return ok({
           quarterlyEps,
           changeRateYoY: +(((lastEps - first) / first) * 100).toFixed(2),
@@ -232,8 +257,8 @@ export const handlers = [
       ok({
         stocks: STOCKS.map((s) => {
           const candles = makeCandles(s.stockCode)
-          const last = candles[candles.length - 1]
-          const yearAgo = candles[Math.max(0, candles.length - 240)]
+          const last = at(candles, -1)
+          const yearAgo = at(candles, Math.max(0, candles.length - 240))
           return {
             stockName: s.stockName,
             stockCode: s.stockCode,
@@ -256,6 +281,25 @@ export const handlers = [
   http.get('/api/v1/auth/account', () =>
     ok({ isLoggedIn: true, nickname: '개발자', email: 'dev@example.com' }),
   ),
+
+  /**
+   * 하루치 스크리닝 판정 목록 (⑤-2 · `DailyScreeningResult`).
+   *
+   * 계획의 「근거 날짜」가 여기서 고르는 값이다 — **고를 수 있는 날이 무엇인지**를
+   * 화면이 알아야 ④ 의 *「며칠 전 판정을 보고 세운 계획이면 그 날짜를 찍어야
+   * 근거가 사실과 맞는다」* 가 성립한다.
+   *
+   * ⚠️ 매일 있지 «않다». ①-1 게이트에 걸린 날은 행이 없다 — 그 빈칸이 정보다.
+   */
+  http.get('/api/v1/stocks/:code/screening', ({ params, request }) => {
+    const q = new URL(request.url).searchParams
+    const from = q.get('from')
+    const to = q.get('to')
+    const results = makeScreening(String(params.code)).filter(
+      (r) => (!from || r.date >= from) && (!to || r.date <= to),
+    )
+    return ok({ results })
+  }),
 
   // ─────────────── 계획 ───────────────
   // ⚠️ 백엔드에 TradePlan API 가 없다. 이 둘이 유일한 구현이다.
@@ -280,6 +324,16 @@ export const handlers = [
       .map(toListItem)
 
     return ok({ plans })
+  }),
+
+  /**
+   * 계획을 세울 때 «계획이 아닌 데서» 오는 값들 — 계좌 · 통계 · 종목.
+   * **계획이 하나도 없는 종목에서도 온다.** 첫 계획이 여기에 기댄다.
+   */
+  http.get('/api/v1/stocks/:code/plan-defaults', ({ params }) => {
+    const code = String(params.code)
+    const last = at(makeCandles(code), -1).closePrice
+    return ok(planDefaults(code, last))
   }),
 
   // 종목 포지션 (③). ④의 자료가 「스냅샷 + ③의 손절가·위험노출·보유 수량 + 계좌 총액」이라
@@ -313,6 +367,83 @@ export const handlers = [
     })
   }),
 
+  // 계획 «생성» (④ · Q8). 세운 계획은 「대기」로 난다 — 실행 중으로 만드는 것은 체결이다
+  http.post('/api/v1/plans', async ({ request }) => {
+    const body = (await request.json()) as Parameters<typeof createPlan>[0]
+    const made = createPlan(body)
+    // 기록상 현금보다 큰 매수는 «막는다» — 화면만 막으면 우회된다 (④-1-3)
+    if (made === 'no-cash')
+      return fail(
+        409,
+        'NOT_ENOUGH_CASH',
+        '기록상 현금보다 큽니다 — 현금을 고치거나 수량을 줄이세요',
+      )
+    return ok(made)
+  }),
+
+  /**
+   * 계획 «폐기» (Q8) — 안 가기로 한 것이다. 상태만 바뀌고 행은 남는다.
+   * **삭제와 같은 문턱이다** — 대기 + 체결 0건.
+   *
+   * **사유가 필수다.** 폐기는 판단이고, 판단에는 이유가 있다 — ⑦가 폐기 비율로
+   * 세므로 이유 없이 닫힌 행이 쌓이면 그 비율이 아무것도 못 말한다.
+   */
+  http.post('/api/v1/plans/:planId/close', async ({ params, request }) => {
+    const body = (await request.json()) as { closeReason?: string }
+    const reason = body.closeReason?.trim()
+    if (!reason)
+      return fail(400, 'CLOSE_REASON_REQUIRED', '폐기 사유가 없습니다')
+
+    const r = closePlan(Number(params.planId), reason)
+    if (r === 'not-found') return fail(404, 'NOT_FOUND', '계획이 없습니다')
+    // 삭제와 «같은 문턱»이다 — 체결이 붙으면 「안 갔다」고 닫을 수 없다
+    if (r === 'conflict')
+      return fail(
+        409,
+        'NOT_CLOSABLE',
+        '체결이 붙었거나 대기가 아닙니다 — 닫는 것은 체결이 합니다',
+      )
+    return ok(r)
+  }),
+
+  /**
+   * 계획 «삭제» (Q8) — 애초에 없어야 했던 것이다. **폐기와 다른 행위다.**
+   *
+   * 대기 + 체결 0건만 지운다. 그 밖은 409 이고, 화면은 **폐기로 안내해야 한다** —
+   * 체결이 붙었으면 돈이 실제로 움직였고 그건 없던 일이 될 수 없다.
+   */
+  http.delete('/api/v1/plans/:planId', ({ params }) => {
+    const r = deletePlan(Number(params.planId))
+    if (r === 'not-found') return fail(404, 'NOT_FOUND', '계획이 없습니다')
+    if (r === 'conflict')
+      return fail(
+        409,
+        'NOT_DELETABLE',
+        '체결이 붙었거나 대기가 아닙니다 — 폐기로 닫습니다',
+      )
+    return ok(null)
+  }),
+
+  // 계획 수정 (④ — 대기이면 고칠 수 있고, 실행 중에도 고칠 수 있다.
+  // 이미 찍힌 스냅샷과 체결은 안 바뀐다)
+  http.patch('/api/v1/plans/:planId', async ({ params, request }) => {
+    const body = (await request.json()) as Record<string, unknown>
+    const next = patchPlan(Number(params.planId), body)
+    if (!next)
+      return HttpResponse.json(
+        {
+          meta: {
+            result: 'FAIL',
+            errorCode: 'NOT_FOUND',
+            message: '계획이 없습니다',
+          },
+          data: null,
+        },
+        { status: 404 },
+      )
+    return ok(next)
+  }),
+
   http.get('/api/v1/plans/:planId', ({ params }) => {
     const plan = PLANS.find((p) => p.planId === Number(params.planId))
     if (!plan)
@@ -342,7 +473,7 @@ export const handlers = [
         return {
           stockCode: s.stockCode,
           stockName: s.stockName,
-          price: candles[candles.length - 1].closePrice,
+          price: at(candles, -1).closePrice,
           regime: regimeOf(s.stockCode),
         }
       }),

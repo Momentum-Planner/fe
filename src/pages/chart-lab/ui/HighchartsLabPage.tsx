@@ -81,8 +81,17 @@ export function HighchartsLabPage() {
     const paneH = (94 - mainH) / (panes.length + 1)
 
     const yAxis: Highcharts.YAxisOptions[] = [
-      { height: `${mainH}%`, labels: { align: 'right', x: -3 }, resize: { enabled: true } },
-      { top: `${mainH + 2}%`, height: `${paneH - 2}%`, offset: 0, labels: { enabled: false } },
+      {
+        height: `${mainH}%`,
+        labels: { align: 'right', x: -3 },
+        resize: { enabled: true },
+      },
+      {
+        top: `${mainH + 2}%`,
+        height: `${paneH - 2}%`,
+        offset: 0,
+        labels: { enabled: false },
+      },
       ...panes.map((_, i) => ({
         top: `${mainH + 2 + paneH * (i + 1)}%`,
         height: `${paneH - 2}%`,
@@ -149,8 +158,9 @@ export function HighchartsLabPage() {
     measure(
       el,
       () => {
-        chartRef.current = ((window as unknown as Record<string, unknown>).__lab =
-          Highcharts.stockChart(el, {
+        chartRef.current = (
+          window as unknown as Record<string, unknown>
+        ).__lab = Highcharts.stockChart(el, {
           chart: {
             backgroundColor: 'transparent',
             animation: false,
@@ -160,9 +170,10 @@ export function HighchartsLabPage() {
             // ⑥ 드래그를 「영역 선택 줌」이 아니라 「옆으로 끌기」로 — KLineChart 와 같은 조작.
             //    zooming.type 이 있으면 드래그가 줌 상자가 된다. 빼야 panning 이 드래그를 갖는다.
             //    (panKey 를 주면 그 키를 누른 채로만 패닝되므로 주지 않는다)
-            zooming: dragMode === 'pan'
-              ? { mouseWheel: { enabled: true } }
-              : { mouseWheel: { enabled: true }, type: 'x' as const },
+            zooming:
+              dragMode === 'pan'
+                ? { mouseWheel: { enabled: true } }
+                : { mouseWheel: { enabled: true }, type: 'x' as const },
             panning: { enabled: true, type: 'x' },
           },
           credits: { enabled: false },
@@ -208,7 +219,7 @@ export function HighchartsLabPage() {
           legend: { enabled: false },
           annotations,
           series,
-          }) as Highcharts.Chart)
+        }) as Highcharts.Chart
       },
       (p) => setPerf({ bars: bars.length, ...p }),
     )
@@ -229,7 +240,7 @@ export function HighchartsLabPage() {
     const chart = chartRef.current
     if (!chart) return
     const s0 = chart.series[0]
-    const pts = s0.points
+    const pts = s0?.points ?? []
     if (pts.length === 0) return
     // Point 타입에 OHLC 가 안 선언돼 있어 캔들 포인트로 좁힌다
     const tail = pts[pts.length - 1] as Highcharts.Point & {
@@ -251,17 +262,29 @@ export function HighchartsLabPage() {
     const meter = new TickMeter()
     feedRef.current = feed
     feed.start(liveHz, ({ bar, isNewBar }) => {
-      const s = chartRef.current?.series?.[0]
+      const s = chartRef.current?.series[0]
       if (!s) return
       const arr = [bar.timestamp, bar.open, bar.high, bar.low, bar.close]
       if (isNewBar) s.addPoint(arr, true, true, false)
       else {
-        const p = s.points[s.points.length - 1]
-        p.update({ x: bar.timestamp, open: bar.open, high: bar.high, low: bar.low, close: bar.close }, true, false)
+        const p = s.points.at(-1)
+        if (!p) return
+        p.update(
+          {
+            x: bar.timestamp,
+            open: bar.open,
+            high: bar.high,
+            low: bar.low,
+            close: bar.close,
+          },
+          true,
+          false,
+        )
       }
       meter.mark()
       const r = meter.read()
-      if (r) setLiveStat(`중앙 ${r.medianMs}ms · 최악 ${r.worstMs}ms · ${r.fps}fps`)
+      if (r)
+        setLiveStat(`중앙 ${r.medianMs}ms · 최악 ${r.worstMs}ms · ${r.fps}fps`)
     })
     return () => feed.stop()
   }, [liveHz, frame, size])
@@ -281,18 +304,33 @@ export function HighchartsLabPage() {
         on={on}
         onToggle={(n) => setOn((p) => ({ ...p, [n]: !p[n] }))}
         extras={[
-          { label: '베이스 3구간', active: showBases, onClick: () => setShowBases((v) => !v) },
-          { label: '★ Stock Tools 툴바', active: showTools, onClick: () => setShowTools((v) => !v) },
-          { label: 'dataGrouping (기본 켜짐)', active: grouping, onClick: () => setGrouping((v) => !v) },
           {
-            label: dragMode === 'pan' ? '드래그 = 옆으로 이동' : '드래그 = 영역 줌',
+            label: '베이스 3구간',
+            active: showBases,
+            onClick: () => setShowBases((v) => !v),
+          },
+          {
+            label: '★ Stock Tools 툴바',
+            active: showTools,
+            onClick: () => setShowTools((v) => !v),
+          },
+          {
+            label: 'dataGrouping (기본 켜짐)',
+            active: grouping,
+            onClick: () => setGrouping((v) => !v),
+          },
+          {
+            label:
+              dragMode === 'pan' ? '드래그 = 옆으로 이동' : '드래그 = 영역 줌',
             active: dragMode === 'pan',
             onClick: () => setDragMode((v) => (v === 'pan' ? 'zoom' : 'pan')),
           },
         ]}
       />
       <div className="flex flex-wrap items-center gap-2">
-        <span className="t-body text-[var(--color-fg-secondary)]">실시간 틱</span>
+        <span className="t-body text-[var(--color-fg-secondary)]">
+          실시간 틱
+        </span>
         {[0, 1, 5, 20, 60].map((hz) => (
           <button
             key={hz}
@@ -307,7 +345,9 @@ export function HighchartsLabPage() {
             {hz === 0 ? '끔' : `${hz}/초`}
           </button>
         ))}
-        <span className="t-num text-[var(--color-fg-secondary)]">{liveStat}</span>
+        <span className="t-num text-[var(--color-fg-secondary)]">
+          {liveStat}
+        </span>
       </div>
 
       <div
@@ -316,9 +356,9 @@ export function HighchartsLabPage() {
         className="rounded-[var(--radius-lg)] border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)]"
       />
       <p className="t-body text-[var(--color-fg-secondary)]">
-        ★ = KLineChart 에 내장이 없는 것. 좌측 툴바의 「Indicators」를 누르면 지표
-        검색 팝업과 <b>기간 입력 폼</b>이 뜬다 — 20일선·50일선을 사용자가 직접 바꾸는
-        화면이 이것이다.
+        ★ = KLineChart 에 내장이 없는 것. 좌측 툴바의 「Indicators」를 누르면
+        지표 검색 팝업과 <b>기간 입력 폼</b>이 뜬다 — 20일선·50일선을 사용자가
+        직접 바꾸는 화면이 이것이다.
       </p>
     </div>
   )

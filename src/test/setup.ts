@@ -13,6 +13,18 @@ if (typeof globalThis.CSS === 'undefined')
 const css = globalThis.CSS as { supports?: (...a: string[]) => boolean }
 css.supports ??= () => false
 
+/**
+ * jsdom 에 `ResizeObserver` 가 없다. 계획 사슬이 잇는 선을 «측정해서» 그리므로
+ * (`PlanChain.tsx`) 폴리필이 없으면 계획 싱글을 띄우는 테스트가 죽는다.
+ * 측정값은 쓰지 않으니 아무것도 안 하는 것으로 둔다.
+ */
+if (typeof globalThis.ResizeObserver === 'undefined')
+  (globalThis as { ResizeObserver?: unknown }).ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+
 afterEach(() => {
   cleanup()
 })

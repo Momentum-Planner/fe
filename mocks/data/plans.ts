@@ -1,4 +1,5 @@
 import type {
+  PlanCreate,
   PlanDetail,
   PlanListItem,
   PlanSnapshot,
@@ -147,13 +148,12 @@ type Seed = Omit<
 > & { filled: number }
 
 const SEEDS: Seed[] = [
-  // ── SK하이닉스 사슬 ──  7 ✕폐쇄   8 실행완료 ──→ 1 실행중 ──┬─→ 6 매도(실행 전)
+  // ── SK하이닉스 사슬 ──  7 ✕폐기   8 실행완료 ──→ 1 실행중 ──┬─→ 6 매도(대기)
   {
     planId: 7,
     title: '1차 베이스 돌파',
     stockCode: '000660',
     stockName: 'SK하이닉스',
-    side: 'BUY',
     status: 'CLOSED',
     writtenAt: '2026-06-02',
     entryPrice: 890_000,
@@ -174,7 +174,6 @@ const SEEDS: Seed[] = [
     title: '2차 베이스 진입',
     stockCode: '000660',
     stockName: 'SK하이닉스',
-    side: 'BUY',
     status: 'DONE',
     writtenAt: '2026-07-14',
     entryPrice: 962_000,
@@ -204,7 +203,6 @@ const SEEDS: Seed[] = [
     title: '추가매수 — 신고가 돌파',
     stockCode: '000660',
     stockName: 'SK하이닉스',
-    side: 'BUY',
     status: 'RUNNING',
     writtenAt: '2026-08-24',
     entryPrice: 1_120_000,
@@ -244,7 +242,6 @@ const SEEDS: Seed[] = [
     title: '돌파 진입 68,200',
     stockCode: '005930',
     stockName: '삼성전자',
-    side: 'BUY',
     status: 'PLANNED',
     writtenAt: '2026-09-08',
     entryPrice: 68_200,
@@ -265,7 +262,6 @@ const SEEDS: Seed[] = [
     title: '눌림 대기 66,000',
     stockCode: '005930',
     stockName: '삼성전자',
-    side: 'BUY',
     status: 'PLANNED',
     writtenAt: '2026-09-08',
     entryPrice: 66_000,
@@ -286,7 +282,6 @@ const SEEDS: Seed[] = [
     title: '2차 베이스 돌파',
     stockCode: '035720',
     stockName: '카카오',
-    side: 'BUY',
     status: 'DONE',
     writtenAt: '2026-07-14',
     entryPrice: 55_000,
@@ -307,7 +302,6 @@ const SEEDS: Seed[] = [
     title: '조기 진입 시도',
     stockCode: '041510',
     stockName: '에스엠',
-    side: 'BUY',
     status: 'CLOSED',
     writtenAt: '2026-09-01',
     entryPrice: 92_000,
@@ -328,7 +322,6 @@ const SEEDS: Seed[] = [
     title: '3주 눌림 추가매수',
     stockCode: '000660',
     stockName: 'SK하이닉스',
-    side: 'BUY',
     status: 'DONE',
     writtenAt: '2026-07-28',
     entryPrice: 1_010_000,
@@ -357,7 +350,6 @@ const SEEDS: Seed[] = [
     title: '4주 베이스 돌파',
     stockCode: '000660',
     stockName: 'SK하이닉스',
-    side: 'BUY',
     status: 'DONE',
     writtenAt: '2026-08-11',
     entryPrice: 1_048_000,
@@ -386,7 +378,6 @@ const SEEDS: Seed[] = [
     title: '신고가 눌림 추가',
     stockCode: '000660',
     stockName: 'SK하이닉스',
-    side: 'BUY',
     status: 'DONE',
     writtenAt: '2026-08-18',
     entryPrice: 1_082_000,
@@ -413,10 +404,9 @@ const SEEDS: Seed[] = [
   // 사슬 «중간»에서 떨어져 나간 갈래 — 세웠다가 안 가기로 한 길
   {
     planId: 13,
-    title: '분할 익절 시도',
+    title: '눌림에서 추가',
     stockCode: '000660',
     stockName: 'SK하이닉스',
-    side: 'SELL',
     status: 'CLOSED',
     writtenAt: '2026-08-12',
     entryPrice: 1_070_000,
@@ -425,7 +415,7 @@ const SEEDS: Seed[] = [
     plannedStop: singleStop(1_024_000),
     plannedPosition: { quantity: 10, riskBefore: 0.6, riskAfter: 0 },
     snapshot: SNAPSHOTS[88790],
-    closeReason: '추세가 안 꺾여서 안 팔기로 했다',
+    closeReason: '눌림이 안 와서 이 자리는 버렸다',
     memo: '',
     recordCount: 0,
     filled: 0,
@@ -435,33 +425,36 @@ const SEEDS: Seed[] = [
   // 실행 중 계획 «밑»으로 떨어진 갈래 — 세웠다가 안 가기로 한 길
   {
     planId: 14,
-    title: '손절 앞당기기',
+    title: '3차 돌파 대기',
     stockCode: '000660',
     stockName: 'SK하이닉스',
-    side: 'SELL',
     status: 'CLOSED',
     writtenAt: '2026-08-29',
-    entryPrice: 1_100_000,
+    entryPrice: 1_210_000,
     initialStopWidth: null,
     previousPlanId: 1,
-    plannedStop: singleStop(1_120_000),
+    plannedStop: singleStop(1_180_000),
     plannedPosition: { quantity: 15, riskBefore: 0.9, riskAfter: 0 },
     snapshot: SNAPSHOTS[90455],
-    closeReason: '스톱을 본전으로 올려서 이 계획이 필요 없어졌다',
+    closeReason: '거래량이 안 실려서 이 돌파는 안 따라간다',
     memo: '',
     recordCount: 0,
     filled: 0,
     stopLimit: 2.36,
     records: [],
   },
-  // 실행 중 계획에서 갈라지는 대기 둘 — «하나만» 실현된다 (④-3).
-  // 하나는 더 사는 길, 하나는 절반 파는 길이라 둘 다 열어 두고 장을 본다
+  /**
+   * 실행 중 계획에서 갈라지는 대기 둘 — «하나만» 실현된다 (④-3).
+   * 두 자리 중 어디가 오느냐가 다를 뿐 둘 다 «사는» 계획이다.
+   *
+   * ⚠️ **「매도 계획」이 없다.** 파는 일은 계획 «안»에 있다 — 스톱가격과
+   *    스톱 갱신 규칙 셋이 그것이다 (`PlanSide` 주석 참고).
+   */
   {
     planId: 9,
     title: '추가매수 — 2차 돌파',
     stockCode: '000660',
     stockName: 'SK하이닉스',
-    side: 'BUY',
     status: 'PLANNED',
     writtenAt: '2026-09-08',
     entryPrice: 1_180_000,
@@ -477,24 +470,28 @@ const SEEDS: Seed[] = [
     stopLimit: 2.36,
     records: [],
   },
-  // 매도 계획. 매수와 «같은 구조»이고 실행 중이 없다 — 체결이 붙으면 바로 완료다
   {
     planId: 6,
-    title: '절반 익절',
+    title: '눌림 진입 — 20일선',
     stockCode: '000660',
     stockName: 'SK하이닉스',
-    side: 'SELL',
     status: 'PLANNED',
     writtenAt: '2026-09-07',
-    entryPrice: 1_260_000,
-    // 실행 중 계획이 든 물량을 파는 계획이다 — 사슬의 갈래
+    entryPrice: 1_120_000,
+    // 같은 실행 중 계획에서 갈라진 «다른 시나리오» — 하나만 실현된다
     previousPlanId: 1,
     initialStopWidth: null,
-    plannedStop: singleStop(1_120_000, { trail50: true }),
-    plannedPosition: { quantity: 8, riskBefore: 1.6, riskAfter: 0 },
+    plannedStop: singleStop(1_090_000, { trail50: true }),
+    /**
+     * ⚠️ `riskBefore` 는 **지금 포지션의 값**이라 같은 시점의 갈래끼리 «같아야»
+     *    한다. 1.6 으로 박혀 있던 것을 실행 중(계획 1)의 0.9 로 맞췄다 —
+     *    둘이 다르면 ④-3 의 「시나리오는 하나만 실현된다」가 화면에서 깨진다
+     *    (2026-09-11, 테스트가 잡았다).
+     */
+    plannedPosition: { quantity: 8, riskBefore: 0.9, riskAfter: 0 },
     snapshot: SNAPSHOTS[90440],
     closeReason: null,
-    memo: '절반 익절. 나머지는 트레일링에 맡긴다.',
+    memo: '20일선까지 눌리면 여기서 더 산다. 안 오면 안 산다.',
     recordCount: 0,
     stopLimit: 2.36,
     records: [],
@@ -505,17 +502,31 @@ const SEEDS: Seed[] = [
 /**
  * 손절가 후보 선 (④-1-1-2) — **서비스가 하나를 정해 주지 않는다.**
  *
- * 진입가 «바로 아래»의 선들을 가격 오름차순으로 늘어놓는다. 어느 선이 진입가에
+ * 진입가 «바로 아래»의 선들을 가격 내림차순으로 늘어놓는다. 어느 선이 진입가에
  * 가장 가까운지가 바로 보여야 좁은 손절폭을 고를 수 있기 때문이다.
  * 상한을 넘는 선은 «지우지 않고» 넘었다고 표시만 한다.
+ *
+ * **넷으로 추렸다** — 10일선 · 20일선 · 최근 베이스 저항선 · 50일선.
+ *
+ * ```text
+ * 10일선 · 20일선     짧은 이동평균.  깨지면 판다 (쟁거 · 미너비니)
+ * 최근 베이스 저항선   뚫고 올라온 선.  돌파 뒤에는 «지지»로 돌아선다
+ * 50일선             훼손 판정이 보는 선이자 트레일링이 따라가는 선 (⑤-3 · ③-3)
+ * ```
+ *
+ * ⚠️ **최종미지 ④-1-1-2 의 목록에서 둘이 빠졌다** — 21일선(쟁거)과 평균수익률 선.
+ *    21일선은 20일선과 거의 겹쳐 «고를 것이 없고», 평균수익률 선은 ⑦의 통계가
+ *    쌓여야 자리가 정해지는데 그건 백스톱 규칙(③-3)이 이미 들고 있다.
+ *
+ * ⚠️ 목이라 진입가에서 비율로 만든다. 실제로는 차트에서 온다 —
+ *    이동평균선 셋은 `DailyCandle`, 저항선은 `StockBase.highestResistance` 다.
  */
 function stopCandidates(s: Seed): StopCandidate[] {
   const chosen = Math.min(...s.plannedStop.bands.map((b) => b.stopPrice))
-  // 목이라 진입가에서 비율로 만든다. 실제로는 차트에서 온다
   const lines: [string, number][] = [
-    ['21일선', 0.018],
+    ['10일선', 0.014],
     ['20일선', 0.024],
-    ['베이스 하단', 0.06],
+    ['최근 베이스 저항선', 0.041],
     ['50일선', 0.079],
   ]
   const out = lines.map(([label, r]) => {
@@ -528,13 +539,27 @@ function stopCandidates(s: Seed): StopCandidate[] {
       chosen: false,
     }
   })
-  // 실제로 고른 선을 끼워 넣는다 — 상한에 걸려 백분율로 «대체»된 경우도 있다
+
+  /**
+   * 고른 값이 «후보 중 하나가 아닐» 때 한 줄을 더 끼운다.
+   *
+   * 이름이 둘로 갈리는 이유 — ④-1-1-2 가 *「차트값이 상한을 넘으면 선을 버리고
+   * 백분율로 대체한다」* 고 하기 때문이다. 그러면 그 값은 «어느 선»도 아니다.
+   *
+   * ```text
+   * 직접 넣은 값   선이 아닌 자리를 사용자가 찍었다.  상한 안쪽
+   * 상한으로 자름   선이 전부 상한을 넘어서 «버리고» 백분율로 계산한 자리
+   * ```
+   *
+   * ⚠️ 이름을 「고른 값 / 상한 대체」에서 바꿨다 (2026-09-11) — 「상한 대체」는
+   *    무엇이 무엇을 대체했는지가 안 읽힌다.
+   */
   const width = +(((s.entryPrice - chosen) / s.entryPrice) * 100).toFixed(2)
   const hit = out.find((c) => c.price === chosen)
   if (hit) hit.chosen = true
   else
     out.push({
-      label: width <= s.stopLimit ? '고른 값' : '상한 대체',
+      label: width <= s.stopLimit ? '직접 넣은 값' : '상한으로 자름',
       price: chosen,
       width,
       overLimit: false,
@@ -573,10 +598,12 @@ function ownRisk(s: Seed): number {
  * ⚠️ 시나리오끼리는 여전히 «안» 더한다 — 하나만 실현된다 (④-3).
  */
 function riskAfter(s: Seed): number {
-  return +(s.plannedPosition.riskBefore + ownRisk(s)).toFixed(2)
+  // 위험노출에 음수가 없다 — 0 이 바닥이다. 화면과 «같은 규칙»이어야 한다
+  return +Math.max(0, s.plannedPosition.riskBefore + ownRisk(s)).toFixed(2)
 }
 
-export const PLANS: PlanDetail[] = SEEDS.map((s) => {
+/** 씨앗 하나 → 파생까지 채운 계획 하나. 수정이 들어와도 «같은 식»으로 다시 만든다 */
+function build(s: Seed): PlanDetail {
   const { filled, ...rest } = s
   const quantity = s.plannedPosition.quantity
   return {
@@ -594,7 +621,227 @@ export const PLANS: PlanDetail[] = SEEDS.map((s) => {
     stopCandidates: stopCandidates(s),
     plannedPosition: { ...s.plannedPosition, riskAfter: riskAfter(s) },
   }
-})
+}
+
+export const PLANS: PlanDetail[] = SEEDS.map(build)
+
+/**
+ * 계획 하나를 «고친다» (PATCH).
+ *
+ * 씨앗을 고치고 **파생을 다시 만든다** — 위험노출·최저손절가·후보 선을 손으로
+ * 덮어쓰면 저장 전 미리보기와 저장 후 값이 어긋난다. 어긋나면 사용자는
+ * 「내가 잘못 넣었나」를 먼저 의심하게 된다.
+ *
+ * ⚠️ 스냅샷은 «안 고친다». 계획 시점에 동결된 값이고 사후에 못 만든다 (F4).
+ */
+export function patchPlan(
+  planId: number,
+  patch: {
+    title?: string
+    entryPrice?: number
+    stopPrice?: number
+    quantity?: number
+    memo?: string
+    raiseAtR?: number | null
+    trail50?: boolean
+    backstop?: boolean
+  },
+): PlanDetail | null {
+  // ⚠️ `findIndex` + `SEEDS[i]` 로 꺼내면 «인덱스가 유효한지»와 «값이 있는지»가
+  //    따로 놀아 `noUncheckedIndexedAccess` 가 걸린다. 값을 먼저 찾는다
+  const s = SEEDS.find((x) => x.planId === planId)
+  if (!s) return null
+  const i = SEEDS.indexOf(s)
+
+  const next: Seed = {
+    ...s,
+    title: patch.title ?? s.title,
+    entryPrice: patch.entryPrice ?? s.entryPrice,
+    memo: patch.memo ?? s.memo,
+    plannedStop: {
+      ...s.plannedStop,
+      // v1 은 구간이 하나다 — 비중 100 · 순번 1 (④-1-2)
+      bands:
+        patch.stopPrice != null
+          ? [{ order: 1, stopPrice: patch.stopPrice, weight: 100 }]
+          : s.plannedStop.bands,
+      raiseAtR:
+        patch.raiseAtR !== undefined ? patch.raiseAtR : s.plannedStop.raiseAtR,
+      trail50: patch.trail50 ?? s.plannedStop.trail50,
+      backstop: patch.backstop ?? s.plannedStop.backstop,
+    },
+    plannedPosition: {
+      ...s.plannedPosition,
+      quantity: patch.quantity ?? s.plannedPosition.quantity,
+    },
+  }
+  SEEDS[i] = next
+
+  const built = build(next)
+  const j = PLANS.findIndex((p) => p.planId === planId)
+  if (j >= 0) PLANS[j] = built
+  return built
+}
+
+/**
+ * 계획을 «세운다» (POST · Q8).
+ *
+ * **서버가 찍는 것과 사용자가 넣는 것을 여기서 가른다** —
+ * 계좌 값은 등록 시점 것을 얼리고(F7), 스냅샷은 `snapshotDate` 로 찾아 붙인다.
+ * 사후에 못 만드는 값이라 입력으로 받지 않는다 (F4).
+ *
+ * ⚠️ 목에는 스냅샷이 손으로 박은 네 개뿐이라 **날짜로 못 찾으면 종목의 아무 것을
+ *    쓴다.** 실제로는 `DailyScreeningResult` 조회다.
+ */
+export function createPlan(body: PlanCreate): PlanDetail | 'no-cash' {
+  /**
+   * **기록상 현금보다 큰 매수는 막는다** (④-1-3 · ⑥).
+   *
+   * 💀 화면만 막고 있었다. *「살 돈이 있는지를 증권사 앱에 미루지 않는다」* 인데
+   * 화면은 우회할 수 있다 — 돈이 없는 것인지 기록이 낡은 것인지는 구분할 수
+   * 없지만, 어느 쪽이든 그대로 저장하면 **계좌가 틀어지고 모든 종목의 위험노출이
+   * 동시에 과소평가된다.** 위험노출 2.5% 초과를 경고만 하는 것과 다르다 —
+   * 그건 판단의 문제고 이건 **기록이 사실과 어긋나는** 문제다 (2026-09-11).
+   *
+   * ⚠️ 계획마다 «따로» 잰다. 대기 계획들의 필요 현금을 합치지 않는다 —
+   *    시나리오는 하나만 실현된다 (④-3).
+   */
+  if (body.entryPrice * body.quantity > ACCOUNT_CASH) return 'no-cash'
+
+  const siblings = SEEDS.filter((x) => x.stockCode === body.stockCode)
+  /**
+   * **스냅샷은 서버가 붙인다.** 계획은 근거 날짜를 안 받는다 — 계획은 자율적으로
+   * 세우고, 그 시점의 «최신 판정»이 따라 붙는다 (F4 — 사후에 못 만든다).
+   *
+   * ⚠️ 목의 `SNAPSHOTS` 는 종목을 안 들어서 같은 종목 계획에서 거꾸로 찾는다.
+   *    실제로는 `DailyScreeningResult` 를 «종목 × 최신 일자»로 한 행 읽는다.
+   */
+  const latest = [...siblings].sort((a, b) =>
+    b.snapshot.date.localeCompare(a.snapshot.date),
+  )[0]
+  const snapshot = latest?.snapshot ?? SNAPSHOTS[90124]
+
+  const seed: Seed = {
+    planId: Math.max(0, ...SEEDS.map((x) => x.planId)) + 1,
+    title: body.title,
+    stockCode: body.stockCode,
+    // 종목명은 계획이 정하는 값이 아니다 — 같은 종목의 계획에서 받아 온다
+    stockName: latest?.stockName ?? body.stockCode,
+    // 세운 계획은 «대기»로 난다. 실행 중으로 만드는 것은 체결이다 (⑥)
+    status: 'PLANNED',
+    writtenAt: new Date().toISOString().slice(0, 10),
+    entryPrice: body.entryPrice,
+    // 1R 은 «실행될 때» 박힌다. 대기면 아직 없다 (③-2-1)
+    initialStopWidth: null,
+    previousPlanId: body.previousPlanId,
+    plannedStop: singleStop(body.stopPrice, {
+      raiseAtR: body.raiseAtR,
+      trail50: body.trail50,
+      backstop: body.backstop,
+    }),
+    plannedPosition: {
+      quantity: body.quantity,
+      // 실행 «전» 위험노출은 지금 포지션 것이다 — 같은 종목의 실행 중 계획이 든다
+      riskBefore:
+        SEEDS.find(
+          (x) => x.stockCode === body.stockCode && x.status === 'RUNNING',
+        )?.plannedPosition.riskBefore ?? 0,
+      riskAfter: 0,
+    },
+    snapshot,
+    closeReason: null,
+    memo: body.memo,
+    recordCount: 0,
+    filled: 0,
+    stopLimit: 2.36,
+    records: [],
+  }
+  SEEDS.push(seed)
+  const built = build(seed)
+  PLANS.push(built)
+  return built
+}
+
+/**
+ * 계획을 «폐기»한다 (Q8) — 안 가기로 한 것이다.
+ *
+ * **삭제와 뜻이 다르고 문턱은 같다.** 행이 남고 ⑦가 폐기 비율로 «센다».
+ * 사유가 필수인 것도 그래서다 — 판단에는 이유가 있다.
+ *
+ * ⚠️ 스냅샷은 안 건드린다. 이미 찍힌 것이다.
+ */
+export function closePlan(
+  planId: number,
+  closeReason: string,
+): 'not-found' | 'conflict' | PlanDetail {
+  const s = SEEDS.find((x) => x.planId === planId)
+  if (!s) return 'not-found'
+  // 삭제와 «같은 문턱»이다 — 체결이 붙었으면 「안 갔다」고 닫는 것이 거짓이 된다
+  if (s.status !== 'PLANNED' || s.records.length > 0 || s.filled > 0)
+    return 'conflict'
+
+  const next: Seed = { ...s, status: 'CLOSED', closeReason }
+  SEEDS[SEEDS.indexOf(s)] = next
+  const built = build(next)
+  const j = PLANS.findIndex((p) => p.planId === planId)
+  if (j >= 0) PLANS[j] = built
+  return built
+}
+
+/**
+ * 계획을 «삭제»한다 (Q8) — 애초에 없어야 했던 것이다.
+ *
+ * **대기 + 체결 0건만 지운다.** 체결이 붙었으면 실제로 돈이 움직였고
+ * `TradeRecord` 가 `planId` 로 그것을 가리킨다 — 없던 일이 될 수 없다.
+ * 폐기한 것도 못 지운다: 그건 «판단»이라 ⑦의 재료다.
+ *
+ * 반환값이 세 갈래인 것은 화면이 **못 지우는 이유를 말해야** 해서다.
+ */
+export function deletePlan(planId: number): 'ok' | 'not-found' | 'conflict' {
+  const s = SEEDS.find((x) => x.planId === planId)
+  if (!s) return 'not-found'
+  if (s.status !== 'PLANNED' || s.records.length > 0 || s.filled > 0)
+    return 'conflict'
+
+  SEEDS.splice(SEEDS.indexOf(s), 1)
+  const j = PLANS.findIndex((p) => p.planId === planId)
+  if (j >= 0) PLANS.splice(j, 1)
+  return 'ok'
+}
+
+/**
+ * 계획을 세울 때 «계획이 아닌 데서» 오는 값들 (2026-09-11).
+ *
+ * **계획이 하나도 없는 종목에서도 나온다** — 첫 계획이 여기에 기댄다.
+ * 후보 선을 «마지막 종가»에서 잡는 것이 실제로도 더 맞다 — 이동평균선과
+ * 저항선은 종목의 값이지 진입가의 함수가 아니다.
+ */
+export function planDefaults(stockCode: string, lastClose: number) {
+  const running = SEEDS.find(
+    (s) => s.stockCode === stockCode && s.status === 'RUNNING',
+  )
+  const base = lastClose > 0 ? lastClose : 100_000
+  const lines: [string, number][] = [
+    ['10일선', 0.014],
+    ['20일선', 0.024],
+    ['최근 베이스 저항선', 0.041],
+    ['50일선', 0.079],
+  ]
+  return {
+    accountTotal: ACCOUNT_TOTAL,
+    accountCash: ACCOUNT_CASH,
+    riskBefore: running?.plannedPosition.riskBefore ?? 0,
+    stopLimit: 2.36,
+    stopLimitBasis: STOP_LIMIT_BASIS,
+    stopCandidates: lines.map(([label, r]) => ({
+      label,
+      price: Math.round(base * (1 - r)),
+      width: +(r * 100).toFixed(2),
+      overLimit: r * 100 > 2.36,
+      chosen: false,
+    })),
+  }
+}
 
 /** 목록은 싱글이 가진 것 중 «줄 세우는 데 필요한 것»만 남긴 것이다. */
 export const toListItem = (p: PlanDetail): PlanListItem => ({
@@ -602,7 +849,6 @@ export const toListItem = (p: PlanDetail): PlanListItem => ({
   stockCode: p.stockCode,
   stockName: p.stockName,
   title: p.title,
-  side: p.side,
   status: p.status,
   writtenAt: p.writtenAt,
   entryPrice: p.entryPrice,
@@ -611,6 +857,7 @@ export const toListItem = (p: PlanDetail): PlanListItem => ({
   riskBefore: p.plannedPosition.riskBefore,
   riskAfter: p.riskAfter,
   fillRate: p.fillRate,
+  recordCount: p.recordCount,
   previousPlanId: p.previousPlanId,
   entryState: p.snapshot.entryState,
   fundamentalScore: p.snapshot.fundamentalScore,

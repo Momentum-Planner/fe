@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { at } from '@/shared/lib/at'
 import { server } from './server'
 
 /**
@@ -12,6 +13,36 @@ async function get(path: string) {
   const res = await fetch(`${BASE}${path}`)
   const json = (await res.json()) as {
     meta: { result: string }
+    data: unknown
+  }
+  return { status: res.status, ...json }
+}
+
+async function patch(path: string, body: unknown) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const json = (await res.json()) as {
+    meta: { result: string }
+    data: unknown
+  }
+  return { status: res.status, ...json }
+}
+
+async function send(method: string, path: string, body?: unknown) {
+  const res = await fetch(`${BASE}${path}`, {
+    method,
+    ...(body === undefined
+      ? {}
+      : {
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        }),
+  })
+  const json = (await res.json()) as {
+    meta: { result: string; errorCode: string | null }
     data: unknown
   }
   return { status: res.status, ...json }
@@ -51,7 +82,7 @@ describe('차트', () => {
       }>
     }
     for (let i = 1; i < candles.length; i++) {
-      expect(candles[i].tradeDate > candles[i - 1].tradeDate).toBe(true)
+      expect(at(candles, i).tradeDate > at(candles, i - 1).tradeDate).toBe(true)
     }
     for (const c of candles) {
       expect(c.highPrice).toBeGreaterThanOrEqual(c.lowPrice)
@@ -199,7 +230,7 @@ describe('관심 종목', () => {
     const { stocks } = r.data as {
       stocks: Array<{ stockCode: string; stockName: string }>
     }
-    expect(stocks[0].stockName).toBe('SK하이닉스')
+    expect(at(stocks, 0).stockName).toBe('SK하이닉스')
   })
 })
 
@@ -213,8 +244,8 @@ describe('랭킹 · 검색', () => {
       }
       expect(stocks.length).toBeGreaterThan(0)
       for (let i = 1; i < stocks.length; i++) {
-        expect(stocks[i - 1].fundamentalScore).toBeGreaterThanOrEqual(
-          stocks[i].fundamentalScore,
+        expect(at(stocks, i - 1).fundamentalScore).toBeGreaterThanOrEqual(
+          at(stocks, i).fundamentalScore,
         )
       }
     },
@@ -224,11 +255,397 @@ describe('랭킹 · 검색', () => {
     const r = await get('/api/v1/search/stocks?query=하이닉스')
     const { stocks } = r.data as { stocks: Array<{ stockCode: string }> }
     expect(stocks).toHaveLength(1)
-    expect(stocks[0].stockCode).toBe('000660')
+    expect(at(stocks, 0).stockCode).toBe('000660')
   })
 
   it('검색어가 비면 빈 배열을 준다', async () => {
     const r = await get('/api/v1/search/stocks?query=')
     expect((r.data as { stocks: unknown[] }).stocks).toEqual([])
+  })
+})
+
+/**
+ * 계획 수정.
+ *
+ * 목이 **파생을 다시 만드는지**가 요점이다. 위험노출·최저손절가·후보 선을 손으로
+ * 덮어쓰면 저장 전 미리보기와 저장 후 값이 어긋나고, 그 어긋남은 사용자에게
+ * 「내가 잘못 넣었나」로 읽힌다.
+ */
+describe('계획 수정', () => {
+  type Plan = {
+    planId: number
+    entryPrice: number
+    stopPrice: number
+    quantity: number
+    riskBefore: number
+    riskAfter: number
+    accountTotal: number
+    memo: string
+    plannedStop: { bands: { stopPrice: number; weight: number }[] }
+    stopCandidates: { price: number; chosen: boolean }[]
+    snapshot: { date: string }
+  }
+
+  it('수량을 고치면 «위험노출»이 따라 바뀐다', async () => {
+    const before = (await get('/api/v1/plans/2')).data as Plan
+    const r = await patch('/api/v1/plans/2', { quantity: 200 })
+    const after = r.data as Plan
+
+    expect(after.quantity).toBe(200)
+    // 몫이 절반이 됐으니 «얹히는 만큼»도 절반이다 (riskBefore 위에 더한다).
+    // 목이 riskAfter 를 소수 2자리로 반올림하므로 그 폭 안에서 본다
+    const own = (p: Plan) => p.riskAfter - p.riskBefore
+    expect(Math.abs(own(after) - own(before) / 2)).toBeLessThan(0.011)
+  })
+
+  it('손절가를 고치면 «최저손절가»와 구간이 같이 간다', async () => {
+    const r = await patch('/api/v1/plans/2', { stopPrice: 65_000 })
+    const p = r.data as Plan
+    expect(p.stopPrice).toBe(65_000)
+    // v1 은 구간이 «하나»다 — 비중 100 · 순번 1 (④-1-2)
+    expect(p.plannedStop.bands).toHaveLength(1)
+    expect(at(p.plannedStop.bands, 0).weight).toBe(100)
+  })
+
+  it('진입가를 고치면 «후보 선»이 다시 만들어진다', async () => {
+    const before = (await get('/api/v1/plans/3')).data as Plan
+    const r = await patch('/api/v1/plans/3', { entryPrice: 70_000 })
+    const after = r.data as Plan
+    expect(after.entryPrice).toBe(70_000)
+    // 후보 선은 진입가에서 비율로 나오므로 값이 통째로 옮겨간다
+    expect(at(after.stopCandidates, 0).price).not.toBe(
+      at(before.stopCandidates, 0).price,
+    )
+  })
+
+  it('스냅샷은 «안 바뀐다» — 사후에 못 만든다 (F4)', async () => {
+    const before = (await get('/api/v1/plans/2')).data as Plan
+    const r = await patch('/api/v1/plans/2', {
+      entryPrice: 71_000,
+      memo: '고쳐 본다',
+    })
+    const after = r.data as Plan
+    expect(after.memo).toBe('고쳐 본다')
+    expect(after.snapshot.date).toBe(before.snapshot.date)
+  })
+
+  it('없는 계획은 404', async () => {
+    const r = await patch('/api/v1/plans/99999', { quantity: 1 })
+    expect(r.status).toBe(404)
+    expect(r.meta.result).toBe('FAIL')
+  })
+})
+
+/**
+ * 폐기와 삭제 (Q8).
+ *
+ * 요점은 **둘이 다른 결과를 남기는지**다 — 폐기는 행이 남고 ⑦가 세고, 삭제는
+ * 사라지고 안 센다. 뭉치면 「내 계획이 성급한지」와 「내가 잘못 적었는지」를
+ * 구분할 수 없다 (③-2-3 의 보정과 같은 자리).
+ */
+describe('계획 폐기와 삭제', () => {
+  type Plan = {
+    planId: number
+    status: string
+    closeReason: string | null
+    stockCode: string
+    recordCount: number
+    quantity: number
+    stopPrice: number
+    snapshot: { date: string }
+  }
+  const list = async () =>
+    ((await get('/api/v1/plans')).data as { plans: { planId: number }[] }).plans
+
+  /** 목은 메모리를 «공유»하므로 테스트마다 새 계획을 세워서 쓴다 */
+  const fresh = async (over: Record<string, unknown> = {}) =>
+    (
+      await send('POST', '/api/v1/plans', {
+        stockCode: '000660',
+        side: 'BUY',
+        title: '테스트 계획',
+        snapshotDate: '2026-09-08',
+        entryPrice: 1_200_000,
+        stopPrice: 1_150_000,
+        quantity: 5,
+        memo: '',
+        raiseAtR: 2,
+        trail50: false,
+        backstop: false,
+        previousPlanId: null,
+        ...over,
+      })
+    ).data as Plan
+
+  it('세운 계획은 «대기»로 나고 목록에 뜬다', async () => {
+    const p = await fresh()
+    expect(p.status).toBe('PLANNED')
+    // 파생이 채워진다 — 최저손절가·수량은 손으로 박는 값이 아니다
+    expect(p.stopPrice).toBe(1_150_000)
+    expect(p.quantity).toBe(5)
+    expect((await list()).some((x) => x.planId === p.planId)).toBe(true)
+  })
+
+  it('스냅샷은 «서버가» 붙인다 — 입력으로 받지 않는다 (F4)', async () => {
+    const p = await fresh({ snapshotDate: '2026-09-08' })
+    expect(p.snapshot.date).toBe('2026-09-08')
+  })
+
+  it('폐기하면 «남는다» — 상태와 사유만 바뀐다', async () => {
+    const p = await fresh()
+    const r = await send('POST', `/api/v1/plans/${p.planId}/close`, {
+      closeReason: '돌파가 거래량 없이 나왔다',
+    })
+    const after = r.data as Plan
+    expect(after.status).toBe('CLOSED')
+    expect(after.closeReason).toBe('돌파가 거래량 없이 나왔다')
+    // 계획은 사라지지 않는다. 상태만 바뀐다 (④-2)
+    expect((await list()).some((x) => x.planId === p.planId)).toBe(true)
+  })
+
+  it('사유 없이 폐기할 수 없다 — 판단에는 이유가 있다', async () => {
+    const p = await fresh()
+    const r = await send('POST', `/api/v1/plans/${p.planId}/close`, {
+      closeReason: '   ',
+    })
+    expect(r.status).toBe(400)
+    expect(r.meta.errorCode).toBe('CLOSE_REASON_REQUIRED')
+  })
+
+  it('삭제하면 «사라진다»', async () => {
+    const p = await fresh()
+    const r = await send('DELETE', `/api/v1/plans/${p.planId}`)
+    expect(r.status).toBe(200)
+    expect((await list()).some((x) => x.planId === p.planId)).toBe(false)
+    expect((await get(`/api/v1/plans/${p.planId}`)).status).toBe(404)
+  })
+
+  it('폐기한 계획은 «못 지운다» — 그건 판단이라 ⑦의 재료다', async () => {
+    const p = await fresh()
+    await send('POST', `/api/v1/plans/${p.planId}/close`, {
+      closeReason: '안 가기로 했다',
+    })
+    const r = await send('DELETE', `/api/v1/plans/${p.planId}`)
+    expect(r.status).toBe(409)
+    expect(r.meta.errorCode).toBe('NOT_DELETABLE')
+  })
+
+  it('체결이 붙은 계획은 «못 지운다» — 돈이 실제로 움직였다', async () => {
+    // 목의 1번은 실행 중 + 체결이 있다
+    const running = (await get('/api/v1/plans/1')).data as Plan
+    expect(running.recordCount).toBeGreaterThan(0)
+    const r = await send('DELETE', '/api/v1/plans/1')
+    expect(r.status).toBe(409)
+  })
+
+  it('이미 닫힌 계획과 «없는» 계획을 가른다', async () => {
+    const p = await fresh()
+    await send('POST', `/api/v1/plans/${p.planId}/close`, { closeReason: 'x' })
+    // 닫힌 계획은 더 닫을 것이 없다 — 대기가 아니므로 같은 문턱에 걸린다
+    const again = await send('POST', `/api/v1/plans/${p.planId}/close`, {
+      closeReason: 'y',
+    })
+    expect(again.status).toBe(409)
+    expect(again.meta.errorCode).toBe('NOT_CLOSABLE')
+
+    const missing = await send('POST', '/api/v1/plans/99999/close', {
+      closeReason: 'y',
+    })
+    expect(missing.status).toBe(404)
+    expect(missing.meta.errorCode).toBe('NOT_FOUND')
+  })
+
+  it('체결이 붙은 계획은 «못 닫는다» — 「안 갔다」가 거짓이 된다', async () => {
+    // 목의 1번은 실행 중 + 체결이 있다. 폐기와 삭제가 «같은 문턱»이다 (Q8)
+    const r = await send('POST', '/api/v1/plans/1/close', {
+      closeReason: '판단이 틀렸다',
+    })
+    expect(r.status).toBe(409)
+    expect(r.meta.errorCode).toBe('NOT_CLOSABLE')
+  })
+})
+
+/**
+ * 하루치 스크리닝 판정 (⑤-2 · `DailyScreeningResult`).
+ *
+ * 요점은 **캔들과 어긋나지 않는지**다. 판정을 따로 난수로 만들면 봉은 오르는데
+ * 「진입 불가」가 뜨는 식으로 화면이 거짓말을 한다 — 계획을 세우는 화면에서
+ * 근거와 그림이 어긋나면 그 화면은 아무 말도 못 하는 것이 된다.
+ */
+describe('스크리닝 판정 목록', () => {
+  type Row = {
+    dailyScreeningResultId: number
+    date: string
+    entryState: string
+    fundamentalScore: number
+    damageScore: number
+    entryPosition: number
+    trendPassed: number
+    trendFailed: string[]
+  }
+  const list = async (q = '') =>
+    (
+      (await get(`/api/v1/stocks/000660/screening${q}`)).data as {
+        results: Row[]
+      }
+    ).results
+
+  it('종목 × 일자로 «쌓인» 행을 준다', async () => {
+    const rows = await list()
+    expect(rows.length).toBeGreaterThan(50)
+    // 날짜 오름차순이고 겹치지 않는다 — 하루가 한 행이다
+    const dates = rows.map((r) => r.date)
+    expect([...dates].sort()).toEqual(dates)
+    expect(new Set(dates).size).toBe(dates.length)
+  })
+
+  it('매일 있지 «않다» — 게이트에 걸린 날은 행이 없다', async () => {
+    const rows = await list()
+    const candles = (
+      (await get('/api/v1/stocks/000660/chart/daily')).data as {
+        candles: { tradeDate: string }[]
+      }
+    ).candles
+    const covered = candles.filter((c) => c.tradeDate >= (rows[0]?.date ?? ''))
+    // 그 빈칸이 「후보가 아니었던 날」이다 (디자인 3장 ⑤ — 간극이 정보다)
+    expect(rows.length).toBeLessThan(covered.length)
+  })
+
+  it('판정이 «봉의 자리»와 맞는다 — 돌파는 고점 근처에서만 난다', async () => {
+    const rows = await list()
+    for (const r of rows) {
+      if (r.entryState === 'BREAKOUT')
+        expect(r.entryPosition).toBeGreaterThan(-2)
+      if (r.entryState === 'BLOCKED') expect(r.entryPosition).toBeLessThan(-8)
+    }
+  })
+
+  it('트렌드는 «대개 8/8» 이고, 어긋나면 이름이 붙는다', async () => {
+    const rows = await list()
+    const full = rows.filter((r) => r.trendPassed === 8)
+    expect(full.length).toBeGreaterThan(rows.length / 2)
+    for (const r of rows) {
+      expect(r.trendFailed.length).toBe(8 - r.trendPassed)
+    }
+  })
+
+  it('기간으로 끊어 온다', async () => {
+    const all = await list()
+    const mid = all[Math.floor(all.length / 2)]!.date
+    const cut = await list(`?from=${mid}`)
+    expect(cut.length).toBeLessThan(all.length)
+    expect(cut.every((r) => r.date >= mid)).toBe(true)
+  })
+
+  it('같은 종목은 «매번 같은» 판정을 준다 (seed 고정)', async () => {
+    const a = await list()
+    const b = await list()
+    expect(a.map((r) => r.date + r.entryState)).toEqual(
+      b.map((r) => r.date + r.entryState),
+    )
+  })
+})
+
+/**
+ * 계획의 **불변식** — 값이 아니라 «규칙»을 잰다.
+ */
+describe('④ 계획의 불변식', () => {
+  type Plan = {
+    planId: number
+    status: string
+    stockCode: string
+    entryPrice: number
+    quantity: number
+    riskBefore: number
+    riskAfter: number
+    accountCash: number
+    initialStopWidth: number | null
+    stopPrice: number
+  }
+  const of = async (id: number) =>
+    (await get(`/api/v1/plans/${id}`)).data as Plan
+
+  it('④-2 한 종목에 «실행 중»은 하나뿐이다', async () => {
+    const { plans } = (await get('/api/v1/plans')).data as { plans: Plan[] }
+    const byStock = new Map<string, number>()
+    for (const p of plans)
+      if (p.status === 'RUNNING')
+        byStock.set(p.stockCode, (byStock.get(p.stockCode) ?? 0) + 1)
+    for (const [, n] of byStock) expect(n).toBe(1)
+  })
+
+  it('④-3 시나리오의 실행 후 위험노출은 «단독 실행» 기준이다', async () => {
+    // 같은 실행 중 계획에서 갈라진 대기 둘 — 하나만 실현된다
+    const { plans } = (await get('/api/v1/plans?stockCode=000660')).data as {
+      plans: Plan[]
+    }
+    const waiting = plans.filter((p) => p.status === 'PLANNED')
+    expect(waiting.length).toBeGreaterThan(1)
+
+    // 둘 다 «같은» riskBefore 에서 출발한다 — 서로 얹지 않는다
+    const befores = new Set(waiting.map((p) => p.riskBefore))
+    expect(befores.size).toBe(1)
+    // 그리고 어느 것도 「둘을 합친」 값이 아니다
+    const sumOfOwn = waiting.reduce(
+      (n, p) => n + (p.riskAfter - p.riskBefore),
+      0,
+    )
+    for (const p of waiting)
+      expect(p.riskAfter - p.riskBefore).toBeLessThan(sumOfOwn)
+  })
+
+  it('④-1-3 기록상 현금보다 큰 매수는 «막는다»', async () => {
+    const cash = (await of(1)).accountCash
+    const r = await send('POST', '/api/v1/plans', {
+      stockCode: '000660',
+      title: '현금 초과',
+      entryPrice: cash,
+      stopPrice: Math.round(cash * 0.97),
+      quantity: 2, // 현금의 두 배가 든다
+      memo: '',
+      raiseAtR: null,
+      trail50: false,
+      backstop: false,
+      previousPlanId: null,
+    })
+    /**
+     * 화면만 막으면 «우회»된다. 위험노출 2.5% 초과를 경고만 하는 것과 다르다 —
+     * 그건 판단의 문제고 이건 **기록이 사실과 어긋나는** 문제다 (④-1-3 · ⑥).
+     */
+    expect(r.status).toBe(409)
+    expect(r.meta.errorCode).toBe('NOT_ENOUGH_CASH')
+  })
+
+  it('③-2-1 1R 은 «실행될 때» 박히고, 대기면 아직 없다', async () => {
+    // ⚠️ 목록에는 `initialStopWidth` 가 «없다» — 줄 세우는 데 안 쓰는 값이라
+    //    싱글에만 있다. 그래서 하나씩 열어 본다
+    const waiting = (
+      (await get('/api/v1/plans?statuses=PLANNED')).data as {
+        plans: { planId: number }[]
+      }
+    ).plans
+    expect(waiting.length).toBeGreaterThan(0)
+    for (const p of waiting)
+      expect((await of(p.planId)).initialStopWidth).toBeNull()
+
+    // 실행 중은 값이 박혀 있다 — R 배수의 분모가 그것이다
+    expect((await of(1)).initialStopWidth).not.toBeNull()
+  })
+
+  it('③-2-1 손절가를 갱신해도 «1R 은 안 변한다»', async () => {
+    const before = await of(1)
+    expect(before.initialStopWidth).not.toBeNull()
+
+    // 스톱을 올린다 — 위험노출은 줄지만 R 의 분모는 그대로다
+    const after = (
+      await patch('/api/v1/plans/1', {
+        stopPrice: before.stopPrice + 10_000,
+      })
+    ).data as Plan
+    expect(after.stopPrice).toBe(before.stopPrice + 10_000)
+    expect(after.initialStopWidth).toBe(before.initialStopWidth)
+
+    // 되돌린다 — 다른 테스트가 이 계획을 같이 쓴다
+    await patch('/api/v1/plans/1', { stopPrice: before.stopPrice })
   })
 })

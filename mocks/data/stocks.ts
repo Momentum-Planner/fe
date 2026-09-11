@@ -59,6 +59,28 @@ export type MockCandle = {
  * 모양은 「베이스 두 번 → 돌파」로, 불타기가 찾는 패턴이 눈에 보이게 만든다
  * (지지/저항 박스가 얹힐 자리가 실제로 생기도록).
  */
+/**
+ * 종목마다의 «오늘» 가격.
+ *
+ * 💀 이게 없을 때 **계획 화면의 진입선·스톱선·후보 선이 14개 계획 전부 차트 밖에
+ * 있었다.** 재 보니 후보 선은 `0/5` 였다 — 선은 그려지는데 y축 범위 밖이라
+ * «한 번도 뜬 적이 없다». 차트를 보고 계획을 세우라는 화면에서 계획이 차트에
+ * 안 얹혀 있던 것이다.
+ *
+ * ⚠️ **시작 가격으로 맞추면 안 된다.** 생성기가 「베이스 두 번 → 돌파」로 400일에
+ *    두 배 가까이 드리프트하므로, 시작을 1,050,000 에 놓아도 최근 구간은
+ *    1,200,000~2,280,000 이 된다. 계획은 «최근»에 서므로 맞출 자리는 마지막 종가다.
+ *
+ * 목의 계획값과 목의 캔들이 같은 자리에 있어야 화면을 판단할 수 있다.
+ * 실제로는 캔들이 사실이고 계획이 거기서 나오므로, 맞추는 쪽은 캔들이다.
+ */
+const TODAY_PRICE: Record<string, number> = {
+  '000660': 1_240_000,
+  '005930': 69_000,
+  '035720': 74_000,
+  '041510': 104_000,
+}
+
 export function makeCandles(code: string, days = 400): MockCandle[] {
   const seed = seedOf(code)
   const startPrice = 40_000 + (seed % 60) * 1_000
@@ -77,9 +99,11 @@ export function makeCandles(code: string, days = 400): MockCandle[] {
     // 상승 → 횡보(베이스) → 상승 → 횡보 → 돌파
     let drift: number
     if (t < 0.25) drift = 0.0035
-    else if (t < 0.45) drift = 0.0002 // 1차 베이스
+    else if (t < 0.45)
+      drift = 0.0002 // 1차 베이스
     else if (t < 0.6) drift = 0.004
-    else if (t < 0.82) drift = 0.0003 // 2차 베이스
+    else if (t < 0.82)
+      drift = 0.0003 // 2차 베이스
     else drift = 0.005 // 최종 돌파
 
     const noise = (rand(seed, i) - 0.5) * 0.022
@@ -87,8 +111,12 @@ export function makeCandles(code: string, days = 400): MockCandle[] {
 
     const open = Math.round(price * (1 + (rand(seed, i + 7) - 0.5) * 0.006))
     const close = Math.round(price)
-    const high = Math.round(Math.max(open, close) * (1 + rand(seed, i + 13) * 0.012))
-    const low = Math.round(Math.min(open, close) * (1 - rand(seed, i + 21) * 0.012))
+    const high = Math.round(
+      Math.max(open, close) * (1 + rand(seed, i + 13) * 0.012),
+    )
+    const low = Math.round(
+      Math.min(open, close) * (1 - rand(seed, i + 21) * 0.012),
+    )
 
     out.push({
       tradeDate: ymd(d),
@@ -99,6 +127,22 @@ export function makeCandles(code: string, days = 400): MockCandle[] {
       volume: Math.round(300_000 + rand(seed, i + 31) * 900_000),
     })
   }
+
+  /**
+   * 마지막 종가를 「오늘 가격」에 맞춘다 — 모양은 그대로 두고 «자리»만 옮긴다.
+   * 배수라서 지지·저항 박스와 이평선의 상대 관계가 안 깨진다.
+   */
+  const target = TODAY_PRICE[code]
+  const lastBar = out.at(-1)
+  if (target && lastBar) {
+    const factor = target / lastBar.closePrice
+    for (const c of out) {
+      c.openPrice = Math.round(c.openPrice * factor)
+      c.highPrice = Math.round(c.highPrice * factor)
+      c.lowPrice = Math.round(c.lowPrice * factor)
+      c.closePrice = Math.round(c.closePrice * factor)
+    }
+  }
   return out
 }
 
@@ -106,9 +150,11 @@ export function makeCandles(code: string, days = 400): MockCandle[] {
 export function makeMovingAverage(candles: MockCandle[], period: number) {
   const out: Array<{ tradeDate: string; price: number }> = []
   for (let i = period - 1; i < candles.length; i++) {
+    const c = candles[i]
+    if (!c) continue
     const win = candles.slice(i - period + 1, i + 1)
-    const avg = win.reduce((s, c) => s + c.closePrice, 0) / period
-    out.push({ tradeDate: candles[i].tradeDate, price: Math.round(avg) })
+    const avg = win.reduce((s, x) => s + x.closePrice, 0) / period
+    out.push({ tradeDate: c.tradeDate, price: Math.round(avg) })
   }
   return out
 }
@@ -122,16 +168,22 @@ export function makeBases(candles: MockCandle[]) {
     [0.26, 0.44],
     [0.61, 0.81],
   ]
-  return spans.map(([a, b]) => {
+  return spans.flatMap(([a, b]) => {
     const from = Math.floor(candles.length * a)
     const to = Math.floor(candles.length * b)
     const slice = candles.slice(from, to)
-    return {
-      startDate: candles[from].tradeDate,
-      endDate: candles[to - 1].tradeDate,
-      supportPrice: Math.min(...slice.map((c) => c.lowPrice)),
-      resistancePrice: Math.max(...slice.map((c) => c.highPrice)),
-    }
+    // 구간이 비면 박스가 없다 — 빈 배열이면 `flatMap` 이 그 항목을 지운다
+    const head = slice.at(0)
+    const tail = slice.at(-1)
+    if (!head || !tail) return []
+    return [
+      {
+        startDate: head.tradeDate,
+        endDate: tail.tradeDate,
+        supportPrice: Math.min(...slice.map((c) => c.lowPrice)),
+        resistancePrice: Math.max(...slice.map((c) => c.highPrice)),
+      },
+    ]
   })
 }
 

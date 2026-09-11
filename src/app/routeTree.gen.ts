@@ -21,7 +21,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as StocksTickerRouteImport } from './routes/stocks.$ticker'
 import { Route as SnapshotsNewRouteImport } from './routes/snapshots.new'
 import { Route as SnapshotsEditRouteImport } from './routes/snapshots.edit'
-import { Route as PlansPlanIdRouteImport } from './routes/plans_.$planId'
+import { Route as StocksTickerPlanPlanIdRouteImport } from './routes/stocks.$ticker_.plan.$planId'
 
 const TrendsRoute = TrendsRouteImport.update({
   id: '/trends',
@@ -83,9 +83,9 @@ const SnapshotsEditRoute = SnapshotsEditRouteImport.update({
   path: '/snapshots/edit',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PlansPlanIdRoute = PlansPlanIdRouteImport.update({
-  id: '/plans_/$planId',
-  path: '/plans/$planId',
+const StocksTickerPlanPlanIdRoute = StocksTickerPlanPlanIdRouteImport.update({
+  id: '/stocks/$ticker_/plan/$planId',
+  path: '/stocks/$ticker/plan/$planId',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -99,10 +99,10 @@ export interface FileRoutesByFullPath {
   '/search': typeof SearchRoute
   '/stats': typeof StatsRoute
   '/trends': typeof TrendsRoute
-  '/plans/$planId': typeof PlansPlanIdRoute
   '/snapshots/edit': typeof SnapshotsEditRoute
   '/snapshots/new': typeof SnapshotsNewRoute
   '/stocks/$ticker': typeof StocksTickerRoute
+  '/stocks/$ticker/plan/$planId': typeof StocksTickerPlanPlanIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -114,10 +114,10 @@ export interface FileRoutesByTo {
   '/search': typeof SearchRoute
   '/stats': typeof StatsRoute
   '/trends': typeof TrendsRoute
-  '/plans/$planId': typeof PlansPlanIdRoute
   '/snapshots/edit': typeof SnapshotsEditRoute
   '/snapshots/new': typeof SnapshotsNewRoute
   '/stocks/$ticker': typeof StocksTickerRoute
+  '/stocks/$ticker/plan/$planId': typeof StocksTickerPlanPlanIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -130,10 +130,10 @@ export interface FileRoutesById {
   '/search': typeof SearchRoute
   '/stats': typeof StatsRoute
   '/trends': typeof TrendsRoute
-  '/plans_/$planId': typeof PlansPlanIdRoute
   '/snapshots/edit': typeof SnapshotsEditRoute
   '/snapshots/new': typeof SnapshotsNewRoute
   '/stocks/$ticker': typeof StocksTickerRoute
+  '/stocks/$ticker_/plan/$planId': typeof StocksTickerPlanPlanIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -147,10 +147,10 @@ export interface FileRouteTypes {
     | '/search'
     | '/stats'
     | '/trends'
-    | '/plans/$planId'
     | '/snapshots/edit'
     | '/snapshots/new'
     | '/stocks/$ticker'
+    | '/stocks/$ticker/plan/$planId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -162,10 +162,10 @@ export interface FileRouteTypes {
     | '/search'
     | '/stats'
     | '/trends'
-    | '/plans/$planId'
     | '/snapshots/edit'
     | '/snapshots/new'
     | '/stocks/$ticker'
+    | '/stocks/$ticker/plan/$planId'
   id:
     | '__root__'
     | '/'
@@ -177,10 +177,10 @@ export interface FileRouteTypes {
     | '/search'
     | '/stats'
     | '/trends'
-    | '/plans_/$planId'
     | '/snapshots/edit'
     | '/snapshots/new'
     | '/stocks/$ticker'
+    | '/stocks/$ticker_/plan/$planId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -193,10 +193,10 @@ export interface RootRouteChildren {
   SearchRoute: typeof SearchRoute
   StatsRoute: typeof StatsRoute
   TrendsRoute: typeof TrendsRoute
-  PlansPlanIdRoute: typeof PlansPlanIdRoute
   SnapshotsEditRoute: typeof SnapshotsEditRoute
   SnapshotsNewRoute: typeof SnapshotsNewRoute
   StocksTickerRoute: typeof StocksTickerRoute
+  StocksTickerPlanPlanIdRoute: typeof StocksTickerPlanPlanIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -285,11 +285,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SnapshotsEditRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/plans_/$planId': {
-      id: '/plans_/$planId'
-      path: '/plans/$planId'
-      fullPath: '/plans/$planId'
-      preLoaderRoute: typeof PlansPlanIdRouteImport
+    '/stocks/$ticker_/plan/$planId': {
+      id: '/stocks/$ticker_/plan/$planId'
+      path: '/stocks/$ticker/plan/$planId'
+      fullPath: '/stocks/$ticker/plan/$planId'
+      preLoaderRoute: typeof StocksTickerPlanPlanIdRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -305,10 +305,10 @@ const rootRouteChildren: RootRouteChildren = {
   SearchRoute: SearchRoute,
   StatsRoute: StatsRoute,
   TrendsRoute: TrendsRoute,
-  PlansPlanIdRoute: PlansPlanIdRoute,
   SnapshotsEditRoute: SnapshotsEditRoute,
   SnapshotsNewRoute: SnapshotsNewRoute,
   StocksTickerRoute: StocksTickerRoute,
+  StocksTickerPlanPlanIdRoute: StocksTickerPlanPlanIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

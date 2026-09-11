@@ -78,10 +78,13 @@ export class TickMeter {
   read() {
     if (this.times.length < 5) return null
     const sorted = [...this.times].sort((a, b) => a - b)
+    // 위에서 5개 미만은 이미 나갔으므로 둘 다 있다. 타입만 그것을 모른다
     const median = sorted[Math.floor(sorted.length / 2)]
+    const worst = sorted.at(-1)
+    if (median === undefined || worst === undefined) return null
     return {
       medianMs: +median.toFixed(1),
-      worstMs: +sorted[sorted.length - 1].toFixed(1),
+      worstMs: +worst.toFixed(1),
       fps: +(1000 / median).toFixed(0),
     }
   }

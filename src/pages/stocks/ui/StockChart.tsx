@@ -7,8 +7,16 @@ import {
   priceAxis,
 } from '@/shared/lib/chartOptions'
 
-export type ChartBaseBox = { from: number; to: number; low: number; high: number }
-export type ChartMovingAverage = { color: string; data: Array<[number, number]> }
+export type ChartBaseBox = {
+  from: number
+  to: number
+  low: number
+  high: number
+}
+export type ChartMovingAverage = {
+  color: string
+  data: Array<[number, number]>
+}
 export type ChartPriceTag = { price: number; color: string }
 export type ChartCandle = [number, number, number, number, number]
 export type ChartVolumeBar = { x: number; y: number; color: string }
@@ -53,8 +61,10 @@ export function StockChart({
     const el = containerRef.current
     if (!el || candles.length === 0) return
 
-    const from = candles[Math.max(0, candles.length - visibleBars)][0]
-    const to = candles[candles.length - 1][0]
+    // 위에서 «비어 있으면» 이미 나갔으므로 둘 다 있다. 타입만 그것을 모른다
+    const from = candles[Math.max(0, candles.length - visibleBars)]?.[0]
+    const to = candles.at(-1)?.[0]
+    if (from === undefined || to === undefined) return
 
     const chart = Highcharts.stockChart(el, {
       ...baseStockOptions(),
@@ -97,7 +107,8 @@ export function StockChart({
           if (p.series.type === 'column') {
             return `거래량 ${Math.round(p.y ?? 0).toLocaleString('ko-KR')}M`
           }
-          if (p.open == null) return `${p.series.name} ${p.y?.toLocaleString('ko-KR')}`
+          if (p.open == null)
+            return `${p.series.name} ${p.y?.toLocaleString('ko-KR')}`
           const color = (p.close ?? 0) >= (p.open ?? 0) ? CANDLE_UP : '#34ADE4'
           return (
             `시 ${p.open.toLocaleString('ko-KR')} · 고 ${p.high?.toLocaleString('ko-KR')}<br/>` +
@@ -159,7 +170,10 @@ export function StockChart({
         .find((s) => s.options.id === MA_SERIES_ID(i))
         ?.setVisible(maVisible[i] ?? true, false)
     })
-    chart.update({ annotations: [baseBoxAnnotation(showSR ? baseBoxes : [])] }, false)
+    chart.update(
+      { annotations: [baseBoxAnnotation(showSR ? baseBoxes : [])] },
+      false,
+    )
     chart.redraw(false)
   }, [showSR, maVisible, baseBoxes, movingAverages])
 

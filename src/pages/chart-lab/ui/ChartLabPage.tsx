@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { dispose, init } from 'klinecharts'
 import type { Chart, Crosshair, KLineData, PeriodType } from 'klinecharts'
-import { dailyBars, minute5Bars, findBases, resample } from '../model/mockCandles'
+import {
+  dailyBars,
+  minute5Bars,
+  findBases,
+  resample,
+} from '../model/mockCandles'
 import { BASE_BOX, registerBaseBox } from '../model/baseOverlay'
 import { measure } from '../model/perf'
 import { LiveFeed, TickMeter } from '../model/liveFeed'
@@ -121,8 +126,13 @@ export function ChartLabPage() {
         chartRef.current = chart
         // 실험용: 콘솔에서 렌더 비용을 재려고 인스턴스를 노출한다. 결정이 끝나면 이 랩과 함께 지운다
         ;(window as unknown as Record<string, unknown>).__lab = chart
-        chart.setSymbol({ ticker: 'LAB', pricePrecision: 0, volumePrecision: 0 })
-        chart.setPeriod(PERIODS[frame])
+        chart.setSymbol({
+          ticker: 'LAB',
+          pricePrecision: 0,
+          volumePrecision: 0,
+        })
+        const period = PERIODS[frame]
+        if (period) chart.setPeriod(period)
 
         // ③ 무한 스크롤 — 왼쪽 끝에 닿으면 forward 로 다시 불린다.
         //    lightweight-charts 에는 이게 없어서 makeHistory() 로 가짜 과거를 만들고 있다
@@ -181,7 +191,11 @@ export function ChartLabPage() {
       if (on[name]) {
         chart.createIndicator(
           // ⑤ 파라미터는 calcParams 로 넘긴다. 바꾸면 즉시 재계산 — 왕복이 없다
-          { name, paneId: 'candle_pane', calcParams: name === 'MA' ? maParams : undefined },
+          {
+            name,
+            paneId: 'candle_pane',
+            calcParams: name === 'MA' ? maParams : undefined,
+          },
           true,
         )
       }
@@ -200,7 +214,8 @@ export function ChartLabPage() {
       return
     }
     const src = source(frame)
-    const last = src[src.length - 1]
+    const last = src.at(-1)
+    if (!last) return
     const stepMs = frame === '5m' ? 5 * 60_000 : 24 * 60 * 60_000
     const feed = new LiveFeed(last, stepMs)
     const meter = new TickMeter()
@@ -209,7 +224,8 @@ export function ChartLabPage() {
       pushRef.current?.(bar)
       meter.mark()
       const r = meter.read()
-      if (r) setLiveStat(`중앙 ${r.medianMs}ms · 최악 ${r.worstMs}ms · ${r.fps}fps`)
+      if (r)
+        setLiveStat(`중앙 ${r.medianMs}ms · 최악 ${r.worstMs}ms · ${r.fps}fps`)
     })
     return () => feed.stop()
   }, [liveHz, frame, size])
@@ -247,7 +263,11 @@ export function ChartLabPage() {
         on={on}
         onToggle={(n) => setOn((p) => ({ ...p, [n]: !p[n] }))}
         extras={[
-          { label: '베이스 3구간', active: showBases, onClick: () => setShowBases((v) => !v) },
+          {
+            label: '베이스 3구간',
+            active: showBases,
+            onClick: () => setShowBases((v) => !v),
+          },
         ]}
       />
 
@@ -279,7 +299,9 @@ export function ChartLabPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className="t-body text-[var(--color-fg-secondary)]">실시간 틱</span>
+        <span className="t-body text-[var(--color-fg-secondary)]">
+          실시간 틱
+        </span>
         {[0, 1, 5, 20, 60].map((hz) => (
           <button
             key={hz}
@@ -294,7 +316,9 @@ export function ChartLabPage() {
             {hz === 0 ? '끔' : `${hz}/초`}
           </button>
         ))}
-        <span className="t-num text-[var(--color-fg-secondary)]">{liveStat}</span>
+        <span className="t-num text-[var(--color-fg-secondary)]">
+          {liveStat}
+        </span>
       </div>
 
       <div className="t-num rounded-[var(--radius-md)] border border-[var(--color-border-subtle)] px-3 py-2 text-[var(--color-fg-secondary)]">
@@ -308,8 +332,9 @@ export function ChartLabPage() {
       />
       <p className="t-body text-[var(--color-fg-secondary)]">
         위 「MA 기간」 버튼은 <b>직접 만든 것</b>이다. 라이브러리는{' '}
-        <code>calcParams</code> 를 받아 즉시 재계산해 줄 뿐, 그 값을 고르는 화면은 주지
-        않는다 — 검색 팝업·입력 폼·삭제·순서 변경까지 전부 우리 몫이다.
+        <code>calcParams</code> 를 받아 즉시 재계산해 줄 뿐, 그 값을 고르는
+        화면은 주지 않는다 — 검색 팝업·입력 폼·삭제·순서 변경까지 전부 우리
+        몫이다.
       </p>
     </div>
   )

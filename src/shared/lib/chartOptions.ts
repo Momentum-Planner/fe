@@ -99,6 +99,8 @@ export function baseStockOptions({
       backgroundColor: 'transparent',
       animation: false, // 끝점이 계속 움직이는 화면에서 애니메이션은 잔상만 남긴다
       height,
+      // 툴팁 «한 줄»이 앉을 자리를 플롯 밖에 비워 둔다 — 그래야 봉을 안 덮는다
+      marginTop: 18,
       spacing: [4, 0, 0, 0],
       // 드래그 = 옆으로 이동, 줌 = 휠. zooming.type 을 주면 드래그가 영역 선택 줌으로
       // 넘어가 버리므로 넣지 않는다. panKey 를 주면 그 키를 누른 채로만 패닝된다.
@@ -122,6 +124,23 @@ export function baseStockOptions({
       },
       series: {
         animation: false,
+        /**
+         * **호버 마커를 끈다.**
+         *
+         * 💀 커서를 올리면 선마다 도형이 하나씩 찍혔다 — 다이아몬드·사각형·삼각형.
+         * Highcharts 가 시리즈마다 기본 심볼을 돌려 쓰는 것인데, 이평선 넷을
+         * 켜 두면 **도형 넷이 캔들 위에 얹혀 그 자리를 가린다.** 값을 보려고
+         * 올린 커서가 그 값을 덮는 구조라, 고정 툴팁과 같은 병이다.
+         *
+         * 점을 찍어 줄 이유도 없다 — 어느 시점인지는 세로 십자선이, 가격은
+         * 축의 크로스헤어 라벨이 이미 말한다.
+         *
+         * `marker.enabled: false` «만»으로는 안 꺼진다. 평소에 안 보일 뿐이고
+         * 호버 상태는 따로 켜져 있어서 `states.hover` 를 같이 내려야 한다.
+         */
+        marker: { enabled: false, states: { hover: { enabled: false } } },
+        // 점 둘레에 번지는 후광도 끈다 — 선이 굵어 보여 값이 흐려진다
+        states: { hover: { halo: { size: 0 }, lineWidthPlus: 0 } },
         dataGrouping: {
           enabled: true,
           groupPixelWidth: 6,
@@ -136,18 +155,111 @@ export function baseStockOptions({
       labels: {
         style: { color: TEXT_DIM, fontFamily: FONT, fontSize: '11px' },
       },
-      crosshair: { color: 'rgba(255,255,255,0.2)', dashStyle: 'Dash' },
+      crosshair: {
+        color: 'rgba(255,255,255,0.2)',
+        dashStyle: 'Dash',
+        /**
+         * **커서를 따라 «그대로» 간다.**
+         *
+         * 💀 기본값이 `snap: true` 라 십자가 가장 가까운 봉으로 끌려간다. 봉
+         * 사이를 지날 때마다 선이 «툭툭» 건너뛰어서, 마우스가 조형물에 들러붙어
+         * 마음대로 안 움직이는 것처럼 느껴진다.
+         *
+         * 가격을 읽는 일은 축의 라벨이 하고, 봉의 시고저종은 좌상단 줄이 한다 —
+         * 십자가 봉에 붙어 있을 이유가 없다.
+         */
+        snap: false,
+        label: {
+          enabled: true,
+          backgroundColor: 'rgba(255,255,255,0.92)',
+          borderRadius: 3,
+          padding: 4,
+          style: { color: '#111', fontFamily: FONT, fontSize: '11px' },
+          format: '{value:%Y-%m-%d}',
+        },
+      },
     },
+    /**
+     * 툴팁을 «플롯 밖 맨 위»의 **한 줄**로 못박는다.
+     *
+     * 💀 두 번 틀렸다.
+     *   ① 기본값은 커서를 따라다닌다 — **읽으려는 봉을 자기가 덮는다.**
+     *      시가·종가를 보려고 올린 커서가 그 봉을 가리는 구조다.
+     *   ② 위로 올려 놓기만 하고 «줄 수»를 안 줄였다. 캔들 툴팁 기본 서식이
+     *      날짜 한 줄 + O·H·L·C 네 줄이라, 위에 붙여도 **아래로 흘러 봉을 덮는다.**
+     *      비운 자리(`marginTop`)보다 길면 올려 둔 의미가 없다.
+     *
+     * 그래서 **한 줄로 만든다.** 가격을 「그 자리」에서 읽는 일은 축의 크로스헤어
+     * 라벨이 따로 지므로, 여기는 O·H·L·C 를 훑는 자리다.
+     *
+     * ⚠️ 지표를 켜도 이 줄은 «캔들만» 쓴다. 지표 값까지 넣으면 줄이 다시 길어지고,
+     *    지표는 자기 칸에 이름이 이미 박혀 있다.
+     */
     tooltip: {
-      backgroundColor: 'rgba(0,0,0,0.85)',
-      borderColor: 'rgba(255,255,255,0.12)',
-      borderRadius: 6,
+      backgroundColor: 'transparent',
+      borderWidth: 0,
       shadow: false,
+      padding: 0,
       style: { color: '#fff', fontFamily: FONT, fontSize: '11px' },
       split: false,
       shared: true,
+      followPointer: false,
+      followTouchMove: false,
+      // 봉 근처에서 «붙잡지» 않는다. 줄은 위에 고정이라 따라올 이유도 없다
+      snap: 0,
+      useHTML: true,
+      positioner: () => ({ x: 8, y: 1 }),
+      /**
+       * ⚠️ Highcharts 13 은 formatter 의 `this` 를 **`Point`** 로 준다 —
+       *    옛 `TooltipFormatterContextObject` 가 없어졌다. `shared` 라
+       *    같이 잡힌 점들이 `this.points` 에 온다.
+       */
+      formatter(this: Highcharts.Point) {
+        const p = this.points?.find((x) => x.series.type === 'candlestick') as
+          | OHLCPoint
+          | undefined
+        if (!p?.close) return false
+
+        const n = (v: number) => v.toLocaleString('ko-KR')
+        const dim = 'color:rgba(255,255,255,0.40)'
+        const cell = (label: string, v: number) =>
+          `<span style="${dim}">${label}</span> ${n(v)}`
+
+        // 등락은 «전일 종가» 대비다. 같은 봉의 시가 대비로 재면 다른 값이 된다
+        const prev = p.series.points[p.index - 1] as OHLCPoint | undefined
+        const base = prev?.close
+        const rate =
+          base && base > 0 ? ((p.close - base) / base) * 100 : undefined
+        const up = (rate ?? 0) >= 0
+        const chg =
+          rate === undefined
+            ? ''
+            : ` <span style="color:${up ? CANDLE_UP : CANDLE_DOWN}">${
+                up ? '+' : ''
+              }${rate.toFixed(2)}%</span>`
+
+        const date = Highcharts.dateFormat('%Y-%m-%d', Number(p.x))
+        return (
+          `<span style="${dim}">${date}</span>&nbsp;&nbsp;` +
+          [
+            cell('시', p.open ?? 0),
+            cell('고', p.high ?? 0),
+            cell('저', p.low ?? 0),
+            cell('종', p.close),
+          ].join('&nbsp;&nbsp;') +
+          chg
+        )
+      },
     },
   }
+}
+
+/** 캔들 점 하나 — `Point` 에 O·H·L·C 가 타입으로 안 붙어 있다 */
+type OHLCPoint = Highcharts.Point & {
+  open?: number
+  high?: number
+  low?: number
+  close?: number
 }
 
 /** 가격 축 하나의 공통 모양. */
@@ -165,6 +277,35 @@ export function priceAxis(
       align: 'left',
       x: 6,
       style: { color: TEXT_DIM, fontFamily: FONT, fontSize: '11px' },
+      /**
+       * **원 단위로 쓴다.**
+       *
+       * Highcharts 기본 포매터는 큰 수에 접두어를 붙여 1,240,000 을 「1.24M」 로
+       * 줄인다. 이 화면의 값은 «주가»라 자릿수 자체가 정보고, 진입가·스톱가가
+       * 원 단위로 적히는데 축만 M 이면 둘을 맞대볼 수 없다.
+       */
+      formatter(this: Highcharts.AxisLabelsFormatterContextObject) {
+        return Number(this.value).toLocaleString('ko-KR')
+      },
+    },
+    /**
+     * 가로 십자선 + 축에 붙는 가격표. 세로선은 `xAxis.crosshair` 가 진다.
+     * 값을 읽는 자리가 «축»이라 플롯 위에 아무것도 안 덮는다.
+     */
+    crosshair: {
+      color: 'rgba(255,255,255,0.2)',
+      dashStyle: 'Dash',
+      // 가로선도 커서를 그대로 따라간다 — 세로선과 같은 이유
+      snap: false,
+      label: {
+        enabled: true,
+        backgroundColor: 'rgba(255,255,255,0.92)',
+        borderRadius: 3,
+        padding: 4,
+        style: { color: '#111', fontFamily: FONT, fontSize: '11px' },
+        format: '{value:,.0f}',
+        align: 'left',
+      },
     },
     ...extra,
   }

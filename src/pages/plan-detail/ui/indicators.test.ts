@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { at } from '@/shared/lib/at'
 import {
   Highcharts,
   baseStockOptions,
@@ -108,7 +109,7 @@ describe('보조지표 사전', () => {
   for (const spec of INDICATORS) {
     it(`${spec.label}(${spec.id}) 가 점을 만든다`, () => {
       const { chart, layers, cleanup } = render([spec.id])
-      const s = chart.get(`ind-${layers[0].key}`) as
+      const s = chart.get(`ind-${at(layers, 0).key}`) as
         | Highcharts.Series
         | undefined
       expect(s, '시리즈가 안 만들어졌다').toBeTruthy()
@@ -122,13 +123,21 @@ describe('보조지표 사전', () => {
     const short = render(['sma'])
     const long = render(['sma'])
     const sSpec = specOf('sma')!
-    short.layers[0].params = writeParam(short.layers[0], sSpec.params[0], 20)
-    long.layers[0].params = writeParam(long.layers[0], sSpec.params[0], 200)
+    at(short.layers, 0).params = writeParam(
+      at(short.layers, 0),
+      at(sSpec.params, 0),
+      20,
+    )
+    at(long.layers, 0).params = writeParam(
+      at(long.layers, 0),
+      at(sSpec.params, 0),
+      200,
+    )
     short.cleanup()
     long.cleanup()
 
     const a = render(['sma'])
-    const s1 = a.chart.get(`ind-${a.layers[0].key}`) as Highcharts.Series
+    const s1 = a.chart.get(`ind-${at(a.layers, 0).key}`) as Highcharts.Series
     const before = s1.points.length
     s1.update({
       type: 'sma',
@@ -145,9 +154,9 @@ describe('보조지표 사전', () => {
     const l = makeLayer(spec)
     expect(l.params.periods).toEqual([14, 3])
 
-    const next = writeParam(l, spec.params[0], 21)
+    const next = writeParam(l, at(spec.params, 0), 21)
     expect(next.periods).toEqual([21, 3])
-    expect(readParam({ ...l, params: next }, spec.params[0])).toBe(21)
+    expect(readParam({ ...l, params: next }, at(spec.params, 0))).toBe(21)
     // ⚠️ `period` 로 새면 그 지표는 값을 «무시»한다. 그런 키가 생기면 안 된다
     expect(next).not.toHaveProperty('period')
   })
@@ -170,11 +179,11 @@ describe('보조지표 사전', () => {
 
       for (let i = 1; i < stack.length; i++)
         expect(
-          stack[i].top,
+          at(stack, i).top,
           `${i}번 칸이 앞 칸을 파고든다`,
-        ).toBeGreaterThanOrEqual(stack[i - 1].top + stack[i - 1].height)
+        ).toBeGreaterThanOrEqual(at(stack, i - 1).top + at(stack, i - 1).height)
 
-      const last = stack[stack.length - 1]
+      const last = at(stack, -1)
       expect(
         box.total - (last.top + last.height),
         'X축 날짜가 설 자리가 없다 — 마지막 칸 위에 겹친다',

@@ -43,8 +43,9 @@ export function MarketChart() {
       c.close,
     ])
     // 처음 보이는 구간 = 설계된 최근 봉들. 왼쪽으로 끌면 과거가 나온다.
-    const from = data[Math.max(0, data.length - VISIBLE_BARS)][0]
-    const to = data[data.length - 1][0]
+    const from = data[Math.max(0, data.length - VISIBLE_BARS)]?.[0]
+    const to = data.at(-1)?.[0]
+    if (from === undefined || to === undefined) return
 
     const chart = Highcharts.stockChart(el, {
       ...baseStockOptions({ height: HEIGHT }),
@@ -75,12 +76,14 @@ export function MarketChart() {
       ],
       annotations: [
         baseBoxAnnotation(
-          baseBoxes.map((b) => ({
-            from: ms(marketCandles[b.fromIndex].time),
-            to: ms(marketCandles[b.toIndex].time),
-            low: b.low,
-            high: b.high,
-          })),
+          baseBoxes.flatMap((b) => {
+            const a = marketCandles[b.fromIndex]
+            const z = marketCandles[b.toIndex]
+            if (!a || !z) return []
+            return [
+              { from: ms(a.time), to: ms(z.time), low: b.low, high: b.high },
+            ]
+          }),
         ),
       ],
       tooltip: {

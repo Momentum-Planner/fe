@@ -10,15 +10,22 @@ import {
 } from 'lightweight-charts'
 import type { ISeriesApi } from 'lightweight-charts'
 import { formatChartDate } from '@/shared/lib/chartHistory'
+/**
+ * 💀 여기서 **`@/pages/stocks/model/stockChart` 를 가져다 쓰고 있었다.**
+ * FSD 가 「같은 층의 다른 슬라이스 안쪽을 부르지 마라」로 잡던 자리인데,
+ * 실제로는 규칙 위반보다 **버그가 먼저였다** — 이 화면은 `snapshotChart` 에
+ * 자기 캔들·이평선·박스를 이미 갖고 있으면서 «종목 화면의 것»을 그리고 있었다.
+ * 복사해 만들다 import 만 안 바꾼 자국이다 (2026-09-11).
+ */
 import {
   VISIBLE_BARS,
-  movingAverages,
-  stockBaseBoxes,
-  stockCandles,
-  stockPriceTags,
-  stockVolume,
-} from '@/pages/stocks/model/stockChart'
-import { pastSnapshots } from '../model/snapshotChart'
+  pastSnapshots,
+  snapshotBaseBoxes,
+  snapshotCandles,
+  snapshotMAs,
+  snapshotPriceTags,
+  snapshotVolume,
+} from '../model/snapshotChart'
 
 const esc = (str: string) =>
   str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -102,7 +109,7 @@ export function SnapshotChart({
       borderVisible: false,
       scaleMargins: { top: 0.15, bottom: 0.05 },
     })
-    volume.setData(stockVolume)
+    volume.setData(snapshotVolume)
 
     // Hover tooltip showing the volume value at the cursor
     chart.subscribeCrosshairMove((param) => {
@@ -120,7 +127,7 @@ export function SnapshotChart({
     })
 
     // Moving averages
-    maSeriesRef.current = movingAverages.map((ma, i) => {
+    maSeriesRef.current = snapshotMAs.map((ma, i) => {
       const line = chart.addSeries(LineSeries, {
         color: ma.color,
         lineWidth: 2,
@@ -144,16 +151,14 @@ export function SnapshotChart({
       lastValueVisible: false,
       priceLineVisible: false,
     })
-    candle.setData(stockCandles)
+    candle.setData(snapshotCandles)
 
     // Candle pane large, volume pane ~2.5:1
     const panes = chart.panes()
-    if (panes.length > 1) {
-      panes[0].setStretchFactor(2.5)
-      panes[1].setStretchFactor(1)
-    }
+    panes[0]?.setStretchFactor(2.5)
+    panes[1]?.setStretchFactor(1)
 
-    for (const tag of stockPriceTags) {
+    for (const tag of snapshotPriceTags) {
       candle.createPriceLine({
         price: tag.price,
         color: tag.color,
@@ -164,7 +169,7 @@ export function SnapshotChart({
       })
     }
 
-    const total = stockCandles.length
+    const total = snapshotCandles.length
     chart
       .timeScale()
       .setVisibleLogicalRange({ from: total - VISIBLE_BARS, to: total + 2 })
@@ -173,7 +178,10 @@ export function SnapshotChart({
       const W = container.clientWidth
       const H = container.clientHeight
       const ts = chart.timeScale()
-      const cx = (i: number) => ts.timeToCoordinate(stockCandles[i].time)
+      const cx = (i: number) => {
+        const c = snapshotCandles[i]
+        return c ? ts.timeToCoordinate(c.time) : null
+      }
       const cy = (price: number) => candle.priceToCoordinate(price)
 
       const c0 = cx(0)
@@ -184,7 +192,7 @@ export function SnapshotChart({
 
       // base boxes (지지/저항 — toggled)
       if (showSRRef.current) {
-        for (const box of stockBaseBoxes) {
+        for (const box of snapshotBaseBoxes) {
           const x1 = cx(box.fromIndex)
           const x2 = cx(box.toIndex)
           const yHigh = cy(box.high)

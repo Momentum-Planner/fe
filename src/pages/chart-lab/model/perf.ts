@@ -10,7 +10,9 @@ export type Perf = {
 }
 
 /** 컨테이너 안의 DOM 노드 수. Canvas 는 <canvas> 몇 장, SVG 는 캔들 수만큼 늘어난다. */
-export function countNodes(el: HTMLElement): Pick<Perf, 'domNodes' | 'svgNodes'> {
+export function countNodes(
+  el: HTMLElement,
+): Pick<Perf, 'domNodes' | 'svgNodes'> {
   return {
     domNodes: el.querySelectorAll('*').length,
     svgNodes: el.querySelectorAll('svg *').length,

@@ -67,7 +67,11 @@ export function LabHeader({
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
         <Group label="봉 단위">
           {FRAMES.map((f) => (
-            <Chip key={f.key} active={frame === f.key} onClick={() => onFrame(f.key)}>
+            <Chip
+              key={f.key}
+              active={frame === f.key}
+              onClick={() => onFrame(f.key)}
+            >
               {f.label}
             </Chip>
           ))}
@@ -81,14 +85,22 @@ export function LabHeader({
         </Group>
         <Group label="캔들 위">
           {overlay.map((i) => (
-            <Chip key={i.name} active={!!on[i.name]} onClick={() => onToggle(i.name)}>
+            <Chip
+              key={i.name}
+              active={!!on[i.name]}
+              onClick={() => onToggle(i.name)}
+            >
               {i.label}
             </Chip>
           ))}
         </Group>
         <Group label="별도 패널">
           {pane.map((i) => (
-            <Chip key={i.name} active={!!on[i.name]} onClick={() => onToggle(i.name)}>
+            <Chip
+              key={i.name}
+              active={!!on[i.name]}
+              onClick={() => onToggle(i.name)}
+            >
               {i.label}
             </Chip>
           ))}
@@ -105,7 +117,13 @@ export function LabHeader({
   )
 }
 
-function Group({ label, children }: { label: string; children: React.ReactNode }) {
+function Group({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
   return (
     <div className="flex items-center gap-2">
       <span className="t-body whitespace-nowrap text-[var(--color-fg-secondary)]">

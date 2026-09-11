@@ -35,7 +35,8 @@ export function IndicatorPanel({
   onChange: (next: Layer[]) => void
 }) {
   const [open, setOpen] = useState(false)
-  const [picked, setPicked] = useState<string>(INDICATORS[0].id)
+  // 첫 지표를 «이름으로» 고른다 — 순서가 바뀌어도 안 깨지고 undefined 도 안 낀다
+  const [picked, setPicked] = useState<string>('sma')
   const boxRef = useRef<HTMLDivElement>(null)
 
   // 바깥을 누르면 닫는다 — 차트를 만지려는 것이지 패널을 만지려는 게 아니다

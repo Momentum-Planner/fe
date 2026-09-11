@@ -27,12 +27,15 @@ type NavEntry = {
  * 「오늘의 계획」을 뺐다 (2026-09-09) — 안 쓰기로 했다.
  * ⚠️ Q3 이 이 줄을 「종목 · 계획 · 거래 기록 · 계좌」로 바꾸기로 했다. 아직 안 옮겼다.
  *
+ * **「거래 계획」은 계획 «컬렉션»이다** — 목록을 모아 보는 자리.
+ * `/plans/:id` 는 그 자식이 아니라 **종목 세부**다 (2026-09-11). 하이닉스를
+ * 누르면 거기로 간다 — 차트·사슬·계획이 한 화면에 있는 그 화면이다.
+ *
  * 여전히 메뉴가 아닌 것들:
  *   보유 중·관심  상단 바 드롭다운
- *   계획 작성     종목 상세에서 시작
+ *   계획 작성     사슬의 «빈 자리»에서 시작 (Q8)
  *   거래 기록     계획 카드에서 시작
- *   계획 잇기     계획 카드에서 들어감
- *
+ *   계획 잇기     사슬에서 들어감
  */
 const navItems: NavEntry[] = [
   { to: '/trends', label: '오늘의 후보', icon: TrendingUp },
@@ -76,6 +79,15 @@ export function TopBar() {
             to={to}
             className={`${itemClass} [&.active]:bg-white/[0.08] [&.active]:font-bold [&.active]:text-white`}
             activeProps={{ className: 'active' }}
+            /**
+             * ⚠️ **정확히 그 주소일 때만 켜진다.**
+             *
+             * 기본값은 앞부분만 맞아도 켜져서, `/plans/12`(종목 세부)에 있을 때
+             * 「거래 계획」이 흰색으로 섰다. 그 화면은 **컬렉션의 자식이 아니라
+             * 다른 화면**이다 — 라우트 파일 이름의 밑줄(`plans_.$planId`)이
+             * 이미 그 뜻이었는데 내비만 모르고 있었다.
+             */
+            activeOptions={{ exact: true }}
           >
             <Icon size={17} strokeWidth={2} />
             <span>{label}</span>
