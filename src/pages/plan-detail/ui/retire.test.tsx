@@ -532,7 +532,31 @@ describe('사슬을 찾아간다', () => {
     ).toBeInTheDocument()
   })
 
-  it('찾아가는 줄에 «실행 중»만 있다', async () => {
+  it('«대기»도 한 자리 — 여럿이면 개수가 붙는다', async () => {
+    const plan = await planApi.getDetail(1)
+    show(plan)
+
+    await screen.findAllByText(plan.title)
+    /**
+     * 실행 중은 종목당 «하나»지만(④-2) 대기는 «여럿»일 수 있다 —
+     * 같은 종목에 시나리오를 여럿 두고 하나만 실현한다 (④-3).
+     * 그래서 칩 하나가 돌아가며 하나씩 데려오고, 개수가 붙는다 —
+     * **한 번 눌러서 다 못 본다는 사실이 보여야 한다.**
+     */
+    const waiting = (
+      await planApi.getList({ stockCode: '000660' })
+    ).plans.filter((p) => p.status === 'PLANNED')
+    expect(waiting.length).toBeGreaterThan(1)
+
+    // ⚠️ 「대기」로만 찾으면 «제목»에 그 글자가 든 마디의 버튼까지 잡힌다
+    //    (목의 「3차 돌파 대기」). 앞머리로 좁힌다
+    const chip = await screen.findByRole('button', {
+      name: new RegExp(`^대기 ${waiting.length}개`),
+    })
+    expect(chip).toBeInTheDocument()
+  })
+
+  it('찾아가는 줄에 «실행 중»과 «대기»만 있다', async () => {
     const plan = await planApi.create({ ...BLANK, title: '줄 확인' })
     show(plan)
 

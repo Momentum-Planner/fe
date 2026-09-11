@@ -309,6 +309,21 @@ export function PlanChain({
   /** 실행 중은 종목당 하나뿐이다 (④-2) — 「지금 살아 있는 판단」 */
   const running = plans.find((p) => p.status === 'RUNNING')
   /**
+   * 대기는 **여럿일 수 있다** — 같은 종목에 시나리오를 여럿 둘 수 있고
+   * 하나만 실현된다 (④-3). 그래서 칩 하나가 «돌아가며» 하나씩 데려온다.
+   * 최근에 세운 것부터다.
+   */
+  const waiting = plans
+    .filter((p) => p.status === 'PLANNED')
+    .sort((a, b) => b.writtenAt.localeCompare(a.writtenAt))
+  const waitAt = useRef(0)
+  const nextWaiting = () => {
+    const i = waitAt.current % waiting.length
+    waitAt.current = i + 1
+    const target = waiting[i]
+    if (target) setFocusId(target.planId)
+  }
+  /**
    * ⚠️ 「최신」 칩을 뺐다 (2026-09-11). 사슬은 **왼쪽이 과거, 오른쪽이 지금**이라
    *    최신은 늘 오른쪽 끝이다 — 끌면 닿는 자리에 칩까지 둘 이유가 없다.
    *    찾기 어려운 것은 «가운데 어딘가»에 있는 실행 중이고, 그것만 남긴다.
@@ -343,6 +358,26 @@ export function PlanChain({
           >
             <span className="bg-brand-red h-1.5 w-1.5 rounded-full" />
             실행 중
+          </Jump>
+        )}
+        {waiting.length > 0 && (
+          <Jump
+            on={waiting.some((p) => p.planId === centerOn)}
+            onClick={nextWaiting}
+            label={
+              waiting.length > 1
+                ? `대기 ${waiting.length}개 — 누를 때마다 다음`
+                : '대기'
+            }
+          >
+            <span className="bg-brand-blue h-1.5 w-1.5 rounded-full" />
+            대기
+            {/* 여럿이면 개수를 붙인다 — 한 번 눌러서 다 못 본다는 사실이 보여야 한다 */}
+            {waiting.length > 1 && (
+              <span className="font-number text-white/40">
+                {waiting.length}
+              </span>
+            )}
           </Jump>
         )}
 
