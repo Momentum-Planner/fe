@@ -137,6 +137,16 @@ export function PlanChain({
    * 못 온다 — 스크롤이 끝에서 멈춘다.
    */
   const [pad, setPad] = useState(0)
+  /**
+   * 사슬 «위아래»에 두는 빈 자리.
+   *
+   * 갈래가 늘면 마디가 세로로 쌓이는데, 그러면 맨 위·맨 아래 마디는 칸 가운데까지
+   * 못 온다 — 스크롤이 끝에서 멈춘다. 가로(`pad`)와 같은 이유다.
+   *
+   * ⚠️ **내용이 칸보다 «높을 때만» 준다.** 한 줄뿐인 종목에까지 주면 위아래로
+   *    끌 수 있는 빈 공간만 생긴다.
+   */
+  const [padY, setPadY] = useState(0)
   const nodeRefs = useRef(new Map<number, HTMLElement>())
   const [edges, setEdges] = useState<
     { x1: number; y1: number; x2: number; y2: number; ghost?: boolean }[]
@@ -197,7 +207,18 @@ export function PlanChain({
     }
     const sizePad = () => {
       const pan = panRef.current
-      if (pan) setPad(Math.max(0, (pan.clientWidth - CARD_W) / 2))
+      if (!pan) return
+      setPad(Math.max(0, (pan.clientWidth - CARD_W) / 2))
+      /**
+       * ⚠️ 여유를 «뺀» 높이로 잰다. 지금 붙어 있는 `padY` 를 그대로 세면
+       *    「높다 → 여유를 준다 → 더 높다」로 스스로를 물고 늘어진다.
+       */
+      const contentH = box.scrollHeight - padY * 2
+      setPadY(
+        contentH > pan.clientHeight
+          ? Math.max(0, (pan.clientHeight - NODE_H) / 2)
+          : 0,
+      )
     }
     // 첫 값은 동기로 읽는다 — 콜백만 기다리면 첫 프레임에 선이 없다
     measure()
@@ -225,8 +246,11 @@ export function PlanChain({
   /**
    * 사슬을 «어디로» 맞춰 둘까 — 기본은 고른 마디다.
    *
-   * 「최신으로」·날짜 이동을 누르면 이 값이 바뀌고, 그 마디가 가운데로 온다.
-   * 칸이 작아서(186px × 가로 스크롤) **스스로 데려오지 않으면 못 찾는다.**
+   * 「실행 중」·기간을 누르면 이 값이 바뀌고, 그 마디가 **가로·세로 가운데**로 온다.
+   * 칸이 작아서(210px × 가로 스크롤) **스스로 데려오지 않으면 못 찾는다.**
+   *
+   * ⚠️ 세로도 가운데로 오게 한 이유 — 갈래가 늘면 마디가 세로로 쌓이는데,
+   *    가로만 맞추면 고른 마디가 «위아래로» 화면 밖에 있을 수 있다.
    */
   const [focusId, setFocusId] = useState<number | null>(null)
   const centerOn = focusId ?? currentId
@@ -244,15 +268,17 @@ export function PlanChain({
       }
       const br = box.getBoundingClientRect()
       const er = el.getBoundingClientRect()
-      // 마디의 «중심»을 칸의 «중심»에 맞춘다
-      const delta = er.left + er.width / 2 - (br.left + br.width / 2)
+      // 마디의 «중심»을 칸의 «중심»에 맞춘다 — 가로와 «세로» 둘 다
+      const dx = er.left + er.width / 2 - (br.left + br.width / 2)
+      const dy = er.top + er.height / 2 - (br.top + br.height / 2)
       /**
        * ⚠️ 탭이 «안 보이면 부드러운 스크롤이 안 끝난다.** smooth 애니메이션도
        * rAF 로 도는데 hidden 상태에서는 rAF 가 멈춘다 — 몇 px 만 가고 그대로 선다.
        * 보고 있을 때만 부드럽게, 아니면 즉시 옮긴다.
        */
       box.scrollTo({
-        left: box.scrollLeft + delta,
+        left: box.scrollLeft + dx,
+        top: box.scrollTop + dy,
         behavior: document.hidden ? 'auto' : 'smooth',
       })
     }
@@ -263,11 +289,11 @@ export function PlanChain({
      *    안 돈다.** 탭을 옮겨 놓고 계획을 열면 사슬이 영영 제자리에 있게 된다.
      *    `setTimeout` 은 느려질 뿐 멈추지는 않는다.
      *
-     * ⚠️ `pad` 가 의존성에 «있어야» 한다. 첫 렌더에는 0 이라 양옆 빈 자리가 없고,
+     * ⚠️ `pad` · `padY` 가 의존성에 «있어야» 한다. 첫 렌더에는 0 이라 양옆 빈 자리가 없고,
      *    그 상태에서 가운데로 가려면 왼쪽으로 가야 하는데 이미 0 이라 클램프되고
      *    끝난다. `ResizeObserver` 가 pad 를 정한 «뒤» 한 번 더 돌아야 한다.
      */
-  }, [centerOn, plans, pad])
+  }, [centerOn, plans, pad, padY])
 
   const cells = [
     ...spine.map((p) => ({ key: p.planId, list: [p, ...dropped(p.planId)] })),
@@ -381,7 +407,12 @@ export function PlanChain({
             <div
               ref={boxRef}
               className="relative flex w-max items-start gap-7"
-              style={{ paddingLeft: pad, paddingRight: pad }}
+              style={{
+                paddingLeft: pad,
+                paddingRight: pad,
+                paddingTop: padY,
+                paddingBottom: padY,
+              }}
             >
               {cells.map(({ key: k, list }) => (
                 <div key={k} className="flex flex-col gap-2">
@@ -603,6 +634,12 @@ function PanBox({
 
 /** 마디 폭. 양옆 빈 자리를 잴 때 쓴다 */
 const CARD_W = 176
+
+/**
+ * 마디 높이의 어림값. 위아래 빈 자리를 잴 때만 쓴다 —
+ * 실제 높이는 내용이 정하지만(세 줄 + `py-2`), 여유의 크기는 «대략»이면 된다.
+ */
+const NODE_H = 58
 
 /**
  * 「아직 없는 마디」의 자리표. 실제 `planId` 와 안 겹치게 음수로 둔다 —
