@@ -1,4 +1,4 @@
-import { REGIMES } from '@/shared/lib/snapshots'
+import { REGIMES, TREND_CONDITIONS } from '@/shared/lib/snapshots'
 import type { DailyScreening } from '@/shared/lib/snapshots'
 import { makeCandles, rand, seedOf } from './stocks'
 
@@ -13,17 +13,6 @@ import { makeCandles, rand, seedOf } from './stocks'
  *    후보가 아니었던 날이다. 화면에서 그 «빈칸»이 정보가 된다
  *    (디자인 3장 ⑤ — 「간극이 정보다」).
  */
-
-const TREND_CONDITIONS = [
-  '150·200일선 위',
-  '150일선 > 200일선',
-  '200일선 상승',
-  '50일선 > 150·200일선',
-  '52주 저점 +25%',
-  '52주 고점 −25% 이내',
-  'RS 70 이상',
-  '진입 가능 · 50일선 위',
-]
 
 const ENTRY_STATES = ['EARLY', 'BREAKOUT', 'PULLBACK', 'BLOCKED'] as const
 

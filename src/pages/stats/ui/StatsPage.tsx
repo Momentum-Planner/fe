@@ -1,128 +1,138 @@
 /**
- * 거래 통계 — ⑨ 지표 + ⑧ 그룹별 성과 + ⑦ 거래 목록을 한 화면에 둔다 (Q1).
+ * ⑦ 거래 통계.
  *
- * ⑧은 화면이 아니라 「과정 · 단건」이라 독립 화면을 안 만든다 — ⑦과 ⑨를 잇는
- * 연산이므로 둘 사이에 놓는다. 그룹을 누르면 그 그룹의 거래만 걸러진다.
+ * ```text
+ * ① 월별 손익 워터폴 (왼쪽)      +  요약 (오른쪽)     한 판에 같이 선다
+ *   └ 최대 수익 · 최대 손실           성과 넷 · 위험 넷
+ * ② 거래 기록                    ← 기간 선택에 안 걸린다. 자기 필터가 있다
+ * ```
  *
- * ⚠️ TradeStats · Trade API가 아직 없다. 자리만 잡아 둔 것이다.
+ * 💀 **셋이 남았다** (2026-09-13). 최대 둘 · 요약 지표 · 종형 곡선이 ① 로
+ * 합쳐졌고, **그룹별 성과(축 여덟 · 22행 × 3열)는 통째로 뺐다** —
+ * *「이건 구현 세부사항에 가깝다」*. 무엇을 축으로 삼을지(훼손 0~2냐 0~5냐 ·
+ * 베이스를 몇으로 묶냐 · 계획 상태를 넣냐)가 아직 안 정해졌는데 화면이 먼저
+ * 서 있었다. **⑧ 피드백이 어떤 값을 되돌려 줄지 정해진 뒤에** 다시 세운다.
+ *
+ * ⚠️ 설계 문서의 여섯 블록과 대조 —
+ *
+ * ```text
+ * 문서                    지금
+ * ① 최대 수익 · 최대 손실  →  ① 안의 첫 층
+ * ② 워터폴               →  ②   (자리만 아래로)
+ * ③ 요약 지표            →  ① 안의 「성과」 + 「위험」
+ * ④ 종형 곡선            →  ① 의 「벽 왼쪽」 한 칸  (F1 · Q9)
+ * ⑤ 그룹별 성과          →  —   (뺐다)
+ * ⑥ 거래 기록 목록        →  ③
+ * ```
+ *
+ * **표본 경계**
+ *
+ * ```text
+ * ① 의 최대 둘 · 세는 칸 셋 · ② · ③   1건~   사실이라 항상 나온다
+ * ① 의 성과 넷 · 평균 위험노출        5건~   값을 흐리게 + 「표본 N건」
+ * ```
+ *
+ * 💀 **필터를 걸수록 흐려지는 칸이 늘어난다.** *「기간을 걸었을 때 표본이
+ * 적으면 적다고 함께 적는다」* 가 화면 «동작»이 된 것이다. 모델은 24장 ④ 의
+ * 액션 필터 — 거기서도 선택은 워터폴과 스파크바에만 걸렸고 세부사항 표는
+ * 그대로 있었다.
+ *
+ * ⚠️ **분기 추이는 따로 두지 않는다.** ② 의 기간 선택이 그 역할을 겸한다.
  */
 
-function Section({
-  no,
-  title,
-  desc,
-  children,
-}: {
-  no: string
-  title: string
-  desc: string
-  children: React.ReactNode
-}) {
-  return (
-    <section className="card flex flex-col gap-3 px-6 py-5">
-      <header className="flex flex-wrap items-baseline gap-2.5">
-        <span className="font-number text-[13px] text-white/35">{no}</span>
-        <h2 className="t-h3 m-0 text-white">{title}</h2>
-        <span className="text-[12px] text-white/35">{desc}</span>
-      </header>
-      {children}
-    </section>
-  )
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="m-0 py-8 text-center text-[13px] text-white/35">{children}</p>
-  )
-}
-
-const GROUPS = [
-  { d: '계획', labels: ['계획 있음', '임의 진입', '계획 없음'] },
-  { d: '베이스 번호', labels: ['1~2번째', '3~4번째', '5번째+'] },
-  { d: '트렌드 템플릿', labels: ['8/8', '6~7', '그 이하'] },
-  { d: '위험노출', labels: ['1% 미만', '1~2%', '2% 초과'] },
-]
+import { useMemo, useState } from 'react'
+import { useTradeList } from '@/entities/tradeRecord'
+import {
+  inPeriod,
+  isClosed,
+  monthlyFlow,
+  recordRows,
+  riskStat,
+  summarize,
+  wallStat,
+} from '../model/aggregate'
+import type { Period } from '../model/aggregate'
+import { Overview } from './Overview'
+import { PeakTrades } from './PeakTrades'
+import { RecordList } from './RecordList'
+import { Waterfall } from './Waterfall'
+import { rangeLabel } from './parts'
 
 export function StatsPage() {
-  return (
-    <main className="flex flex-col gap-4 px-6 pt-6 pb-8">
-      <header className="flex flex-col gap-1.5">
-        <h1 className="t-h1 m-0 text-white">거래 통계</h1>
-        <p className="m-0 text-[13px] text-white/45">
-          내 기록으로 규칙의 가치를 증명하는 자리입니다 — 계획을 지킨 거래와
-          어긴 거래를 갈라서 봅니다.
-        </p>
-      </header>
+  const { data: records, isError } = useTradeList()
+  const [period, setPeriod] = useState<Period | null>(null)
 
-      <Section no="⑨" title="지표" desc="승률 · 평균수익 · 손익비 · 기대값">
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          {['승률', '평균 수익', '손익비', '기대값'].map((l) => (
-            <div
-              key={l}
-              className="flex flex-col gap-1.5 rounded-[10px] border border-white/[0.07] px-4 py-3"
-            >
-              <span className="text-[12px] text-white/40">{l}</span>
-              <span className="font-number text-[22px] font-bold text-white/25">
-                —
-              </span>
-            </div>
-          ))}
-        </div>
-        <Empty>거래가 쌓이면 여기에 나옵니다.</Empty>
-      </Section>
-
-      <Section
-        no="⑧"
-        title="그룹별 성과"
-        desc="꼬리표로 갈라서 본다 · 누르면 아래 목록이 걸러집니다"
-      >
-        <div className="flex flex-col gap-3">
-          {GROUPS.map((g) => (
-            <div key={g.d} className="flex flex-wrap items-center gap-2">
-              <span className="w-[104px] shrink-0 text-[12px] text-white/40">
-                {g.d}
-              </span>
-              {g.labels.map((l) => (
-                <span
-                  key={l}
-                  className="rounded-full border border-white/12 px-3 py-1 text-[12px] text-white/40"
-                >
-                  {l}
-                  <span className="font-number ml-1.5 text-white/25">—</span>
-                </span>
-              ))}
-            </div>
-          ))}
-        </div>
-      </Section>
-
-      <Section no="⑦" title="거래 목록" desc="진입가 · 매도가 · 수량 · 매도일">
-        <Empty>기록된 거래가 없습니다.</Empty>
-      </Section>
-
-      <Section
-        no="⑩"
-        title="계획으로 되돌리기"
-        desc="통계가 계획의 다섯 값을 계산해 돌려준다"
-      >
-        <div className="flex flex-wrap gap-2">
-          {[
-            '손절폭',
-            '손익비 목표',
-            '위험노출%',
-            '포지션%',
-            '최대 보유 종목 수',
-          ].map((l) => (
-            <span
-              key={l}
-              className="rounded-full border border-white/12 px-3 py-1 text-[12px] text-white/40"
-            >
-              {l}
-              <span className="font-number ml-1.5 text-white/25">—</span>
-            </span>
-          ))}
-        </div>
-      </Section>
-    </main>
+  /** **세는 단위는 매도 기록 하나다** (⑥) */
+  const closed = useMemo(() => (records ?? []).filter(isClosed), [records])
+  /** ① 이 보는 집합. ② ③ 은 위의 `closed` 를 그대로 본다 */
+  const picked = useMemo(
+    () => closed.filter((r) => inPeriod(r, period)),
+    [closed, period],
   )
+
+  const flow = useMemo(() => monthlyFlow(closed), [closed])
+  const rows = useMemo(() => recordRows(records ?? []), [records])
+  const sum = useMemo(() => summarize(picked), [picked])
+  const wall = useMemo(() => wallStat(picked), [picked])
+  const risk = useMemo(() => riskStat(picked), [picked])
+
+  if (isError)
+    return (
+      <Shell>
+        <p className="card m-0 px-5 py-6 text-[13px] text-white/45">
+          거래 기록을 불러오지 못했습니다.
+        </p>
+      </Shell>
+    )
+
+  if (!records)
+    return (
+      <Shell>
+        <p className="card m-0 px-5 py-6 text-[13px] text-white/35">
+          쌓인 것을 세고 있습니다…
+        </p>
+      </Shell>
+    )
+
+  if (closed.length === 0)
+    return (
+      <Shell>
+        <p className="card m-0 px-5 py-6 text-[13px] leading-relaxed text-white/45">
+          매도한 거래가 아직 없습니다. 체결을 기록하면 여기부터 채워집니다 (⑥).
+        </p>
+      </Shell>
+    )
+
+  return (
+    <Shell>
+      {/**
+       * ① 워터폴(왼쪽) + 요약(오른쪽) — **한 판에 같이 선다.**
+       * 달을 고르는 손과 값이 바뀌는 자리가 떨어져 있으면
+       * 고르고 → 스크롤하고 → 읽고를 반복해야 한다.
+       */}
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <Waterfall
+          flow={flow}
+          period={period}
+          onPeriod={setPeriod}
+          sells={closed.length}
+        >
+          {/* 차트가 「언제」를 말하고, 같은 카드 안에서 「그중 가장 큰 둘」을 */}
+          <PeakTrades closed={picked} range={rangeLabel(period)} />
+        </Waterfall>
+        <Overview
+          sum={sum}
+          wall={wall}
+          risk={risk}
+          range={rangeLabel(period)}
+        />
+      </div>
+
+      <RecordList rows={rows} />
+    </Shell>
+  )
+}
+
+function Shell({ children }: { children: React.ReactNode }) {
+  return <main className="flex flex-col gap-4 px-6 pt-6 pb-16">{children}</main>
 }

@@ -10,6 +10,7 @@ import {
   planDefaults,
   toListItem,
 } from './data/plans'
+import { filterRecords, makeStats } from './data/tradeRecords'
 import {
   STOCKS,
   makeBases,
@@ -462,6 +463,41 @@ export const handlers = [
   }),
 
   // ─────────────── 검색 ───────────────
+  // ─────────────── 거래 기록 · 통계 (⑥⑦) ───────────────
+  //
+  // ⚠️ 백엔드에 TradeRecord API 가 없다. 여기가 유일한 구현이다.
+
+  /** 체결 목록 — 정산표 ①「어느 지점에서 사고팔았는지」가 이것을 그대로 쓴다 */
+  http.get('/api/v1/trade-records', ({ request }) => {
+    const p = new URL(request.url).searchParams
+    const planned = p.get('planned')
+    return ok({
+      records: filterRecords({
+        from: p.get('from') ?? undefined,
+        to: p.get('to') ?? undefined,
+        stockCode: p.get('stockCode') ?? undefined,
+        planned: planned === null ? undefined : planned === 'true',
+      }),
+    })
+  }),
+
+  /**
+   * ⑦ 통계 — 정산표 · 자본 감소 · 그룹별 · 조건 고정 · 교차를 «한 번에» 준다.
+   * 쪼개면 기간 필터가 어긋난 조합이 한 화면에 설 수 있다.
+   */
+  http.get('/api/v1/trade-records/stats', ({ request }) => {
+    const p = new URL(request.url).searchParams
+    const planned = p.get('planned')
+    return ok(
+      makeStats({
+        from: p.get('from') ?? undefined,
+        to: p.get('to') ?? undefined,
+        stockCode: p.get('stockCode') ?? undefined,
+        planned: planned === null ? undefined : planned === 'true',
+      }),
+    )
+  }),
+
   http.get('/api/v1/search/stocks', ({ request }) => {
     const q = (new URL(request.url).searchParams.get('query') ?? '').trim()
     const hits = q

@@ -36,6 +36,24 @@ export interface DailyScreening {
   /** 어긋난 조건의 «이름». 정상(8/8)이면 빈 배열이라 한 줄로 끝난다 */
   trendFailed: string[]
 }
+/**
+ * 트렌드 템플릿 8조건 (①-1 게이트). **이름이 여기 있는 이유** — 스크리닝 목이
+ * 들고 있던 배열인데 ⑦ 의 「트렌드 8조건 표」가 같은 이름을 세로로 훑는다.
+ * 종목 축의 값이고 두 슬라이스가 같이 쓰므로 `shared` 가 제자리다.
+ *
+ * ⚠️ **순서가 의미다** — `trendFailed` 에 담기는 문자열이 이 배열의 원소다.
+ */
+export const TREND_CONDITIONS = [
+  '150·200일선 위',
+  '150일선 > 200일선',
+  '200일선 상승',
+  '50일선 > 150·200일선',
+  '52주 저점 +25%',
+  '52주 고점 −25% 이내',
+  'RS 70 이상',
+  '진입 가능 · 50일선 위',
+] as const
+
 export type Judgment = 'buy' | 'sell' | 'hold'
 
 export const REGIME_LABEL: Record<Regime, string> = {
