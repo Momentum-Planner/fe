@@ -19,6 +19,7 @@ import type {
 import { PlanChain } from './PlanChain'
 import { PlanChart } from './PlanChart'
 import { RiskBar } from './RiskBar'
+import { SnapshotBar } from './SnapshotBar'
 import { NewPlanForm } from './NewPlanForm'
 import { useNewPlan } from './useNewPlan'
 import { usePlanClose, usePlanRemove } from './usePlanRetire'
@@ -308,6 +309,11 @@ function PlanDetailView({
         {/* 차트가 «주»다 — 종목 상세를 대체하는 화면이므로 차트가 그 폭을 가져야 한다.
             Q0 이 잰 값이 826px 이고, 여기 1fr 이 그 근처에 선다 */}
         <section className="card min-w-0 px-3 py-3">
+          {/* ④-0 스냅샷 — **차트 «위»다.** 이유는 `SnapshotBar` 머리에 있다
+              (보조지표 팝오버가 아래로 열리고, 하단 지표가 차트를 아래로 늘린다).
+              ⚠️ 새 계획을 쓰는 동안에도 «이어받는 계획»의 판정이 보인다 —
+                 그 계획의 스냅샷이 아직 없어서다. 날짜를 제목에 붙여 두었다. */}
+          <SnapshotBar snap={plan.snapshot} />
           <PlanChart
             stockCode={plan.stockCode}
             /**
@@ -346,11 +352,17 @@ function PlanDetailView({
           />
         ) : (
           <section className="card min-w-0 px-5 py-4">
-            {/* 머리줄 */}
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            {/* 머리줄 — **접지 않는다.**
+                💀 `flex-wrap` 이었다. 고칠 때 이름 칸이 220px 로 «고정»이라
+                   상태칩 + 이름 + 작성일이 448px 를 넘겨 **저장·취소가 다음 줄로
+                   밀렸다.** 누르는 것이 밀리고 안 누르는 것이 자리를 지켰다.
+                지금은 이름이 «남는 폭을 먹는다» — 버튼은 자기 폭만 쓰고 고정이다.
+                작성일은 고치는 동안 비켜 준다: 못 고치는 값이라 그 자리를
+                이름에 주는 편이 낫다. 읽을 때는 그대로 있다. */}
+            <div className="flex items-center gap-x-3">
               <span
                 className={cn(
-                  'rounded-md px-2 py-0.5 text-[12px]',
+                  'shrink-0 rounded-md px-2 py-0.5 text-[12px]',
                   plan.status === 'RUNNING'
                     ? 'bg-brand-red/15 text-brand-red'
                     : plan.status === 'PLANNED'
@@ -368,17 +380,19 @@ function PlanDetailView({
                   value={shown.title}
                   onChange={(e) => set('title', e.target.value)}
                   placeholder="계획 이름"
-                  className="bg-bg-input w-[220px] rounded-md px-2 py-0.5 text-[15px] font-bold text-white outline-none placeholder:font-normal placeholder:text-white/25 focus:ring-1 focus:ring-white/30"
+                  className="bg-bg-input min-w-0 flex-1 rounded-md px-2 py-0.5 text-[15px] font-bold text-white outline-none placeholder:font-normal placeholder:text-white/25 focus:ring-1 focus:ring-white/30"
                 />
               ) : (
-                <span className="text-[15px] font-bold text-white">
-                  {plan.title}
-                </span>
+                <>
+                  <span className="truncate text-[15px] font-bold text-white">
+                    {plan.title}
+                  </span>
+                  <span className="font-number shrink-0 text-[11px] text-white/30">
+                    {plan.writtenAt} 작성
+                  </span>
+                </>
               )}
-              <span className="font-number text-[11px] text-white/30">
-                {plan.writtenAt} 작성
-              </span>
-              <div className="ml-auto flex items-center gap-1.5">
+              <div className="ml-auto flex shrink-0 items-center gap-1.5">
                 {editing ? (
                   <>
                     {/* 「저장」은 «고친 게 있을 때만» 산다 — 안 고치고 누르는 저장은
@@ -510,48 +524,68 @@ function PlanDetailView({
 
               {/**
                * 후보 선 — **서비스가 하나를 정해 주지 않는다** (④-1-1-2).
-               * 읽을 때는 「왜 «거기»에 뒀나」를 답하는 목록이고, 고칠 때는
-               * 고르는 목록이다. 그래서 고칠 때만 «버튼»이 된다 —
+               *
+               * **읽을 때는 «고른 하나»만 선다.** 나머지 셋은 고를 수 없는 선이고,
+               * 고를 수 없는 것을 늘어놓으면 「왜 저건 안 되나」를 묻게 된다.
+               * 이미 정해진 스톱가격을 보는 자리에서 답할 것은 「어디에 뒀나」
+               * 하나다 — 「무엇 중에서 골랐나」는 «고를 때»의 질문이다.
+               * 상한 표시를 고칠 때만 띄운 것과 같은 이유다.
+               *
+               * 고칠 때만 넷이 다 펴지고 «버튼»이 된다 —
                * 안 눌리는 것이 버튼처럼 생기면 눌러 보게 된다.
                */}
               <div className="mt-2 flex flex-col gap-0.5 border-t border-white/[0.06] pt-2">
-                {plan.stopCandidates.map((c) => {
-                  const chosen = c.price === shown.stopPrice
-                  const row = (
-                    <>
-                      <span className={chosen ? 'text-white' : 'text-white/45'}>
-                        {c.label}
-                      </span>
-                      <span className="font-number text-right text-white/75 tabular-nums">
-                        {won(c.price)}
-                      </span>
-                      <span className="font-number text-right text-white/35 tabular-nums">
-                        −{c.width}%
-                      </span>
-                    </>
-                  )
-                  const shape = cn(
-                    'grid grid-cols-[104px_1fr_50px] items-center gap-2 rounded-md px-2 py-1 text-left text-[12px]',
-                    chosen && 'bg-white/[0.09]',
-                    // 상한을 넘는 선은 «지우지 않고» 흐리게 남긴다 —
-                    // 지우면 「왜 이 선이 없나」를 다시 물어야 한다
-                    c.overLimit && !chosen && 'opacity-35',
-                  )
-                  return editing ? (
-                    <button
-                      key={c.label}
-                      type="button"
-                      onClick={() => set('stopPrice', c.price)}
-                      className={cn(shape, 'hover:bg-white/[0.12]')}
-                    >
-                      {row}
-                    </button>
-                  ) : (
-                    <div key={c.label} className={shape}>
-                      {row}
-                    </div>
-                  )
-                })}
+                {plan.stopCandidates
+                  .filter((c) => editing || c.price === shown.stopPrice)
+                  .map((c) => {
+                    const chosen = c.price === shown.stopPrice
+                    const row = (
+                      <>
+                        <span
+                          className={chosen ? 'text-white' : 'text-white/45'}
+                        >
+                          {c.label}
+                        </span>
+                        <span className="font-number text-right text-white/75 tabular-nums">
+                          {won(c.price)}
+                        </span>
+                        <span
+                          className={cn(
+                            'font-number flex items-center justify-end gap-0.5 tabular-nums',
+                            c.overLimit ? 'text-warning' : 'text-white/35',
+                          )}
+                        >
+                          {c.overLimit && <span aria-hidden>⚠</span>}−{c.width}%
+                        </span>
+                      </>
+                    )
+                    // 상한을 넘는 선은 «지우지 않는다» — 지우면 「왜 이 선이 없나」를
+                    // 다시 물어야 한다. 넘는다는 것은 **색조와 ⚠** 로 말한다.
+                    // 💀 한때 흐림(`opacity-35`)이었다. 이 앱에서 흐림은 이미
+                    //    「못 누른다」(`disabled:opacity-40`)라 넘는 선이 막힌 것처럼
+                    //    읽혔다. 막지 않는 것이 전제이므로 변수를 갈랐다 (9장).
+                    const shape = cn(
+                      'grid grid-cols-[104px_1fr_62px] items-center gap-2 rounded-md px-2 py-1 text-left text-[12px]',
+                      chosen && 'bg-white/[0.09]',
+                    )
+                    return editing ? (
+                      <button
+                        key={c.label}
+                        type="button"
+                        onClick={() => set('stopPrice', c.price)}
+                        aria-label={`${c.label} ${won(c.price)} 손절폭 ${c.width}%${
+                          c.overLimit ? ' · 상한 초과' : ''
+                        }`}
+                        className={cn(shape, 'hover:bg-white/[0.12]')}
+                      >
+                        {row}
+                      </button>
+                    ) : (
+                      <div key={c.label} className={shape}>
+                        {row}
+                      </div>
+                    )
+                  })}
               </div>
 
               {/**

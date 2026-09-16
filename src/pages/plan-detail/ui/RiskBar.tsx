@@ -1,7 +1,10 @@
 import { cn } from '@/shared/lib/cn'
 
 /**
- * 위험노출 막대 — 이 화면의 «결론»이다.
+ * 계좌 총 위험노출 막대 — 이 화면의 «결론»이다.
+ *
+ * ⚠️ **계획 하나의 값이 아니라 계좌 전체의 값이다.** 그래서 맨 위에 선다 —
+ *    계획이 들어갈 «자리»를 말하는 값이지 계획의 결과가 아니다.
  *
  * 왜 숫자 둘을 화살표로 잇지 않고 막대인가 —
  * *"막대만 있으면 잴 상대가 없어 판정이 안 된다. 참조선을 그으면 막대 끝과
@@ -45,7 +48,9 @@ export function RiskBar({ before, after }: { before: number; after: number }) {
       {/* 숫자가 «먼저» 온다 — 결론이고, 막대는 그 결론이 어디쯤인지를 말하는 근거다
           (디자인 9장 ⑨ — 행 왼쪽의 콜아웃) */}
       <div className="flex items-baseline gap-2">
-        <span className="text-[11px] font-bold text-white/55">위험노출</span>
+        <span className="text-[11px] font-bold text-white/55">
+          계좌 총 위험노출
+        </span>
         <span className="font-number ml-auto flex items-baseline gap-1.5 text-[15px]">
           <span className="text-white/45">{before.toFixed(2)}%</span>
           <span className="text-white/25">→</span>

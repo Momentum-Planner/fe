@@ -19,17 +19,9 @@
  */
 
 import type { TradeSnapshot } from '@/entities/tradeRecord'
-import { REGIME_LABEL } from '@/shared/lib/snapshots'
-import type { EntryState } from '@/shared/lib/snapshots'
+import { ENTRY_STATE_LABEL, REGIME_LABEL } from '@/shared/lib/snapshots'
 import type { Closed } from '../model/aggregate'
 import { Dash, pct, toneOf, won } from './parts'
-
-const ENTRY_LABEL: Record<EntryState, string> = {
-  EARLY: '조기',
-  BREAKOUT: '돌파',
-  PULLBACK: '눌림',
-  BLOCKED: '진입 불가',
-}
 
 export function PeakTrades({
   closed,
@@ -145,7 +137,7 @@ function Snapshot({ snap }: { snap: TradeSnapshot | null }) {
 
   const items: [string, string, boolean?][] = [
     ['레짐', REGIME_LABEL[snap.regime]],
-    ['진입', ENTRY_LABEL[snap.entryState]],
+    ['진입', ENTRY_STATE_LABEL[snap.entryState]],
     ['트렌드', `${snap.trendPassed}/8`, snap.trendPassed < 8],
     ['베이스', `${snap.baseNo}`],
     ['VCP', snap.vcp ? '있음' : '없음'],

@@ -110,18 +110,6 @@ const SNAPSHOTS = {
     trendPassed: 8,
     trendFailed: [],
   },
-  90201: {
-    dailyScreeningResultId: 90201,
-    date: '2026-09-01',
-    entryState: 'EARLY',
-    fundamentalScore: 2,
-    damageScore: 1,
-    entryPosition: -6.4,
-    regime: 'none',
-    damageAt: '2026-09-01 11:48',
-    trendPassed: 6,
-    trendFailed: ['200일선 상승', 'RS 70 이상'],
-  },
   90440: {
     dailyScreeningResultId: 90440,
     date: '2026-09-07',
@@ -133,6 +121,51 @@ const SNAPSHOTS = {
     damageAt: '2026-09-07 15:30',
     trendPassed: 8,
     trendFailed: [],
+  },
+  /**
+   * ── 진입 불가 셋 ──────────────────────────────────────────────
+   * **관문 뱃지의 오른쪽 절반은 못 살 때만 레짐이 된다** (`entryGate`).
+   * 그래서 `BLOCKED` 이 한 건도 없으면 「진입 불가 · …」 세 칸을 화면에서
+   * 영영 못 본다 — 목이 화면의 절반을 안 그리고 있었다 (2026-09-16).
+   *
+   * ⚠️ 레짐을 사유로 쓰는 것은 **지금의 규칙**이다. 진입 불가의 «사유 넷»이
+   *    실리면 오른쪽 절반이 그쪽으로 옮겨 갈 수 있다 (CLAUDE.md 미정).
+   */
+  91010: {
+    dailyScreeningResultId: 91010,
+    date: '2026-08-29',
+    entryState: 'BLOCKED',
+    fundamentalScore: 5,
+    damageScore: 1,
+    entryPosition: 2.4,
+    regime: 'fail',
+    damageAt: '2026-08-29 13:05',
+    trendPassed: 8,
+    trendFailed: [],
+  },
+  91020: {
+    dailyScreeningResultId: 91020,
+    date: '2026-08-12',
+    entryState: 'BLOCKED',
+    fundamentalScore: 4,
+    damageScore: 2,
+    entryPosition: -8.2,
+    regime: 'drop',
+    damageAt: '2026-08-12 10:22',
+    trendPassed: 6,
+    trendFailed: ['50일선 > 150·200일선', '진입 가능 · 50일선 위'],
+  },
+  91030: {
+    dailyScreeningResultId: 91030,
+    date: '2026-09-01',
+    entryState: 'BLOCKED',
+    fundamentalScore: 2,
+    damageScore: 1,
+    entryPosition: -6.4,
+    regime: 'none',
+    damageAt: '2026-09-01 11:48',
+    trendPassed: 6,
+    trendFailed: ['200일선 상승', 'RS 70 이상'],
   },
 } satisfies Record<number, PlanSnapshot>
 
@@ -317,7 +350,7 @@ const SEEDS: Seed[] = [
     initialStopWidth: null,
     plannedStop: singleStop(86_500),
     plannedPosition: { quantity: 180, riskBefore: 2.2, riskAfter: 0 },
-    snapshot: SNAPSHOTS[90201],
+    snapshot: SNAPSHOTS[91030],
     closeReason: '진입 상한을 넘겨 버려서 안 들어갔다',
     memo: '',
     recordCount: 0,
@@ -422,7 +455,7 @@ const SEEDS: Seed[] = [
     previousPlanId: 11,
     plannedStop: singleStop(1_024_000),
     plannedPosition: { quantity: 10, riskBefore: 0.6, riskAfter: 0 },
-    snapshot: SNAPSHOTS[88790],
+    snapshot: SNAPSHOTS[91020],
     closeReason: '눌림이 안 와서 이 자리는 버렸다',
     memo: '',
     recordCount: 0,
@@ -443,7 +476,7 @@ const SEEDS: Seed[] = [
     previousPlanId: 1,
     plannedStop: singleStop(1_180_000),
     plannedPosition: { quantity: 15, riskBefore: 0.9, riskAfter: 0 },
-    snapshot: SNAPSHOTS[90455],
+    snapshot: SNAPSHOTS[91010],
     closeReason: '거래량이 안 실려서 이 돌파는 안 따라간다',
     memo: '',
     recordCount: 0,
@@ -555,19 +588,25 @@ function stopCandidates(s: Seed): StopCandidate[] {
    * 백분율로 대체한다」* 고 하기 때문이다. 그러면 그 값은 «어느 선»도 아니다.
    *
    * ```text
-   * 직접 넣은 값   선이 아닌 자리를 사용자가 찍었다.  상한 안쪽
-   * 상한으로 자름   선이 전부 상한을 넘어서 «버리고» 백분율로 계산한 자리
+   * 직접 넣은 값     선이 아닌 자리를 사용자가 찍었다.  상한 안쪽
+   * 스톱 하한 N%    선이 전부 상한을 넘어서 «버리고» 백분율로 계산한 자리
    * ```
    *
-   * ⚠️ 이름을 「고른 값 / 상한 대체」에서 바꿨다 (2026-09-11) — 「상한 대체」는
-   *    무엇이 무엇을 대체했는지가 안 읽힌다.
+   * ⚠️ 이름을 「고른 값 / 상한 대체」→「상한으로 자름」(2026-09-11)
+   *    →「스톱 하한 N%」(2026-09-16)로 옮겨 왔다. 「상한 대체」는 무엇이 무엇을
+   *    대체했는지가 안 읽혔고, 「상한으로 자름」은 **자르지도 않았다** —
+   *    스톱가격이 얼마나 아래까지 갈 수 있는지의 «하한»이라 그렇게 부른다.
+   *
+   * ⚠️ **숫자를 박지 않는다.** 상한은 `min(평균수익 ÷ 손익비, 10%)` 라
+   *    사용자마다 다르다. 10% 는 그 둘 중 «딱딱한 쪽»일 뿐이다.
    */
   const width = +(((s.entryPrice - chosen) / s.entryPrice) * 100).toFixed(2)
   const hit = out.find((c) => c.price === chosen)
   if (hit) hit.chosen = true
   else
     out.push({
-      label: width <= s.stopLimit ? '직접 넣은 값' : '상한으로 자름',
+      label:
+        width <= s.stopLimit ? '직접 넣은 값' : `스톱 하한 ${s.stopLimit}%`,
       price: chosen,
       width,
       overLimit: false,

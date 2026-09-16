@@ -492,21 +492,34 @@ describe('읽을 때와 고칠 때', () => {
     expect(plan.snapshot.dailyScreeningResultId).toBeGreaterThan(0)
   })
 
-  it('후보 선은 «고칠 때만» 버튼이다', async () => {
+  it('후보 선은 읽을 때 «고른 하나»뿐이고, 고칠 때만 펴지고 버튼이 된다', async () => {
     const plan = await planApi.create({ ...BLANK, title: '후보 목록 보기' })
     show(plan)
     const user = userEvent.setup()
 
     await screen.findAllByText('후보 목록 보기')
-    // 읽을 때도 «보이긴» 한다 — 「왜 거기에 뒀나」를 답하는 목록이라
-    expect(screen.getByText('10일선')).toBeInTheDocument()
-    // 다만 안 눌린다 — 안 눌리는 것이 버튼처럼 생기면 눌러 보게 된다
-    expect(
-      screen.queryByRole('button', { name: /10일선/ }),
-    ).not.toBeInTheDocument()
+
+    /**
+     * 읽을 때는 **고른 하나만** 선다 (2026-09-16).
+     * 💀 넷을 다 늘어놨더니 「왜 저건 안 되나」를 묻게 된다 — 고를 수 없는 선이다.
+     *    이미 정해진 스톱가격을 보는 자리에서 답할 것은 「어디에 뒀나」 하나고,
+     *    「무엇 중에서 골랐나」는 «고를 때»의 질문이다. 상한 표시와 같은 규칙.
+     */
+    const LINES = ['10일선', '20일선', '50일선', '최근 베이스 저항선']
+    const shown = LINES.filter((l) => screen.queryByText(l))
+    expect(shown.length).toBeLessThanOrEqual(1)
+    /**
+     * 안 눌린다 — 안 눌리는 것이 버튼처럼 생기면 눌러 보게 된다.
+     * ⚠️ `/일선/` 으로 세면 **스톱 갱신 규칙의 「50일선 트레일링」**까지 걸린다.
+     *    후보 줄만 집으려면 `aria-label` 에만 있는 「손절폭」으로 센다.
+     */
+    expect(screen.queryAllByRole('button', { name: /손절폭/ })).toHaveLength(0)
 
     await user.click(screen.getByRole('button', { name: '수정' }))
     expect(screen.getByRole('button', { name: /10일선/ })).toBeInTheDocument()
+    expect(
+      screen.getAllByRole('button', { name: /손절폭/ }).length,
+    ).toBeGreaterThan(1)
   })
 })
 

@@ -64,6 +64,62 @@ export const REGIME_LABEL: Record<Regime, string> = {
   none: '방향미정',
 }
 
+/** 진입 상태 (②) — 조기 / 돌파 / 눌림 + 진입 불가. 두 페이지가 같이 쓴다 */
+export const ENTRY_STATE_LABEL: Record<EntryState, string> = {
+  EARLY: '조기',
+  BREAKOUT: '돌파',
+  PULLBACK: '눌림',
+  BLOCKED: '진입 불가',
+}
+
+/**
+ * **진입 관문** — 레짐과 진입 상태를 «한 뱃지»로 섞은 것 (2026-09-16).
+ *
+ * ```text
+ * 진입 가능 · 조기        진입 불가 · 돌파실패
+ * 진입 가능 · 돌파        진입 불가 · 하방이탈
+ * 진입 가능 · 눌림        진입 불가 · 방향미정
+ * ```
+ *
+ * 💀 뱃지 둘을 나란히 뒀었다 — 「돌파성공」(레짐) 옆에 「돌파」(진입 상태).
+ *    **겹치는 것은 단어가 아니라 축이었다.** 같은 말이 두 번 나오면 하나가
+ *    다른 하나의 줄임말로 읽히고, 뱃지가 둘이면 서로 중심점을 깎는다 (교재 4장).
+ *
+ * 섞으면 **읽는 순서가 판단 순서와 같아진다** — 「살 수 있나」가 먼저 오고
+ * 「어떤 진입인가 / 왜 못 사나」가 뒤에 온다.
+ *
+ * ⚠️ **색은 축을 «하나»만 진다** — 가능이냐 아니냐. 여섯 가지에 여섯 색을
+ *    주면 색 자체가 외워야 할 것이 된다. 세부는 «글자»가 진다
+ *    (교재 9장 — 데이터 차원 하나마다 시각 변수 하나).
+ *
+ * ⚠️ 지금은 «화면에서» 섞는다. 백엔드가 한 필드로 내려 주면 이 함수가 그 값을
+ *    그대로 받는 자리가 된다.
+ * ⚠️ 진입 가능일 때 **레짐이 화면에서 빠진다.** 못 살 때만 사유로 나온다.
+ */
+export interface EntryGate {
+  ok: boolean
+  /** 「진입 가능」 · 「진입 불가」 */
+  head: string
+  /** 살 수 있으면 어떤 진입인지, 못 사면 왜 못 사는지 */
+  detail: string
+}
+
+export const entryGate = (entryState: EntryState, regime: Regime): EntryGate =>
+  entryState === 'BLOCKED'
+    ? { ok: false, head: '진입 불가', detail: REGIME_LABEL[regime] }
+    : { ok: true, head: '진입 가능', detail: ENTRY_STATE_LABEL[entryState] }
+
+/** 관문 뱃지 색 — 가능은 이 앱의 «상승» 빨강, 불가는 죽인다 */
+export const GATE_COLOR = {
+  ok: '#FF3636',
+  no: 'rgba(255,255,255,0.65)',
+} as const
+
+export const GATE_BG = {
+  ok: 'linear-gradient(180deg, rgba(255,54,54,0.22), rgba(255,54,124,0.14))',
+  no: 'linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04))',
+} as const
+
 export const JUDGMENT_LABEL: Record<Judgment, string> = {
   buy: '매수',
   sell: '매도',

@@ -158,23 +158,34 @@ export function NewPlanForm({
 
         {/* 후보 선 — **서비스가 하나를 정해 주지 않는다.** 늘어놓고 고르게 한다.
             ⚠️ 새 계획은 아직 스냅샷이 없어 «이어받는 계획»의 후보를 쓴다 —
-               후보는 이동평균선·저항선이라 계획이 아니라 «종목»의 값이다 */}
+               후보는 이동평균선·저항선이라 계획이 아니라 «종목»의 값이다
+
+            💀 상한 초과를 «흐림»으로 말했었다. 그런데 이 앱에서 흐림은 이미
+               「못 누른다」다 (아래 `Btn` 의 `disabled:opacity-40`). 같은 변수가
+               한 화면에서 두 뜻을 지면 관례가 이긴다 — 넘는 선이 «막힌» 것처럼
+               읽혔다. 막지 않는 것이 이 서비스의 전제이므로 흐림을 걷고
+               **색조 + ⚠** 로 옮겼다 (교재 9장 「전주의적 변수」).
+               색만으로 판정하지 않는다 — `RiskBar` 가 2.5% 에 ⚠ 를 붙이는 것과 같다. */}
         <div className="mt-1.5 flex flex-col gap-0.5 border-t border-white/[0.06] pt-1.5">
           {defaults.stopCandidates
             // 이어받는 계획이 «직접 넣은 값»을 썼으면 그건 그 계획의 선택이지
             // 이 종목의 선이 아니다 — 새 계획의 후보로 내려오면 안 된다
+            // ⚠️ 「스톱 하한 N%」는 N 이 사용자마다 달라 이름이 고정이 아니다
             .filter(
-              (c) => c.label !== '직접 넣은 값' && c.label !== '상한으로 자름',
+              (c) =>
+                c.label !== '직접 넣은 값' && !c.label.startsWith('스톱 하한'),
             )
             .map((c) => (
               <button
                 key={c.label}
                 type="button"
                 onClick={() => born.set('stopPrice', c.price)}
+                aria-label={`${c.label} ${won(c.price)} 손절폭 ${c.width}%${
+                  c.overLimit ? ' · 상한 초과' : ''
+                }`}
                 className={cn(
-                  'grid grid-cols-[110px_1fr_52px] items-center gap-2 rounded-md px-2 py-1 text-left text-[12px] hover:bg-white/[0.10]',
+                  'grid grid-cols-[110px_1fr_64px] items-center gap-2 rounded-md px-2 py-1 text-left text-[12px] hover:bg-white/[0.10]',
                   c.price === d.stopPrice && 'bg-white/[0.09]',
-                  c.overLimit && c.price !== d.stopPrice && 'opacity-35',
                 )}
               >
                 <span
@@ -187,8 +198,13 @@ export function NewPlanForm({
                 <span className="font-number text-right text-white/80 tabular-nums">
                   {won(c.price)}
                 </span>
-                <span className="font-number text-right text-white/40">
-                  −{c.width}%
+                <span
+                  className={cn(
+                    'font-number flex items-center justify-end gap-0.5 tabular-nums',
+                    c.overLimit ? 'text-warning' : 'text-white/40',
+                  )}
+                >
+                  {c.overLimit && <span aria-hidden>⚠</span>}−{c.width}%
                 </span>
               </button>
             ))}

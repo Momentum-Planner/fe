@@ -230,7 +230,14 @@ export function PlanChain({
     ro.observe(box)
     if (panRef.current) ro.observe(panRef.current)
     return () => ro.disconnect()
-  }, [key])
+    /**
+     * 💀 한때 `[key]` 뿐이었다. 그러면 **마디가 움직여도 선은 그대로 있는다** —
+     *    확대를 켜고 끄면 칸 높이가 210 ↔ 460 으로 바뀌고 `padY` 가 따라 바뀌어
+     *    마디가 위아래로 옮겨 앉는데, 잇는 것(`key`)은 안 변하므로 다시 안 쟀다.
+     *    선 끝이 옛 자리에 남아 **빈 자리로 가는 화살표가 허공을 가리켰다.**
+     *    잇는 것뿐 아니라 **놓인 자리**가 바뀌어도 다시 잰다.
+     */
+  }, [key, padY, zoomed])
 
   /**
    * **고른 마디를 사슬의 한가운데로 데려온다.**
