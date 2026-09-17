@@ -4,15 +4,11 @@ import { fromServerRegime } from '@/shared/lib/snapshots'
 import { RegimeBadge } from '@/shared/ui/RegimeBadge'
 import { useRegimeInsight, useScreening } from '@/entities/stock'
 import {
-  AVG_STOP_MIN_SAMPLES,
-  PLAN_STATUS_LABEL,
   raiseTriggerPrice,
-  stopRaiseLabel,
   usePlanDefaults,
   usePlanDetail,
   usePlanList,
   useStockPosition,
-  useUpdatePlan,
 } from '@/entities/plan'
 import type {
   PlanDetail,
@@ -20,15 +16,14 @@ import type {
   StockPositionView,
 } from '@/entities/plan'
 import { PlanChain } from './PlanChain'
+import { PlanCard } from './PlanCard'
 import { PlanChart } from './PlanChart'
 import type { GhostPlan } from './PlanChart'
 import { liveSpan } from './planSpan'
-import { RiskBar } from './RiskBar'
 import { SnapshotTable } from './SnapshotTable'
 import { PastPlansPopover } from './PastPlansPopover'
 import { narrowChain } from './narrowChain'
 import { LIT_PANEL } from './panel'
-import { StopRaisePicker } from './StopRaisePicker'
 import { NewPlanForm } from './NewPlanForm'
 import { useNewPlan } from './useNewPlan'
 import { usePlanClose, usePlanRemove } from './usePlanRetire'
@@ -61,9 +56,6 @@ import { usePlanDraft } from './usePlanDraft'
  * **층은 방향이 아니라 밀도다** (활자 크기 · 여백 · 접힘).
  */
 const won = (n: number) => n.toLocaleString('ko-KR')
-
-/** 손절폭의 «절대» 상한. 통계가 없어도 이 위로는 안 간다 (④-1-1-2) */
-const HARD_LIMIT = 10
 
 export function PlanDetailPage({
   stockCode,
@@ -121,7 +113,6 @@ function FirstPlanView({ stockCode }: { stockCode: string }) {
    * 사슬을 «세로로» 넓힌다. 갈래가 늘면 마디가 세로로 쌓이는데 210px 안에서는
    * 위아래가 잘린다. 폭은 안 건드린다 — 가로는 이미 끌어서 본다
    */
-  const [wide, setWide] = useState(false)
   const today = new Date().toISOString().slice(0, 10)
 
   return (
@@ -133,14 +124,12 @@ function FirstPlanView({ stockCode }: { stockCode: string }) {
         <span className="text-[12px] text-white/35">계획 없음</span>
       </section>
 
-      <section className="card px-4 py-3">
-        <div className={cn('relative', wide ? 'h-[460px]' : 'h-[210px]')}>
+      <section className="card px-4 py-2">
+        <div>
           {/* 마디가 없으니 «빈 자리» 하나가 사슬의 전부다 */}
           <PlanChain
             plans={[]}
             currentId={-1}
-            zoomed={wide}
-            onZoom={() => setWide((v) => !v)}
             onCreate={born.draft ? born.cancel : born.open}
             creating={born.draft != null}
           />
@@ -239,9 +228,8 @@ function PlanDetailView({
    * 그래서 계획이 하나도 없는 종목에서도 첫 계획을 세울 수 있다
    */
   const { data: defaults } = usePlanDefaults(plan.stockCode)
-  const update = useUpdatePlan(plan.planId)
-  const { editing, shown, derived, patch, dirty, begin, cancel, set } =
-    usePlanDraft(plan)
+  const draft = usePlanDraft(plan)
+  const { editing, shown } = draft
   /**
    * 폐기와 삭제는 **다른 행위다** (Q8). 훅도 둘이고 자리도 둘이다 —
    * 폐기는 머리줄(평소 보이는 곳), 삭제는 3층 접힘 안(자주 쓸 게 아니다).
@@ -259,7 +247,6 @@ function PlanDetailView({
    * 사슬을 «세로로» 넓힌다. 갈래가 늘면 마디가 세로로 쌓이는데 210px 안에서는
    * 위아래가 잘린다. 폭은 안 건드린다 — 가로는 이미 끌어서 본다
    */
-  const [wide, setWide] = useState(false)
   /**
    * 사슬 마디에 올린 계획 — 차트가 **유령**으로 띄운다 (Q12 브러싱).
    * 지금 보는 계획 자신은 이미 진하게 그려져 있으므로 유령으로 또 안 띄운다.
@@ -306,9 +293,6 @@ function PlanDetailView({
     siblings.find((p) => p.planId === id)?.title ?? plan.title
 
   const held = position?.quantity ?? 0
-  const walked = plan.status === 'RUNNING' || plan.status === 'DONE'
-  const stopWidth = derived.stopWidth
-  const needCash = derived.needCash
 
   return (
     <main className="flex flex-col gap-3 px-6 pt-4 pb-6">
@@ -345,14 +329,14 @@ function PlanDetailView({
       {/* ── 계획 사슬 · 전폭 ───────────────────────────────────────────
           차트보다 «위»인 것은 높이가 고정이어서다. 차트는 지표를 켤 때마다 밑으로
           자라므로, 반대로 두면 지표 하나 켤 때마다 사슬이 밀려 내려간다. */}
-      <section className="card px-4 py-3">
+      <section className="card px-4 py-2">
         {/* 칸을 «가둔다» — 갈래가 늘어도 카드가 세로로 자라지 않고 안에서 움직인다.
             ⚠️ 찾아가는 줄(실행 중 · 기간 · 확대)이 위에 하나 얹히므로
                그만큼 더 준다. 카드 높이는 그대로다.
             ⚠️ 「계획 사슬」 이름표를 뺐다 (2026-09-11) — 보면 사슬인 걸 안다 */}
         {/* 좁힌 사슬은 마디가 넷 안팎이라 210 → 170 (Q12 — 보조로 내리고 높이만 줄인다).
             대기 둘이 세로로 쌓이는 높이까지는 든다 */}
-        <div className={cn('relative', wide ? 'h-[460px]' : 'h-[170px]')}>
+        <div>
           <PlanChain
             // 좁힌 사슬 — 직전 → 실행 중 → 대기. 나머지는 「지난 계획」 안 (Q12)
             plans={narrowed.shown}
@@ -365,8 +349,6 @@ function PlanDetailView({
             // 세우는 동안 사슬은 뒤로 물러난다 — 올린 마디만 진해진다 (Q12)
             faded={drafting}
             currentId={plan.planId}
-            zoomed={wide}
-            onZoom={() => setWide((v) => !v)}
             // 쓰는 동안 그 자리가 **「쓰는 중」으로 켜진다.** 없애지 않는다 —
             // 세부 칸이 «어느 마디»를 만드는 중인지를 사슬이 말해야 한다
             // 만드는 중에 다시 누르면 «끝낸다» — 켠 자리에서 끈다
@@ -474,455 +456,17 @@ function PlanDetailView({
             onPicking={setPicking}
           />
         ) : (
-          <section className={cn(LIT_PANEL, 'min-w-0 px-4 py-4')}>
-            {/* 머리줄 — **접지 않는다.**
-                💀 `flex-wrap` 이었다. 고칠 때 이름 칸이 220px 로 «고정»이라
-                   상태칩 + 이름 + 작성일이 448px 를 넘겨 **저장·취소가 다음 줄로
-                   밀렸다.** 누르는 것이 밀리고 안 누르는 것이 자리를 지켰다.
-                지금은 이름이 «남는 폭을 먹는다» — 버튼은 자기 폭만 쓰고 고정이다.
-                작성일은 고치는 동안 비켜 준다: 못 고치는 값이라 그 자리를
-                이름에 주는 편이 낫다. 읽을 때는 그대로 있다. */}
-            <div className="flex items-center gap-x-3">
-              <span
-                className={cn(
-                  'shrink-0 rounded-md px-2 py-0.5 text-[12px]',
-                  plan.status === 'RUNNING'
-                    ? 'bg-brand-red/15 text-brand-red'
-                    : plan.status === 'PLANNED'
-                      ? 'bg-brand-blue/15 text-brand-blue'
-                      : 'bg-white/[0.08] text-white/70',
-                )}
-              >
-                {PLAN_STATUS_LABEL[plan.status]}
-              </span>
-              {/* 계획 이름 — 값만 봐서는 어느 계획인지 못 가른다.
-                **고칠 수 있다** — 세우고 나서야 「이게 무슨 계획이었지」가
-                분명해지는 일이 잦다. 고치는 자리도 «읽는 그 자리»다 */}
-              {editing ? (
-                <input
-                  value={shown.title}
-                  onChange={(e) => set('title', e.target.value)}
-                  placeholder="계획 이름"
-                  className="bg-bg-input min-w-0 flex-1 rounded-md px-2 py-0.5 text-[15px] font-bold text-white outline-none placeholder:font-normal placeholder:text-white/25 focus:ring-1 focus:ring-white/30"
-                />
-              ) : (
-                <>
-                  <span className="truncate text-[15px] font-bold text-white">
-                    {plan.title}
-                  </span>
-                  <span className="font-number shrink-0 text-[11px] text-white/30">
-                    {plan.writtenAt} 작성
-                  </span>
-                </>
-              )}
-              <div className="ml-auto flex shrink-0 items-center gap-1.5">
-                {editing ? (
-                  <>
-                    {/* 「저장」은 «고친 게 있을 때만» 산다 — 안 고치고 누르는 저장은
-                      아무 일도 안 하면서 한 일처럼 보인다 */}
-                    <Btn
-                      onClick={() => {
-                        update.mutate(patch, { onSuccess: cancel })
-                      }}
-                      disabled={!dirty || update.isPending}
-                      tone="go"
-                    >
-                      {update.isPending ? '저장 중…' : '저장'}
-                    </Btn>
-                    <Btn onClick={cancel}>취소</Btn>
-                  </>
-                ) : (
-                  <>
-                    {/* ⚠️ **여기에는 「수정」밖에 없다.** 흐름을 바꾸는 셋
-                      (이어서 세우기 · 폐기 · 삭제)은 전부 **사슬**이 문이다.
-                      버튼으로 두면 그 일이 «어느 마디»에 일어나는지가 화면에
-                      없어서 매번 다시 물어야 한다. 사슬에서는 자리가 곧 답이다.
-
-                      ```
-                      사슬   흐름을 «바꾸는 문»    + · 폐기 · 삭제
-                      세부   값을 «만지는 자리»    수정 + 그 문들이 여는 칸
-                      ``` */}
-                    <Btn onClick={begin}>수정</Btn>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* ── 1층 · 위험노출.  이 카드 안에서 «결론»이 3열보다 먼저 온다 ── */}
-            <div className="mt-3.5 rounded-[10px] bg-white/[0.04] px-3.5 py-3">
-              {/* 산출값이 «즉시» 따라온다 — 손을 떼기 전에 결과를 본다 (디자인 9장 ④) */}
-              <RiskBar before={plan.riskBefore} after={derived.riskAfter} />
-              {/* 분모가 분자 곁에 선다 (Q12). 이 계획이 등록할 때 «얼린» 값이다 (F7) */}
-              <div className="font-number mt-1.5 text-[10px] text-white/35">
-                ÷ 계좌 총액 {won(plan.accountTotal)}
-                <span className="font-text ml-1 text-white/25">등록 시점</span>
-              </div>
-            </div>
-
-            {/* ── 「얼마에 얼마나」 — 한 줄 ─────────────────────────────
-              **새 계획 칸과 같은 배치다** (`NewPlanForm`). 쓰는 모양과 읽는
-              모양이 같아야 세우고 나서 배울 것이 없다.
-              진입가와 수량은 같은 판단의 두 쪽이고(곱하면 필요 현금),
-              스톱가격은 「어디서 자를까」라 다른 판단이라 아래로 뗀다. */}
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <Cell
-                label="진입 예상가"
-                value={won(shown.entryPrice)}
-                edit={
-                  editing && {
-                    value: shown.entryPrice,
-                    onChange: (n) => set('entryPrice', n),
-                  }
-                }
-                sub={editing ? '차트를 보고 넣는다' : undefined}
-              />
-              <Cell
-                label="수량"
-                value={`${shown.quantity}주`}
-                unit="주"
-                edit={
-                  editing && {
-                    value: shown.quantity,
-                    onChange: (n) => set('quantity', n),
-                  }
-                }
-                sub={`필요 현금 ${won(needCash)}`}
-                // ✕ 「기록상 현금보다 큰 매수는 막는다」 — 살 돈이 있는지를
-                //   증권사 앱에 미루지 않는다 (④-1-3)
-                block={
-                  needCash > plan.accountCash
-                    ? `✕ 현금 ${won(plan.accountCash)} 보다 ${won(needCash - plan.accountCash)} 크다`
-                    : undefined
-                }
-              />
-            </div>
-
-            {/* ── 스톱가격 — 따로 선다. 「어디서 자를까」는 다른 판단이다 ──── */}
-            <div className="mt-2 rounded-[10px] bg-white/[0.04] px-3.5 py-3">
-              <div className="grid grid-cols-2 items-end gap-3">
-                <Cell
-                  label="스톱가격"
-                  value={won(shown.stopPrice)}
-                  edit={
-                    editing && {
-                      value: shown.stopPrice,
-                      onChange: (n) => set('stopPrice', n),
-                    }
-                  }
-                  sub={
-                    plan.initialStopWidth
-                      ? `1R ${won(plan.initialStopWidth)} · ${stopWidth.toFixed(2)}%`
-                      : `1R ${won(derived.oneR)} · ${stopWidth.toFixed(2)}%`
-                  }
-                  // ⚠ 「손절폭 10% 초과 — 그 종목은 포기한다」. 막지는 않는다
-                  warn={
-                    stopWidth > HARD_LIMIT
-                      ? `⚠ 손절폭 ${HARD_LIMIT}% 초과 — 포기하는 자리다`
-                      : stopWidth > plan.stopLimit
-                        ? `⚠ 상한 ${plan.stopLimit}% 초과`
-                        : undefined
-                  }
-                />
-
-                {/**
-                 * 손절폭 상한 — **고칠 때만 뜬다.**
-                 *
-                 * 💀 늘 띄웠더니 읽는 화면에 「상한 2.36% · 평균수익 4.72% ÷
-                 * 손익비 2」가 상시로 서 있었다. 이미 정해진 스톱가격을 보는
-                 * 자리에서는 **상한이 아무 일도 안 한다** — 넘었으면 스톱가격 칸에
-                 * ⚠ 가 이미 붙어 있다.
-                 *
-                 * 상한은 «고를 때» 쓰는 선이다 (④-1-1-2 — `min(평균수익 ÷ 손익비,
-                 * 10%)`). 정하는 것이 차트가 아니라 **내 평균 수익**이라, 어디까지
-                 * 내려갈 수 있는지를 «지금 정하는 사람»만 알면 된다.
-                 */}
-                {editing && (
-                  <div className="pb-1 text-right text-[10px] leading-tight">
-                    <span className="text-white/45">
-                      상한 {plan.stopLimit}%
-                    </span>
-                    <div className="text-white/25">
-                      {plan.stopLimitBasis
-                        ? `평균수익 ${plan.stopLimitBasis.avgWin}% ÷ 손익비 ${plan.stopLimitBasis.targetRR}`
-                        : `통계 없음 — ${HARD_LIMIT}%`}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/**
-               * 후보 선 — **서비스가 하나를 정해 주지 않는다** (④-1-1-2).
-               *
-               * **읽을 때는 «고른 하나»만 선다.** 나머지 셋은 고를 수 없는 선이고,
-               * 고를 수 없는 것을 늘어놓으면 「왜 저건 안 되나」를 묻게 된다.
-               * 이미 정해진 스톱가격을 보는 자리에서 답할 것은 「어디에 뒀나」
-               * 하나다 — 「무엇 중에서 골랐나」는 «고를 때»의 질문이다.
-               * 상한 표시를 고칠 때만 띄운 것과 같은 이유다.
-               *
-               * 고칠 때만 넷이 다 펴지고 «버튼»이 된다 —
-               * 안 눌리는 것이 버튼처럼 생기면 눌러 보게 된다.
-               */}
-              <div className="mt-2 flex flex-col gap-0.5 border-t border-white/[0.06] pt-2">
-                {plan.stopCandidates
-                  .filter((c) => editing || c.price === shown.stopPrice)
-                  .map((c) => {
-                    const chosen = c.price === shown.stopPrice
-                    const row = (
-                      <>
-                        <span
-                          className={chosen ? 'text-white' : 'text-white/45'}
-                        >
-                          {c.label}
-                        </span>
-                        <span className="font-number text-right text-white/75 tabular-nums">
-                          {won(c.price)}
-                        </span>
-                        <span
-                          className={cn(
-                            'font-number flex items-center justify-end gap-0.5 tabular-nums',
-                            c.overLimit ? 'text-warning' : 'text-white/35',
-                          )}
-                        >
-                          {c.overLimit && <span aria-hidden>⚠</span>}−{c.width}%
-                        </span>
-                      </>
-                    )
-                    // 상한을 넘는 선은 «지우지 않는다» — 지우면 「왜 이 선이 없나」를
-                    // 다시 물어야 한다. 넘는다는 것은 **색조와 ⚠** 로 말한다.
-                    // 💀 한때 흐림(`opacity-35`)이었다. 이 앱에서 흐림은 이미
-                    //    「못 누른다」(`disabled:opacity-40`)라 넘는 선이 막힌 것처럼
-                    //    읽혔다. 막지 않는 것이 전제이므로 변수를 갈랐다 (9장).
-                    const shape = cn(
-                      'grid grid-cols-[104px_1fr_62px] items-center gap-2 rounded-md px-2 py-1 text-left text-[12px]',
-                      chosen && 'bg-white/[0.09]',
-                    )
-                    return editing ? (
-                      <button
-                        key={c.label}
-                        type="button"
-                        onClick={() => set('stopPrice', c.price)}
-                        aria-label={`${c.label} ${won(c.price)} 손절폭 ${c.width}%${
-                          c.overLimit ? ' · 상한 초과' : ''
-                        }`}
-                        className={cn(shape, 'hover:bg-white/[0.12]')}
-                      >
-                        {row}
-                      </button>
-                    ) : (
-                      <div key={c.label} className={shape}>
-                        {row}
-                      </div>
-                    )
-                  })}
-              </div>
-
-              {/**
-               * 스톱 갱신 규칙 셋 — **스톱가격과 «같이» 선다** (③-3 · ④-1-4).
-               *
-               * 💀 접힘 안에 뒀었다. 「어디서 자를까」와 「수익이 나면 어디로
-               * 올릴까」는 **같은 선의 두 시점**이라 떨어뜨릴 이유가 없었다 —
-               * 무엇을 켜 뒀는지가 스톱가격을 볼 때 같이 보여야 한다.
-               *
-               * **꺼둔 규칙도 자리를 지킨다** (③-3-1) — 셋 중 무엇을 껐는지가
-               * 화면에서 사라지면 껐다는 사실을 잊는다.
-               */}
-              <div className="mt-2 border-t border-white/[0.06] pt-2">
-                <div className="mb-1.5 text-[10px] text-white/40">
-                  스톱 갱신 규칙
-                </div>
-                {editing ? (
-                  <div className="flex flex-col gap-1.5">
-                    <StopRaisePicker
-                      value={shown.raise}
-                      onChange={(v) => set('raise', v)}
-                      avgLocked={
-                        (defaults?.sampleCount ?? 0) < AVG_STOP_MIN_SAMPLES
-                          ? `통계 ${AVG_STOP_MIN_SAMPLES}건부터`
-                          : null
-                      }
-                    />
-                    <Toggle
-                      on={shown.trail50}
-                      onClick={() => set('trail50', !shown.trail50)}
-                    >
-                      50일선 트레일링
-                    </Toggle>
-                  </div>
-                ) : (
-                  <div className="flex flex-wrap gap-1.5">
-                    <Tag>스톱 상향 {stopRaiseLabel(shown.raise)}</Tag>
-                    <Tag on={shown.trail50}>50일선 트레일링</Tag>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/**
-             * 메모 — **고정 칸이다. 접지 않는다.**
-             *
-             * 분류가 안 붙는 자유 서술이라(④) 접어 두면 아무도 안 쓴다.
-             * 계획에서 「왜」를 담는 유일한 자리다.
-             */}
-            <div className="mt-2">
-              {editing ? (
-                <textarea
-                  value={shown.memo}
-                  onChange={(e) => set('memo', e.target.value)}
-                  rows={3}
-                  placeholder="왜 여기서 사려는가"
-                  className="bg-bg-input w-full resize-y rounded-md px-2.5 py-2 text-[12px] leading-relaxed text-white outline-none placeholder:text-white/25 focus:ring-1 focus:ring-white/30"
-                />
-              ) : plan.memo ? (
-                <div className="rounded-[10px] bg-white/[0.04] px-3.5 py-2.5 text-[12px] leading-relaxed text-white/60">
-                  {plan.memo}
-                </div>
-              ) : (
-                <div className="text-[11px] text-white/25">메모 없음</div>
-              )}
-            </div>
-
-            {/* 실행된 계획이면 «실제»가 1층이다 — 계획값보다 체결이 답이라서 */}
-            {walked && plan.records.length > 0 && (
-              <div className="mt-2 rounded-[10px] bg-white/[0.04] px-3 py-2.5">
-                {/* 324 폭에서는 한 줄에 셋이 못 선다 — 평단 비교를 둘째 줄로 접는다 */}
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px]">
-                  <span className="shrink-0 text-white/40">체결</span>
-                  <span className="font-number shrink-0 whitespace-nowrap text-white/70">
-                    {plan.recordCount}건 · 체결률{' '}
-                    {Math.round(plan.fillRate * 100)}%
-                  </span>
-                  <ActualVsPlan plan={plan} />
-                </div>
-                {/* 체결이 붙으면 폐기도 삭제도 «없다» — 「안 갔다」가 거짓이 되고
-                  거래 기록이 이 계획을 가리킨다. 버튼이 사라진 이유를 여기서
-                  말한다. 버튼만 없애면 「왜 없나」를 다시 물어야 한다 (4장 ⑤) */}
-                {plan.status === 'RUNNING' && (
-                  <div className="mt-1 text-[11px] text-white/35">
-                    체결이 붙어 치울 수 없다 — 끝내는 길은 매도 계획이다
-                  </div>
-                )}
-                <div className="mt-1.5 flex flex-col gap-0.5">
-                  {plan.records.map((r) => (
-                    <div
-                      key={r.recordId}
-                      className="font-number grid grid-cols-[92px_32px_1fr_56px] items-center gap-2 text-[12px]"
-                    >
-                      <span className="text-white/40">
-                        {r.filledAt.slice(5)}
-                      </span>
-                      <span className="text-white/55">
-                        {r.side === 'BUY' ? '매수' : '매도'}
-                      </span>
-                      <span className="text-right text-white/85">
-                        {won(r.price)}
-                      </span>
-                      <span className="text-right text-white/55">
-                        {r.quantity}주
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* ── 폐기 사유를 «받는» 자리. 보여주는 자리와 같은 칸이다 ──────
-              사유가 **필수다** — 폐기는 판단이고, 판단에는 이유가 있다.
-              ⑦가 폐기 비율로 세므로 이유 없이 닫힌 행이 쌓이면 그 비율이
-              아무것도 못 말한다 (Q8). */}
-            {close.target != null && (
-              <div className="border-warning/30 mt-2 rounded-[10px] border bg-white/[0.04] px-3 py-2.5">
-                <div className="text-[11px] text-white/55">
-                  폐기 — <span className="text-white/80">안 가기로 한 것</span>
-                  이다. 계획은 사라지지 않고 ⑦의 폐기 비율에 센다.
-                </div>
-                <textarea
-                  value={close.reason}
-                  onChange={(e) => close.setReason(e.target.value)}
-                  rows={2}
-                  autoFocus
-                  // 카테고리로 고르게 하지 않는다 (④-2)
-                  placeholder="왜 안 가기로 했는가"
-                  className="bg-bg-input mt-2 w-full resize-y rounded-md px-2.5 py-2 text-[12px] leading-relaxed text-white outline-none placeholder:text-white/25 focus:ring-1 focus:ring-white/30"
-                />
-                <div className="mt-2 flex items-center gap-1.5">
-                  <Btn
-                    onClick={close.doClose}
-                    disabled={!close.reason.trim() || close.pending}
-                    tone="go"
-                  >
-                    {close.pending ? '폐기 중…' : '폐기'}
-                  </Btn>
-                  <Btn onClick={close.cancel}>취소</Btn>
-                  {!close.reason.trim() && (
-                    <span className="text-[11px] text-white/35">
-                      사유 없이 닫을 수 없다
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* ── 삭제 — 폐기와 «나란히», 뜻은 이 패널이 말한다 ──────────── */}
-            {remove.target != null && (
-              <div className="border-brand-red/30 mt-2 rounded-[10px] border bg-white/[0.04] px-3 py-2.5">
-                <div className="text-[11px] leading-relaxed text-white/55">
-                  <span className="text-white/80">
-                    「{named(remove.target)}」
-                  </span>{' '}
-                  — 잘못 적은 것이다. 행이 사라지고 ⑦가 «세지 않는다». 폐기와
-                  달리 판단이 아니라 기록을 고치는 것이라 사유를 안 받는다.
-                </div>
-                <div className="text-warning mt-1 text-[11px]">
-                  ⚠ 되돌릴 수 없다
-                </div>
-                <div className="mt-2 flex items-center gap-1.5">
-                  <Btn
-                    onClick={remove.confirm}
-                    disabled={remove.pending}
-                    tone="go"
-                  >
-                    {remove.pending ? '삭제 중…' : '삭제한다'}
-                  </Btn>
-                  <Btn onClick={remove.cancel}>취소</Btn>
-                </div>
-              </div>
-            )}
-
-            {plan.status === 'CLOSED' && (
-              <div className="mt-2 rounded-[10px] bg-white/[0.04] px-3 py-2.5 text-[12px] text-white/60">
-                <span className="text-white/35">폐기 사유 — </span>
-                {plan.closeReason}
-              </div>
-            )}
-          </section>
+          <PlanCard
+            plan={plan}
+            defaults={defaults}
+            draft={draft}
+            close={close}
+            remove={remove}
+            named={named}
+          />
         )}
       </div>
     </main>
-  )
-}
-
-/**
- * ⚠️ `TrendTag` 를 지웠다 (2026-09-11) — **근거 블록을 통째로 들어냈다.**
- *    ④-0 의 25개 값을 「알아볼 수 있게」 보여주는 문제가 안 풀렸고,
- *    계획 루프(⑦→⑧)를 어떻게 돌릴지 정한 뒤에 다시 세우기로 했다.
- *    스냅샷 «데이터»는 그대로 붙는다 — F4 가 사후에 못 만든다고 했으므로.
- */
-
-/** 계획가와 실제 평단의 차이 — 이 화면에서 «처음» 보이는 값이다 */
-function ActualVsPlan({ plan }: { plan: PlanDetail }) {
-  const buys = plan.records.filter((r) => r.side === 'BUY')
-  const qty = buys.reduce((n, r) => n + r.quantity, 0)
-  if (!qty) return null
-  const avg = buys.reduce((n, r) => n + r.price * r.quantity, 0) / qty
-  const diff = ((avg - plan.entryPrice) / plan.entryPrice) * 100
-  return (
-    <span className="font-number ml-auto text-white/50">
-      평단 {won(Math.round(avg))} · 계획가 대비{' '}
-      <span className={diff > 0 ? 'text-brand-red' : 'text-white/70'}>
-        {diff > 0 ? '+' : ''}
-        {diff.toFixed(2)}%
-      </span>
-    </span>
   )
 }
 
@@ -955,167 +499,3 @@ const Stat = ({
     )}
   </span>
 )
-
-const Btn = ({
-  children,
-  onClick,
-  disabled,
-  tone,
-}: {
-  children: React.ReactNode
-  onClick?: () => void
-  disabled?: boolean
-  /** `go` 는 «실제로 저장하는» 버튼. 나머지와 무게가 달라야 한다 */
-  tone?: 'go'
-}) => (
-  <button
-    type="button"
-    onClick={onClick}
-    disabled={disabled}
-    className={cn(
-      'rounded-full px-3 py-1 text-[12px] transition-colors disabled:cursor-not-allowed disabled:opacity-40',
-      tone === 'go'
-        ? 'bg-brand-red/85 hover:bg-brand-red text-white'
-        : 'bg-white/[0.06] text-white/70 hover:bg-white/[0.12] hover:text-white',
-    )}
-  >
-    {children}
-  </button>
-)
-
-const Tag = ({
-  children,
-  on = true,
-}: {
-  children: React.ReactNode
-  on?: boolean
-}) => (
-  <span
-    className={cn(
-      'rounded-md px-2 py-0.5 text-[11px]',
-      on ? 'bg-white/[0.08] text-white/75' : 'bg-white/[0.03] text-white/25',
-    )}
-  >
-    {children}
-  </span>
-)
-
-/**
- * 1층 한 칸.
- *
- * 경고가 «두 종»이다 — `warn` 은 넘어도 가는 것(⚠), `block` 은 막는 것(✕).
- * 색만으로 가르지 않는다. 기호가 형태로 갈리므로 색이 무너져도 남는다 (디자인 2장 ⑨).
- */
-const Cell = ({
-  label,
-  value,
-  sub,
-  warn,
-  block,
-  edit,
-  unit,
-}: {
-  label: string
-  value: string
-  sub?: string
-  warn?: string
-  block?: string
-  /**
-   * 넣을 수 있는 값이면 입력칸이 된다.
-   *
-   * 라벨로 「(입력)」이라 적지 않는다 — 화면에 설명문이 다시 는다.
-   * **바탕이 들어가 있고 커서가 서는 것**이 「여기는 넣는 자리」라는 표시다.
-   * 산출값은 바탕이 없고 굵다 (디자인 2장 ② — 항목마다 «하나씩» 배정된 시각 속성).
-   */
-  edit?: false | { value: number; onChange: (n: number) => void }
-  unit?: string
-}) => (
-  <div
-    className={cn(
-      'min-w-0 rounded-[10px] px-3 py-2',
-      block
-        ? 'bg-brand-red/[0.10] ring-brand-red/40 ring-1'
-        : 'bg-white/[0.04]',
-    )}
-  >
-    <div className="text-[11px] text-white/40">{label}</div>
-    {edit ? (
-      <div className="mt-0.5 flex items-baseline gap-1">
-        <input
-          type="number"
-          value={edit.value}
-          onChange={(e) => {
-            const n = Number(e.target.value)
-            if (!Number.isNaN(n)) edit.onChange(n)
-          }}
-          /**
-           * ⚠️ 이름을 «따로» 건다. 칸 이름이 `<div>` 로 위에 떠 있어서 입력칸과
-           *    묶여 있지 않다 — 읽는 쪽에서 「이게 무슨 칸인지」를 모른다.
-           *    새 계획 칸(`NewPlanForm`)도 같은 이유로 `aria-label` 을 쓴다.
-           */
-          aria-label={label}
-          className="font-number bg-bg-input w-full min-w-0 rounded-md px-2 py-1 text-[16px] font-bold text-white outline-none focus:ring-1 focus:ring-white/30"
-        />
-        {unit && <span className="text-[12px] text-white/40">{unit}</span>}
-      </div>
-    ) : (
-      <div
-        className={cn(
-          'font-number mt-0.5 truncate text-[16px] font-bold',
-          block ? 'text-brand-red' : 'text-white',
-        )}
-      >
-        {value}
-      </div>
-    )}
-    {sub && (
-      <div className="font-number mt-0.5 truncate text-[11px] text-white/35">
-        {sub}
-      </div>
-    )}
-    {(block ?? warn) && (
-      <div
-        className={cn(
-          'font-number mt-1 text-[11px]',
-          block ? 'text-brand-red' : 'text-warning',
-        )}
-      >
-        {block ?? warn}
-      </div>
-    )}
-  </div>
-)
-
-/** 켬/끔 — 켜지면 값이 «들어 있는» 것이 보인다 */
-const Toggle = ({
-  on,
-  onClick,
-  children,
-}: {
-  on: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) => (
-  <button
-    type="button"
-    role="switch"
-    aria-checked={on}
-    onClick={onClick}
-    className={cn(
-      'flex items-center gap-1.5 self-start rounded-md px-2 py-0.5 text-[11px] transition-colors',
-      on
-        ? 'bg-white/[0.12] text-white/85'
-        : 'bg-white/[0.03] text-white/35 hover:text-white/60',
-    )}
-  >
-    <span
-      className={cn(
-        'h-1.5 w-1.5 rounded-full',
-        on ? 'bg-brand-red' : 'bg-white/20',
-      )}
-    />
-    {children}
-  </button>
-)
-
-/** 3층 한 자리. 접혀 있을 때 세로를 안 먹도록 가로로 늘어놓는다 */

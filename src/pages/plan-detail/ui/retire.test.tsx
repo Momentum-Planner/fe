@@ -104,7 +104,7 @@ describe('폐기와 삭제 — 화면', () => {
     await waitFor(() =>
       expect(screen.getByText('돌파가 거래량 없이 나왔다')).toBeInTheDocument(),
     )
-    expect(screen.getByText('폐기 사유 —')).toBeInTheDocument()
+    expect(screen.getByText('폐기 사유')).toBeInTheDocument()
     // 닫힌 계획은 더 닫을 것이 없다
     expect(
       screen.queryByRole('button', { name: '폐기' }),
@@ -168,7 +168,7 @@ describe('폐기와 삭제 — 화면', () => {
     await planApi.close(plan.planId, { closeReason: '안 가기로 했다' })
     show(plan)
 
-    await screen.findByText('폐기 사유 —')
+    await screen.findByText('폐기 사유')
     expect(
       screen.queryByRole('button', { name: '이미 닫힘 폐기' }),
     ).not.toBeInTheDocument()
@@ -523,7 +523,7 @@ describe('읽을 때와 고칠 때', () => {
     // 「어디서 자를까」와 「수익이 나면 어디로 올릴까」는 같은 선의 두 시점이다.
     // 꺼둔 50일선 트레일링도 «자리를 지킨다» (③-3-1) — 껐다는 사실을 잊지 않게
     // 백스톱은 스톱 상향의 선택지로 들어갔다 (Q12)
-    expect(screen.getByText('스톱 갱신 규칙')).toBeInTheDocument()
+    expect(screen.getByText('④ 스톱 갱신 규칙')).toBeInTheDocument()
     expect(screen.getByText('50일선 트레일링')).toBeInTheDocument()
     expect(screen.getByText('스톱 상향 2R')).toBeInTheDocument()
   })
@@ -571,105 +571,23 @@ describe('읽을 때와 고칠 때', () => {
 })
 
 /**
- * 사슬을 **찾아가는 줄** (2026-09-11).
- *
- * 💀 칸이 210px 에 가로 스크롤이라 마디가 열 개만 넘어도 손으로 끌어서는 원하는
- * 자리를 못 찾는다. 특히 **실행 중**이 둘째·셋째에 있으면 화면 밖인데,
- * 그게 「지금 살아 있는 판단」이다 (④-2 — 종목당 하나뿐).
- *
- * ⚠️ 마디를 «옮기지» 않는다. 사슬의 순서는 시간이라 바꾸면 거짓이 된다 —
- *    옮기는 것은 «보는 자리»다.
+ * 사슬 — **좁힌 사슬 한 줄** (Q12). 옛 찾아가기 칩 · 기간 · 확대는 걷어냈다.
  */
-describe('사슬을 찾아간다', () => {
-  it('«실행 중»으로 한 번에 간다', async () => {
-    const plan = await planApi.getDetail(1)
-    expect(plan.status).toBe('RUNNING')
-    show(plan)
-
-    await screen.findAllByText(plan.title)
-    expect(
-      await screen.findByRole('button', { name: /실행 중/ }),
-    ).toBeInTheDocument()
-  })
-
-  it('«대기»도 한 자리 — 여럿이면 개수가 붙는다', async () => {
-    const plan = await planApi.getDetail(1)
-    show(plan)
-
-    await screen.findAllByText(plan.title)
-    /**
-     * 실행 중은 종목당 «하나»지만(④-2) 대기는 «여럿»일 수 있다 —
-     * 같은 종목에 시나리오를 여럿 두고 하나만 실현한다 (④-3).
-     * 그래서 칩 하나가 돌아가며 하나씩 데려오고, 개수가 붙는다 —
-     * **한 번 눌러서 다 못 본다는 사실이 보여야 한다.**
-     */
-    const waiting = (
-      await planApi.getList({ stockCode: '000660' })
-    ).plans.filter((p) => p.status === 'PLANNED')
-    expect(waiting.length).toBeGreaterThan(1)
-
-    // ⚠️ 「대기」로만 찾으면 «제목»에 그 글자가 든 마디의 버튼까지 잡힌다
-    //    (목의 「3차 돌파 대기」). 앞머리로 좁힌다
-    const chip = await screen.findByRole('button', {
-      name: new RegExp(`^대기 ${waiting.length}개`),
-    })
-    expect(chip).toBeInTheDocument()
-  })
-
-  it('찾아가는 줄에 «실행 중»과 «대기»만 있다', async () => {
-    const plan = await planApi.create({ ...BLANK, title: '줄 확인' })
-    show(plan)
-
-    await screen.findAllByText('줄 확인')
-    /**
-     * 사슬은 **왼쪽이 과거, 오른쪽이 지금**이다.
-     *   최신   늘 오른쪽 끝 — 끌면 닿는다.  칩이 필요 없다
-     *   개수   사슬 자체가 보여 준다.  숫자를 또 적을 이유가 없다
-     *   제목   「계획 사슬」이라는 이름표도 뺐다 — 보면 사슬인 걸 안다
-     * 찾기 어려운 것은 «가운데 어딘가»에 있는 실행 중 하나다 (2026-09-11).
-     */
-    expect(
-      await screen.findByRole('button', { name: /실행 중/ }),
-    ).toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: '최신' }),
-    ).not.toBeInTheDocument()
-    expect(screen.queryByText(/^\d+개$/)).not.toBeInTheDocument()
-    expect(screen.queryByText('계획 사슬')).not.toBeInTheDocument()
-  })
-
-  it('마디가 «적으면» 기간 고르개가 안 뜬다', async () => {
-    // 계획이 넷 이하인 종목 — 끌어서 찾을 수 있는 크기다
-    const few = (await planApi.getList({ stockCode: '035720' })).plans
-    expect(few.length).toBeLessThanOrEqual(4)
-    const plan = await planApi.getDetail(few[0]!.planId)
-    show(plan)
-
-    await screen.findAllByText(plan.title)
-    expect(screen.queryByText('기간')).not.toBeInTheDocument()
-  })
-
-  it('확대는 «세로»만 넓힌다 — 가로는 이미 끌어서 본다', async () => {
+describe('좁힌 사슬', () => {
+  it('지난 계획은 팝오버로 접히고, 고르면 사슬에 하나만 들어온다', async () => {
     const plan = await planApi.getDetail(1)
     show(plan)
     const user = userEvent.setup()
 
     await screen.findAllByText(plan.title)
-    const zoom = await screen.findByRole('button', { name: /확대/ })
-    await user.click(zoom)
-    expect(screen.getByRole('button', { name: /줄이기/ })).toBeInTheDocument()
-  })
-
-  it('찾아가는 줄이 사슬에 «덮이지» 않는다', async () => {
-    const plan = await planApi.getDetail(1)
-    show(plan)
-
-    // 💀 `PanBox` 가 `absolute inset-0` 이라 형제로 두면 줄이 밑에 깔렸다.
-    //    「최신이 있는데 안 보인다」가 그것이었다 — 세로로 쌓아서 고쳤다
-    const row = await screen.findByRole('button', { name: /실행 중/ })
-    const pan = document.querySelector('.chain-pan')
-    expect(pan).not.toBeNull()
-    expect(pan?.contains(row)).toBe(false)
+    const pop = await screen.findByRole('button', { name: /지난 계획/ })
+    await user.click(pop)
+    const options = screen.getAllByRole('option')
+    expect(options.length).toBeGreaterThan(0)
+    const pick = options[0]!
+    const name = pick.querySelector('.truncate')?.textContent ?? ''
+    await user.click(pick)
+    expect(screen.getAllByText(name).length).toBeGreaterThan(0)
   })
 })
 
@@ -764,6 +682,8 @@ describe('현금 부족', () => {
     const qty = screen.getByLabelText('수량')
     await user.clear(qty)
     await user.type(qty, '999')
+    // ✕ 는 칸을 벗어날 때 뜬다 (Q11 F)
+    await user.tab()
 
     // ⚠ 가 아니라 ✕ 다 — 기호가 형태로 갈리므로 색이 무너져도 남는다
     expect(await screen.findByText(/^✕ 현금/)).toBeInTheDocument()

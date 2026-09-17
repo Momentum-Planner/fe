@@ -14,6 +14,15 @@ import type { PlanDefaults } from '@/entities/plan'
 import { SnapshotCalendar } from './SnapshotCalendar'
 import { StopRaisePicker } from './StopRaisePicker'
 import { LIT_PANEL } from './panel'
+import {
+  Btn,
+  CandidateList,
+  MoneyField,
+  Section,
+  StopField,
+  Sw,
+  won,
+} from './planParts'
 import type { useNewPlan } from './useNewPlan'
 
 /**
@@ -36,7 +45,6 @@ import type { useNewPlan } from './useNewPlan'
  *
  * ⚠️ 이름을 안 묻는다 — 진입 상태 + 진입가로 자동이다 (Q11 A · `autoPlanTitle`).
  */
-const won = (n: number) => n.toLocaleString('ko-KR')
 const RISK_WARN = 2.5
 
 type Stage = 1 | 2 | 3 | 4 | 5
@@ -211,49 +219,15 @@ export function NewPlanForm({
           </div>
 
           {/* 후보 선 — 서비스가 하나를 정해 주지 않는다. 늘어놓고 고르게 한다 */}
-          <div className="mt-1.5 flex flex-col gap-0.5 border-t border-white/[0.06] pt-1.5">
-            {candidates.map((c) => (
-              <button
-                key={c.label}
-                type="button"
-                onClick={() => {
-                  born.set('stopPrice', c.price)
-                  setSeen((v) => ({ ...v, entry: d.entryPrice, stop: c.price }))
-                  if (d.entryPrice > c.price && stage === 2) setStage(3)
-                }}
-                aria-label={`${c.label} ${won(c.price)} 손절폭 ${c.width}%${c.overLimit ? ' · 상한 초과' : ''}`}
-                className={cn(
-                  'grid grid-cols-[1fr_76px_50px] items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[11px] hover:bg-white/[0.10]',
-                  c.price === d.stopPrice && 'bg-white/[0.09]',
-                  c.limit && 'ring-warning/40 ring-1',
-                )}
-              >
-                <span
-                  className={cn(
-                    'truncate',
-                    c.limit
-                      ? 'text-warning'
-                      : c.price === d.stopPrice
-                        ? 'text-white'
-                        : 'text-white/50',
-                  )}
-                >
-                  {c.label}
-                </span>
-                <span className="font-number text-right text-white/80 tabular-nums">
-                  {won(c.price)}
-                </span>
-                <span
-                  className={cn(
-                    'font-number text-right tabular-nums',
-                    c.overLimit ? 'text-warning' : 'text-white/40',
-                  )}
-                >
-                  {c.overLimit && <span aria-hidden>⚠</span>}−{c.width}%
-                </span>
-              </button>
-            ))}
-          </div>
+          <CandidateList
+            items={candidates}
+            chosen={d.stopPrice}
+            onPick={(price) => {
+              born.set('stopPrice', price)
+              setSeen((v) => ({ ...v, entry: d.entryPrice, stop: price }))
+              if (d.entryPrice > price && stage === 2) setStage(3)
+            }}
+          />
         </Section>
       )}
 
@@ -453,271 +427,3 @@ function AccountConfirm({
     </div>
   )
 }
-
-/** 섹션 하나 — 구분선 + 소제목 (Q12 게슈탈트 「구분선」) */
-function Section({
-  title,
-  tail,
-  first,
-  children,
-}: {
-  title: string
-  tail?: React.ReactNode
-  first?: boolean
-  children: React.ReactNode
-}) {
-  return (
-    <div
-      className={cn(
-        'pt-2.5 pb-1',
-        first ? 'mt-1.5' : 'mt-2 border-t border-white/[0.06]',
-      )}
-    >
-      <div className="mb-1.5 flex items-baseline gap-2">
-        <span className="text-[12px] font-bold text-white/80">{title}</span>
-        {tail && <span className="ml-auto">{tail}</span>}
-      </div>
-      {children}
-    </div>
-  )
-}
-
-/**
- * 숫자 칸 — **숫자와 쉼표만 받고, 치는 동안 쉼표를 찍는다** (Q11 D · F).
- * 그 밖의 글자는 아예 안 찍힌다. 「만」「억」은 안 읽는다.
- */
-function MoneyField({
-  label,
-  value,
-  onChange,
-  onBlur,
-  unit,
-  block,
-  warn,
-  picking,
-  onPick,
-}: {
-  label: string
-  value: number
-  onChange: (n: number) => void
-  onBlur: () => void
-  unit?: string
-  block?: string
-  warn?: string
-  picking?: boolean
-  onPick?: () => void
-}) {
-  return (
-    <div className="flex min-w-0 flex-col gap-0.5">
-      <FieldLabel label={label} picking={picking} onPick={onPick} />
-      <div className="relative">
-        <input
-          aria-label={label}
-          value={value ? won(value) : ''}
-          onChange={(e) =>
-            onChange(Number(e.target.value.replace(/[^0-9]/g, '')) || 0)
-          }
-          onBlur={onBlur}
-          inputMode="numeric"
-          className={cn(
-            'bg-bg-input font-number w-full rounded-md px-2 py-1 text-right text-[13px] text-white outline-none focus:ring-1 focus:ring-white/30',
-            unit && 'pr-6',
-            block && 'ring-brand-red/50 ring-1',
-            picking && 'ring-brand-blue/60 ring-1',
-          )}
-        />
-        {unit && (
-          <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-[11px] text-white/35">
-            {unit}
-          </span>
-        )}
-      </div>
-      <Message block={block} warn={warn} />
-    </div>
-  )
-}
-
-/**
- * 스톱가격 — **[원|%] 전환** (Q11 D).
- * % 로 치면 칸을 벗어날 때 진입가 기준 가격으로 바꿔 넣는다. % 칸만 점(.)을 받는다.
- */
-function StopField({
-  entry,
-  value,
-  onChange,
-  onBlur,
-  picking,
-  onPick,
-  block,
-  warn,
-}: {
-  entry: number
-  value: number
-  onChange: (n: number) => void
-  onBlur: () => void
-  picking: boolean
-  onPick: () => void
-  block?: string
-  warn?: string
-}) {
-  const [unit, setUnit] = useState<'won' | 'pct'>('won')
-  const [pct, setPct] = useState('')
-  const pctBlock =
-    unit === 'pct' && pct !== '' && entry <= 0
-      ? '✕ 진입가를 먼저 넣는다'
-      : undefined
-
-  return (
-    <div className="flex min-w-0 flex-col gap-0.5">
-      <FieldLabel label="스톱가격" picking={picking} onPick={onPick} />
-      <div className="flex gap-1">
-        <input
-          aria-label={unit === 'won' ? '스톱가격' : '스톱가격 %'}
-          value={unit === 'won' ? (value ? won(value) : '') : pct}
-          onChange={(e) =>
-            unit === 'won'
-              ? onChange(Number(e.target.value.replace(/[^0-9]/g, '')) || 0)
-              : setPct(e.target.value.replace(/[^0-9.]/g, ''))
-          }
-          onBlur={() => {
-            if (unit === 'pct' && entry > 0 && Number(pct) > 0)
-              onChange(Math.round(entry * (1 - Number(pct) / 100)))
-            onBlur()
-          }}
-          inputMode={unit === 'won' ? 'numeric' : 'decimal'}
-          placeholder={unit === 'pct' ? '3.5' : undefined}
-          className={cn(
-            'bg-bg-input font-number w-full min-w-0 rounded-md px-2 py-1 text-right text-[13px] text-white outline-none placeholder:text-white/20 focus:ring-1 focus:ring-white/30',
-            (block ?? pctBlock) && 'ring-brand-red/50 ring-1',
-            picking && 'ring-brand-blue/60 ring-1',
-          )}
-        />
-        <div className="flex shrink-0 overflow-hidden rounded-md ring-1 ring-white/10">
-          {(['won', 'pct'] as const).map((u) => (
-            <button
-              key={u}
-              type="button"
-              aria-pressed={unit === u}
-              onClick={() => {
-                setUnit(u)
-                setPct('')
-              }}
-              className={cn(
-                'px-1.5 text-[10px]',
-                unit === u ? 'bg-white/[0.14] text-white' : 'text-white/40',
-              )}
-            >
-              {u === 'won' ? '원' : '%'}
-            </button>
-          ))}
-        </div>
-      </div>
-      {unit === 'pct' && value > 0 && !pctBlock && (
-        <span className="font-number text-[10px] text-white/35">
-          → {won(value)}
-        </span>
-      )}
-      <Message block={block ?? pctBlock} warn={warn} />
-    </div>
-  )
-}
-
-function FieldLabel({
-  label,
-  picking,
-  onPick,
-}: {
-  label: string
-  picking?: boolean
-  onPick?: () => void
-}) {
-  return (
-    <span className="flex items-center gap-1.5 text-[10px] text-white/40">
-      {label}
-      {/* ④-1-1-1 의 📦 자료가 「차트」다 — 그 «자리»를 짚는 것이 실제 동작이다 */}
-      {onPick && (
-        <button
-          type="button"
-          onClick={onPick}
-          className={cn(
-            'rounded-full px-1.5 py-[1px] text-[9px] transition-colors',
-            picking
-              ? 'bg-brand-blue/25 text-brand-blue'
-              : 'bg-white/[0.06] text-white/35 hover:text-white/70',
-          )}
-        >
-          {picking ? '차트에서 집는 중' : '차트에서 집기'}
-        </button>
-      )}
-    </span>
-  )
-}
-
-/** ✕ 는 막는 것, ⚠ 는 넘어도 가는 것 — 기호가 형태로 갈리므로 색이 무너져도 남는다 */
-const Message = ({ block, warn }: { block?: string; warn?: string }) =>
-  block ? (
-    <span className="text-brand-red text-[10px]">{block}</span>
-  ) : warn ? (
-    <span className="text-warning text-[10px]">{warn}</span>
-  ) : null
-
-/** 켬/끔 하나. 세부 화면의 `Toggle` 과 같은 모양이다 */
-const Sw = ({
-  on,
-  onClick,
-  children,
-}: {
-  on: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) => (
-  <button
-    type="button"
-    role="switch"
-    aria-checked={on}
-    onClick={onClick}
-    className={cn(
-      'flex items-center gap-1.5 self-start rounded-md px-2 py-0.5 text-[11px] transition-colors',
-      on
-        ? 'bg-white/[0.12] text-white/85'
-        : 'bg-white/[0.03] text-white/35 hover:text-white/60',
-    )}
-  >
-    <span
-      className={cn(
-        'h-1.5 w-1.5 rounded-full',
-        on ? 'bg-brand-red' : 'bg-white/20',
-      )}
-    />
-    {children}
-  </button>
-)
-
-const Btn = ({
-  children,
-  onClick,
-  disabled,
-  go,
-  className,
-}: {
-  children: React.ReactNode
-  onClick?: () => void
-  disabled?: boolean
-  go?: boolean
-  className?: string
-}) => (
-  <button
-    type="button"
-    onClick={onClick}
-    disabled={disabled}
-    className={cn(
-      'rounded-full px-3 py-1 text-[12px] transition-colors disabled:cursor-not-allowed disabled:opacity-40',
-      go
-        ? 'bg-brand-red/85 hover:bg-brand-red text-white'
-        : 'bg-white/[0.06] text-white/70 hover:bg-white/[0.12] hover:text-white',
-      className,
-    )}
-  >
-    {children}
-  </button>
-)
