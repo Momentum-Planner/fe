@@ -36,6 +36,9 @@ export function PlanChain({
   onRemove,
   zoomed,
   onZoom,
+  onHover,
+  lead,
+  faded = false,
 }: {
   plans: PlanListItem[]
   currentId: number
@@ -66,6 +69,18 @@ export function PlanChain({
   /** 세로로 넓혔나. 넓히는 것은 «칸의 주인»(페이지)이 한다 */
   zoomed?: boolean
   onZoom?: () => void
+  /**
+   * 마디에 마우스를 올렸다 — 차트가 그 계획을 유령으로 띄운다 (Q12 브러싱).
+   * 내리면 null.
+   */
+  onHover?: (planId: number | null) => void
+  /** 찾아가는 줄 맨 앞에 서는 것 — 「지난 계획 N」 팝오버가 여기 선다 (Q12) */
+  lead?: React.ReactNode
+  /**
+   * 새 계획을 쓰는 중이라 사슬이 **뒤로 물러난다** (Q12). 마디가 흐려지고,
+   * 마우스를 올린 마디만 진해진다 — 브러싱은 그대로 된다.
+   */
+  faded?: boolean
 }) {
   /**
    * **줄기는 「실제로 간 길」이다** — 실행 중 · 실행 완료만 줄기에 선다.
@@ -358,6 +373,7 @@ export function PlanChain({
           ⚠️ 마디를 «옮기지» 않는다. 사슬의 순서는 시간이라 바꾸면 거짓이 된다.
              옮기는 것은 «보는 자리»고, 기간은 «밝기»로만 말한다. */}
       <div className="mb-1.5 flex shrink-0 flex-wrap items-center gap-1.5">
+        {lead}
         {running && (
           <Jump
             on={centerOn === running.planId}
@@ -466,6 +482,8 @@ export function PlanChain({
                       outOfSpan={!inSpan(p)}
                       onClose={onClose}
                       onRemove={onRemove}
+                      onHover={onHover}
+                      faded={faded}
                       bind={(el) => {
                         if (el) nodeRefs.current.set(p.planId, el)
                         else nodeRefs.current.delete(p.planId)
@@ -781,6 +799,8 @@ function ChainNode({
   outOfSpan,
   onClose,
   onRemove,
+  onHover,
+  faded = false,
 }: {
   p: PlanListItem
   current: boolean
@@ -790,12 +810,26 @@ function ChainNode({
   outOfSpan?: boolean
   onClose?: (planId: number) => void
   onRemove?: (planId: number) => void
+  onHover?: (planId: number | null) => void
+  faded?: boolean
 }) {
   const droppedNode = p.status === 'CLOSED'
+  /**
+   * 지난 계획(실행 완료)은 **흐리게** 둔다 (Q12 게슈탈트). 올리면 원래 진하기로 —
+   * ⚠️ 이 앱에서 흐림은 「못 누른다」로 읽히므로 올렸을 때 되돌아와야 누를 수 있다는 게 보인다.
+   */
+  const pastNode = p.status === 'DONE' && !current
   // 폐기와 삭제는 «같은 문턱»이다 — 대기 + 체결 0건 (Q8)
   const retirable = canClose(p) && (onClose ?? onRemove) != null
   return (
-    <div className="group/node relative">
+    <div
+      className={cn(
+        'group/node relative transition-opacity hover:opacity-100',
+        (faded || pastNode) && 'opacity-45',
+      )}
+      onMouseEnter={() => onHover?.(p.planId)}
+      onMouseLeave={() => onHover?.(null)}
+    >
       {/* ⚠️ 버튼을 `Link` «밖»에 둔다. 안에 넣으면 중첩이 되고, 누르면 계획이
           열려 버린다. 형제로 두고 카드 위에 겹친다 */}
       {retirable && (

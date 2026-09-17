@@ -1,10 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { cn } from '@/shared/lib/cn'
 import { fromServerRegime } from '@/shared/lib/snapshots'
 import { RegimeBadge } from '@/shared/ui/RegimeBadge'
-import { useRegimeInsight } from '@/entities/stock'
+import { useRegimeInsight, useScreening } from '@/entities/stock'
 import {
+  AVG_STOP_MIN_SAMPLES,
   PLAN_STATUS_LABEL,
+  raiseTriggerPrice,
+  stopRaiseLabel,
   usePlanDefaults,
   usePlanDetail,
   usePlanList,
@@ -18,8 +21,14 @@ import type {
 } from '@/entities/plan'
 import { PlanChain } from './PlanChain'
 import { PlanChart } from './PlanChart'
+import type { GhostPlan } from './PlanChart'
+import { liveSpan } from './planSpan'
 import { RiskBar } from './RiskBar'
-import { SnapshotBar } from './SnapshotBar'
+import { SnapshotTable } from './SnapshotTable'
+import { PastPlansPopover } from './PastPlansPopover'
+import { narrowChain } from './narrowChain'
+import { LIT_PANEL } from './panel'
+import { StopRaisePicker } from './StopRaisePicker'
 import { NewPlanForm } from './NewPlanForm'
 import { useNewPlan } from './useNewPlan'
 import { usePlanClose, usePlanRemove } from './usePlanRetire'
@@ -105,6 +114,8 @@ export function PlanDetailPage({
 function FirstPlanView({ stockCode }: { stockCode: string }) {
   const { data: defaults } = usePlanDefaults(stockCode)
   const born = useNewPlan(stockCode, [])
+  const { data: rows = [] } = useScreening(stockCode)
+  const picked = rows.find((r) => r.date === born.draft?.snapshotDate)
   const [picking, setPicking] = useState<'entry' | 'stop' | null>(null)
   /**
    * 사슬을 «세로로» 넓힌다. 갈래가 늘면 마디가 세로로 쌓이는데 210px 안에서는
@@ -136,14 +147,28 @@ function FirstPlanView({ stockCode }: { stockCode: string }) {
         </div>
       </section>
 
-      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_392px] items-start gap-3">
-        <section className="card min-w-0 px-3 py-3">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_324px] items-start gap-3">
+        <section
+          className={cn(LIT_PANEL, 'sticky top-[68px] min-w-0 px-3 py-3')}
+        >
           <PlanChart
             stockCode={stockCode}
             entryPrice={born.draft?.entryPrice ?? 0}
             stopPrice={born.draft?.stopPrice ?? 0}
             candidates={defaults?.stopCandidates ?? []}
             writtenAt={today}
+            marksFrom={born.draft?.snapshotDate ?? today}
+            drafting
+            raiseTo={
+              born.draft?.raise
+                ? raiseTriggerPrice(
+                    born.draft.entryPrice,
+                    born.draft.stopPrice,
+                    born.draft.raise,
+                    defaults?.stopLimitBasis?.avgWin ?? null,
+                  )
+                : null
+            }
             editing={born.draft != null}
             picking={picking}
             onPick={(price) => {
@@ -152,17 +177,27 @@ function FirstPlanView({ stockCode }: { stockCode: string }) {
               setPicking(null)
             }}
           />
+          {/* 고른 날의 스냅샷 — 첫 계획은 이어받을 스냅샷이 없어 고르기 전에는 안 선다 */}
+          {picked && (
+            <SnapshotTable snap={picked} open onToggle={() => undefined} />
+          )}
         </section>
 
         {born.draft && defaults ? (
           <NewPlanForm
             born={born}
             defaults={defaults}
+            rows={rows}
             picking={picking}
             onPicking={setPicking}
           />
         ) : (
-          <section className="card min-w-0 px-5 py-10 text-center text-[13px] text-white/40">
+          <section
+            className={cn(
+              LIT_PANEL,
+              'min-w-0 px-5 py-10 text-center text-[13px] text-white/40',
+            )}
+          >
             이 종목에 계획이 없습니다.
             <div className="mt-1 text-[12px] text-white/25">
               사슬의 <span className="text-white/50">+</span> 를 눌러 첫 계획을
@@ -226,6 +261,44 @@ function PlanDetailView({
    */
   const [wide, setWide] = useState(false)
   /**
+   * 사슬 마디에 올린 계획 — 차트가 **유령**으로 띄운다 (Q12 브러싱).
+   * 지금 보는 계획 자신은 이미 진하게 그려져 있으므로 유령으로 또 안 띄운다.
+   */
+  const [hoverId, setHoverId] = useState<number | null>(null)
+  /** 「지난 계획」 팝오버에서 꺼낸 계획들 — 좁힌 사슬에 더해진다 (Q12) */
+  const [pulled, setPulled] = useState<number[]>([])
+  const narrowed = narrowChain(siblings, plan.planId, pulled)
+  /**
+   * 스냅샷 표 — 볼 때는 접힌 채, 세울 때는 펼친 채 **시작한다** (Q12).
+   * 사용자가 여닫은 값은 그 상황 안에서만 기억한다 — 세우기를 켜고 끄면 초기값으로.
+   */
+  const [snapOpen, setSnapOpen] = useState<boolean | null>(null)
+  const today = new Date().toISOString().slice(0, 10)
+  const avgWin = defaults?.stopLimitBasis?.avgWin ?? null
+  const drafting = born.draft != null
+  useEffect(() => setSnapOpen(null), [drafting])
+  /** 이 종목의 스크리닝 행 — 새 계획의 달력이 고르고, 고른 날이 스냅샷이 된다 (Q11 A) */
+  const { data: rows = [] } = useScreening(plan.stockCode)
+  const picked = rows.find((r) => r.date === born.draft?.snapshotDate)
+  const hovered = siblings.find(
+    (p) => p.planId === hoverId && (drafting || p.planId !== plan.planId),
+  )
+  const ghost: GhostPlan | null = hovered
+    ? {
+        entryPrice: hovered.entryPrice,
+        stopPrice: hovered.stopPrice,
+        raiseTo: raiseTriggerPrice(
+          hovered.entryPrice,
+          hovered.stopPrice,
+          hovered.raise,
+          avgWin,
+        ),
+        // 새 계획을 쓰는 중이면 살아 있는 계획도 «그날»에서 끊는다 — 새 계획과 안 겹치게
+        ...liveSpan(hovered, siblings, drafting ? today : null),
+        label: `${hovered.writtenAt.slice(5)} ${hovered.title}`,
+      }
+    : null
+  /**
    * 치우려는 마디의 «이름». 문이 사슬에 있으므로 **지금 보는 계획이 아닐 수
    * 있다** — 어느 마디를 닫는지 칸이 말해야 한다.
    */
@@ -264,12 +337,9 @@ function PlanDetailView({
         ) : (
           <Stat label="보유 수량" value="없음" />
         )}
-        {/* 계좌 총액은 위험노출의 «분모»다 (F7). 계획이 등록 시점 값을 얼려 간다 */}
-        <Stat
-          label="계좌 총액"
-          value={won(plan.accountTotal)}
-          className="ml-auto"
-        />
+        {/* ⚠️ 계좌 총액을 **머리줄에서 뺐다** (Q12). 여기 뜨던 것은 «지금» 계좌가 아니라
+            보고 있는 계획이 등록할 때 얼린 값이었다 — 세우는 동안에도 옛 총액이 떠 있었다.
+            위험노출의 «분모»라 위험노출 숫자 바로 밑으로 옮겼다 */}
       </section>
 
       {/* ── 계획 사슬 · 전폭 ───────────────────────────────────────────
@@ -280,9 +350,20 @@ function PlanDetailView({
             ⚠️ 찾아가는 줄(실행 중 · 기간 · 확대)이 위에 하나 얹히므로
                그만큼 더 준다. 카드 높이는 그대로다.
             ⚠️ 「계획 사슬」 이름표를 뺐다 (2026-09-11) — 보면 사슬인 걸 안다 */}
-        <div className={cn('relative', wide ? 'h-[460px]' : 'h-[210px]')}>
+        {/* 좁힌 사슬은 마디가 넷 안팎이라 210 → 170 (Q12 — 보조로 내리고 높이만 줄인다).
+            대기 둘이 세로로 쌓이는 높이까지는 든다 */}
+        <div className={cn('relative', wide ? 'h-[460px]' : 'h-[170px]')}>
           <PlanChain
-            plans={siblings}
+            // 좁힌 사슬 — 직전 → 실행 중 → 대기. 나머지는 「지난 계획」 안 (Q12)
+            plans={narrowed.shown}
+            lead={
+              <PastPlansPopover
+                hidden={narrowed.hidden}
+                onPull={(id) => setPulled((v) => [...v, id])}
+              />
+            }
+            // 세우는 동안 사슬은 뒤로 물러난다 — 올린 마디만 진해진다 (Q12)
+            faded={drafting}
             currentId={plan.planId}
             zoomed={wide}
             onZoom={() => setWide((v) => !v)}
@@ -294,6 +375,7 @@ function PlanDetailView({
             // 사슬의 «어느 마디든» 치울 수 있다 — 문턱 판정은 마디가 스스로 한다
             onClose={close.openFor}
             onRemove={remove.askFor}
+            onHover={setHoverId}
           />
         </div>
       </section>
@@ -305,15 +387,15 @@ function PlanDetailView({
           구조라 두 칸이 같이 읽혀야 하고, 계획 정보가 172px 짜리 두 칸으로 쪼개져
           경고 문구(「✕ 현금 …보다 …크다」)가 잘리고 있었다.
           차트는 770px 로 줄지만 90봉이면 봉당 8.5px 이라 Q0 이 걱정한 516px 과 멀다. */}
-      <div className="grid grid-cols-[minmax(0,1fr)_448px] items-start gap-3">
+      <div className="grid grid-cols-[minmax(0,1fr)_324px] items-start gap-3">
         {/* 차트가 «주»다 — 종목 상세를 대체하는 화면이므로 차트가 그 폭을 가져야 한다.
             Q0 이 잰 값이 826px 이고, 여기 1fr 이 그 근처에 선다 */}
-        <section className="card min-w-0 px-3 py-3">
-          {/* ④-0 스냅샷 — **차트 «위»다.** 이유는 `SnapshotBar` 머리에 있다
-              (보조지표 팝오버가 아래로 열리고, 하단 지표가 차트를 아래로 늘린다).
-              ⚠️ 새 계획을 쓰는 동안에도 «이어받는 계획»의 판정이 보인다 —
-                 그 계획의 스냅샷이 아직 없어서다. 날짜를 제목에 붙여 두었다. */}
-          <SnapshotBar snap={plan.snapshot} />
+        {/* 차트 카드를 **붙잡아 둔다** (Q12 영역). 계획 칸이 길어 끝까지 내려도 차트가
+            옆에 남아야 진입가 · 스톱가격을 차트에서 집을 수 있다.
+            top 68 = 상단 내비 56 + 간격 12 */}
+        <section
+          className={cn(LIT_PANEL, 'sticky top-[68px] min-w-0 px-3 py-3')}
+        >
           <PlanChart
             stockCode={plan.stockCode}
             /**
@@ -331,10 +413,50 @@ function PlanDetailView({
               setPicking(null)
             }}
             candidates={plan.stopCandidates}
-            writtenAt={plan.writtenAt}
+            // 새 계획을 쓰는 동안에는 «오늘»로 옮겨간다 — 오늘 세우는 계획이다
+            writtenAt={born.draft ? today : plan.writtenAt}
+            // 지금 계획은 스냅샷 날짜부터, 새 계획은 오늘부터 (Q12 기간만)
+            marksFrom={
+              born.draft
+                ? (born.draft.snapshotDate ?? today)
+                : plan.snapshot.date
+            }
+            drafting={born.draft != null}
+            raiseTo={
+              born.draft
+                ? born.draft.raise
+                  ? raiseTriggerPrice(
+                      born.draft.entryPrice,
+                      born.draft.stopPrice,
+                      born.draft.raise,
+                      avgWin,
+                    )
+                  : null
+                : raiseTriggerPrice(
+                    shown.entryPrice,
+                    shown.stopPrice,
+                    shown.raise,
+                    avgWin,
+                    plan.initialStopWidth,
+                  )
+            }
+            ghost={ghost}
             // 후보 선은 «고를 때»만 뜬다 — 늘 떠 있으면 넷이 캔들을 가린다
             editing={editing}
           />
+          {/* ④-0 스냅샷 — 차트 «아래» 원값 표 (Q12).
+              세우는 동안에는 «달력에서 고른 날»의 행이다. 아직 안 골랐으면 비어 있다 */}
+          {drafting && !picked ? (
+            <div className="mt-2.5 border-t border-white/[0.06] px-1 pt-2.5 text-[11px] text-white/30">
+              스냅샷 — 날짜를 고르면 그날 판정이 뜬다
+            </div>
+          ) : (
+            <SnapshotTable
+              snap={drafting && picked ? picked : plan.snapshot}
+              open={snapOpen ?? drafting}
+              onToggle={() => setSnapOpen(!(snapOpen ?? drafting))}
+            />
+          )}
         </section>
 
         {/* ── 세부 — **한 자리에 하나만 선다** ────────────────────────────
@@ -347,11 +469,12 @@ function PlanDetailView({
           <NewPlanForm
             born={born}
             defaults={defaults}
+            rows={rows}
             picking={picking}
             onPicking={setPicking}
           />
         ) : (
-          <section className="card min-w-0 px-5 py-4">
+          <section className={cn(LIT_PANEL, 'min-w-0 px-4 py-4')}>
             {/* 머리줄 — **접지 않는다.**
                 💀 `flex-wrap` 이었다. 고칠 때 이름 칸이 220px 로 «고정»이라
                    상태칩 + 이름 + 작성일이 448px 를 넘겨 **저장·취소가 다음 줄로
@@ -429,6 +552,11 @@ function PlanDetailView({
             <div className="mt-3.5 rounded-[10px] bg-white/[0.04] px-3.5 py-3">
               {/* 산출값이 «즉시» 따라온다 — 손을 떼기 전에 결과를 본다 (디자인 9장 ④) */}
               <RiskBar before={plan.riskBefore} after={derived.riskAfter} />
+              {/* 분모가 분자 곁에 선다 (Q12). 이 계획이 등록할 때 «얼린» 값이다 (F7) */}
+              <div className="font-number mt-1.5 text-[10px] text-white/35">
+                ÷ 계좌 총액 {won(plan.accountTotal)}
+                <span className="font-text ml-1 text-white/25">등록 시점</span>
+              </div>
             </div>
 
             {/* ── 「얼마에 얼마나」 — 한 줄 ─────────────────────────────
@@ -604,53 +732,26 @@ function PlanDetailView({
                 </div>
                 {editing ? (
                   <div className="flex flex-col gap-1.5">
-                    {/* 스톱 상향은 «임계 R» 을 같이 고른다 — 켬/끔만으로는 안 된다 (④-1-4) */}
-                    <div className="flex items-center gap-1.5">
-                      <Toggle
-                        on={shown.raiseAtR != null}
-                        onClick={() =>
-                          set('raiseAtR', shown.raiseAtR == null ? 2 : null)
-                        }
-                      >
-                        스톱 상향
-                      </Toggle>
-                      {shown.raiseAtR != null &&
-                        [2, 3].map((r) => (
-                          <button
-                            key={r}
-                            type="button"
-                            onClick={() => set('raiseAtR', r)}
-                            className={cn(
-                              'font-number rounded-md px-2 py-0.5 text-[11px]',
-                              shown.raiseAtR === r
-                                ? 'bg-white/[0.14] text-white'
-                                : 'bg-white/[0.04] text-white/40 hover:text-white/70',
-                            )}
-                          >
-                            {r}R
-                          </button>
-                        ))}
-                    </div>
+                    <StopRaisePicker
+                      value={shown.raise}
+                      onChange={(v) => set('raise', v)}
+                      avgLocked={
+                        (defaults?.sampleCount ?? 0) < AVG_STOP_MIN_SAMPLES
+                          ? `통계 ${AVG_STOP_MIN_SAMPLES}건부터`
+                          : null
+                      }
+                    />
                     <Toggle
                       on={shown.trail50}
                       onClick={() => set('trail50', !shown.trail50)}
                     >
                       50일선 트레일링
                     </Toggle>
-                    <Toggle
-                      on={shown.backstop}
-                      onClick={() => set('backstop', !shown.backstop)}
-                    >
-                      백스톱
-                    </Toggle>
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
-                    <Tag on={shown.raiseAtR != null}>
-                      스톱 상향 {shown.raiseAtR ?? '—'}R
-                    </Tag>
+                    <Tag>스톱 상향 {stopRaiseLabel(shown.raise)}</Tag>
                     <Tag on={shown.trail50}>50일선 트레일링</Tag>
-                    <Tag on={shown.backstop}>백스톱</Tag>
                   </div>
                 )}
               </div>
@@ -683,9 +784,10 @@ function PlanDetailView({
             {/* 실행된 계획이면 «실제»가 1층이다 — 계획값보다 체결이 답이라서 */}
             {walked && plan.records.length > 0 && (
               <div className="mt-2 rounded-[10px] bg-white/[0.04] px-3 py-2.5">
-                <div className="flex items-baseline gap-2 text-[11px]">
-                  <span className="text-white/40">체결</span>
-                  <span className="font-number text-white/70">
+                {/* 324 폭에서는 한 줄에 셋이 못 선다 — 평단 비교를 둘째 줄로 접는다 */}
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px]">
+                  <span className="shrink-0 text-white/40">체결</span>
+                  <span className="font-number shrink-0 whitespace-nowrap text-white/70">
                     {plan.recordCount}건 · 체결률{' '}
                     {Math.round(plan.fillRate * 100)}%
                   </span>
