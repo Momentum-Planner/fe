@@ -15,7 +15,9 @@ import { Pair, won } from './planParts'
  * ```text
  * ✓ ① 2R  1,200,000   09-12 닿음 → 본전           닿은 단 — 잠긴다
  *   ② [2][3][4][5][__]R      1,240,000  ×    안 닿은 단 — 고친다 · 지운다
- *   [+ 단 추가]                                    앞 단 +1R 이 골라진 채 붙는다
+ *
+ * ⚠️ 「+ 단 추가」 를 뺐다 (2026-09-17 사용자 — 「안 해도 된다」). 새 계획은 ① 단 하나다.
+ *    모델은 여러 단을 그대로 든다 — 이미 여러 단인 계획은 그대로 보이고 고친다.
  * ```
  *
  * 💀 Q12 의 「스톱 상향 칩 + 50일선 트레일링 켬/끔」 을 갈아 끼웠다. 옮길 자리는 여기서
@@ -45,7 +47,6 @@ export function StopLadderEditor({
     r == null ? null : goalPrice(entryPrice, stopPrice, r, initialStopWidth)
   const setAt = (i: number, r: number | null) =>
     onChange(value.map((v, k) => (k === i ? r : v)))
-  const last = value.at(-1) ?? locked.at(-1)?.r ?? null
 
   return (
     <div className="flex flex-col gap-1">
@@ -97,14 +98,6 @@ export function StopLadderEditor({
           </div>
         )
       })}
-      <button
-        type="button"
-        disabled={last == null}
-        onClick={() => onChange([...value, Math.floor(last ?? 1) + 1])}
-        className="self-start rounded-md border border-dashed border-white/20 px-2 py-0.5 text-[12px] text-white/45 hover:border-white/40 hover:text-white/75 disabled:opacity-30"
-      >
-        + 단 추가
-      </button>
     </div>
   )
 }

@@ -346,64 +346,107 @@ export type Candidate = {
 export const stopWidthText = (width: number) =>
   width < 0 ? `+${Math.abs(width)}%` : width === 0 ? '0%' : `−${width}%`
 
+/**
+ * 스톱가격 후보 — **스톱가격에 딸린 목록**이다 (2026-09-17).
+ *
+ * ```text
+ * ┃ 스톱가격 후보
+ * ┃ 근거 선            가격      손절폭
+ * ┃ 10일선         1,222,640     −1.4%
+ * ┃ 20일선         1,210,240   ⚠ −2.4%
+ * ┃ ⚠ 상한 2.36% 를 넘는다 — 고를 수는 있다
+ * ```
+ *
+ * 💀 섹션 전폭에 제목 없이 붙어 있어 **진입 예상가와 스톱가격 둘 다의 후보**처럼 읽혔다.
+ *    스톱 선과 같은 파랑 왼쪽 선 + 제목으로 딸린 곳을 말하고, 열 이름과 ⚠ 뜻을 적었다.
+ */
 export function CandidateList({
   items,
   chosen,
   onPick,
+  limit,
 }: {
   items: Candidate[]
   chosen: number
   onPick?: (price: number) => void
+  /** 손절폭 상한 % — ⚠ 가 무엇을 넘었는지 밑줄에 적는다 */
+  limit?: number
 }) {
+  const cols = 'grid grid-cols-[minmax(0,1fr)_80px_58px] items-center gap-1.5'
   return (
-    <div className="mt-1.5 flex flex-col gap-0.5 border-t border-white/[0.06] pt-1.5">
-      {items.map((c) => {
-        const on = c.price === chosen
-        const shape = cn(
-          'grid grid-cols-[1fr_76px_50px] items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[12px]',
-          on && 'bg-white/[0.09]',
-          c.limit && 'ring-warning/40 ring-1',
-        )
-        const row = (
-          <>
-            <span
-              className={cn(
-                'truncate',
-                c.limit ? 'text-warning' : on ? 'text-white' : 'text-white/50',
-              )}
+    <div className="border-brand-blue/60 mt-2 border-l-2 pl-2">
+      <div className="text-brand-blue/90 mb-0.5 text-[11px] font-bold">
+        스톱가격 후보
+      </div>
+      <div
+        className={cn(
+          cols,
+          'border-b border-white/[0.06] px-1.5 pb-0.5 text-[10px] text-white/35',
+        )}
+      >
+        <span>근거 선</span>
+        <span className="text-right">가격</span>
+        <span className="text-right">손절폭</span>
+      </div>
+      <div className="mt-0.5 flex flex-col gap-0.5">
+        {items.map((c) => {
+          const on = c.price === chosen
+          const shape = cn(
+            cols,
+            'rounded-md px-1.5 py-1 text-left text-[12px]',
+            on && 'bg-white/[0.09]',
+            c.limit && 'ring-warning/40 ring-1',
+          )
+          const row = (
+            <>
+              <span
+                className={cn(
+                  'truncate',
+                  c.limit
+                    ? 'text-warning'
+                    : on
+                      ? 'text-white'
+                      : 'text-white/50',
+                )}
+              >
+                {c.label}
+              </span>
+              <span className="font-number text-right text-white/80 tabular-nums">
+                {won(c.price)}
+              </span>
+              <span
+                className={cn(
+                  'font-number text-right tabular-nums',
+                  c.overLimit ? 'text-warning' : 'text-white/40',
+                )}
+              >
+                {c.overLimit && <span aria-hidden>⚠ </span>}
+                {stopWidthText(c.width)}
+              </span>
+            </>
+          )
+          return onPick ? (
+            <button
+              key={c.label}
+              type="button"
+              onClick={() => onPick(c.price)}
+              aria-label={`${c.label} ${won(c.price)} 손절폭 ${c.width}%${c.overLimit ? ' · 상한 초과' : ''}`}
+              className={cn(shape, 'hover:bg-white/[0.10]')}
             >
-              {c.label}
-            </span>
-            <span className="font-number text-right text-white/80 tabular-nums">
-              {won(c.price)}
-            </span>
-            <span
-              className={cn(
-                'font-number text-right tabular-nums',
-                c.overLimit ? 'text-warning' : 'text-white/40',
-              )}
-            >
-              {c.overLimit && <span aria-hidden>⚠</span>}
-              {stopWidthText(c.width)}
-            </span>
-          </>
-        )
-        return onPick ? (
-          <button
-            key={c.label}
-            type="button"
-            onClick={() => onPick(c.price)}
-            aria-label={`${c.label} ${won(c.price)} 손절폭 ${c.width}%${c.overLimit ? ' · 상한 초과' : ''}`}
-            className={cn(shape, 'hover:bg-white/[0.10]')}
-          >
-            {row}
-          </button>
-        ) : (
-          <div key={c.label} className={shape}>
-            {row}
-          </div>
-        )
-      })}
+              {row}
+            </button>
+          ) : (
+            <div key={c.label} className={shape}>
+              {row}
+            </div>
+          )
+        })}
+      </div>
+      {items.some((c) => c.overLimit) && (
+        <div className="mt-1 px-1.5 text-[10px] text-white/35">
+          ⚠ 상한{limit != null ? ` ${limit}%` : ''}를 넘는다 — 고를 수는 있다
+        </div>
+      )}
     </div>
   )
 }

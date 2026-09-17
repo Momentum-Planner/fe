@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/shared/lib/cn'
 import type { DailyScreening } from '@/shared/lib/snapshots'
 import {
@@ -72,6 +72,23 @@ export function NewPlanForm({
   /** 칸을 벗어날 때 «확정된» 값 — ✕ · ⚠ 는 이 값으로만 판정한다 (Q11 F) */
   const [seen, setSeen] = useState({ entry: 0, stop: 0, qty: 0 })
   const [confirming, setConfirming] = useState(false)
+
+  /**
+   * **차트에서 집기가 끝나면 칸을 벗어난 것과 같다** (2026-09-17).
+   *
+   * 💀 ②→③ 은 칸의 blur 로만 열렸다. 차트를 눌러 넣은 값은 칸을 거치지 않아서
+   *    진입 · 스톱을 다 집어도 ③ 이 안 열렸다 — 칸을 한 번 눌렀다 벗어나야 했다.
+   *    집기가 꺼지는 순간(값이 들어간 바로 그 렌더)에 같은 확정을 돌린다.
+   */
+  const wasPicking = useRef(picking)
+  useEffect(() => {
+    const was = wasPicking.current
+    wasPicking.current = picking
+    if (!d || was == null || picking != null) return
+    setSeen((v) => ({ ...v, entry: d.entryPrice, stop: d.stopPrice }))
+    if (d.entryPrice > 0 && d.stopPrice > 0 && d.stopPrice < d.entryPrice)
+      setStage((s) => (s === 2 ? 3 : s))
+  }, [picking, d])
 
   // ⚠️ 폼을 «닫으면» 부모가 이 컴포넌트를 내린다 — 다시 열면 상태가 처음부터다
 
@@ -240,6 +257,7 @@ export function NewPlanForm({
 
           {/* 후보 선 — 서비스가 하나를 정해 주지 않는다. 늘어놓고 고르게 한다 */}
           <CandidateList
+            limit={defaults.stopLimit}
             items={candidates}
             chosen={d.stopPrice}
             onPick={(price) => {
@@ -420,7 +438,7 @@ function AccountConfirm({
         <div className="mt-4 flex justify-end gap-1.5">
           <Btn onClick={onCancel}>돌아가기</Btn>
           <Btn go onClick={onConfirm} disabled={pending}>
-            {pending ? '등록 중…' : '맞다 · 등록'}
+            {pending ? '등록 중…' : '등록'}
           </Btn>
         </div>
       </div>

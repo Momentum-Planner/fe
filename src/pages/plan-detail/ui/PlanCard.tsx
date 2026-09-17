@@ -235,6 +235,7 @@ export function PlanCard({
         {/* 후보 목록은 «고칠 때»만 편다. 읽을 때는 고른 후보가 스톱가격 밑에 선다 */}
         {editing && (
           <CandidateList
+            limit={plan.stopLimit}
             items={plan.stopCandidates}
             chosen={shown.stopPrice}
             onPick={(price) => set('stopPrice', price)}

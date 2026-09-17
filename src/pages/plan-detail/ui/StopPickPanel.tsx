@@ -61,9 +61,11 @@ const GROUPS: { title: string; kinds: StopPickOption['kind'][] }[] = [
  *
  * ```text
  * 목표 3R 도착 · 09-17 종가 1,240,000
- * R 로 지키기   [본전 −9.7%] [+1R −6.5%] [+2R −3.2%]   본전 — 지금 스톱 이하
- * 통계로        [평균 수익률 4.7%]
- * 이평선        [20일선] [50일선]
+ * 후보                 가격      종가 대비
+ * R 로 지키기
+ *   본전           1,120,000     −9.7%      (흐림) 본전 — 지금 스톱 이하
+ *   +1R            1,160,000     −6.5%
+ * 통계로 · 이평선 …
  * 직접          [_______] [원|R]
  * ─────────────────────────────
  * 평균 수익률 4.7%   1,120,000 → 1,172,864 · +1.3R
@@ -115,17 +117,29 @@ export function StopPickPanel({
         <span className="font-number text-[11px] text-white/45">
           {pick.basis.date.slice(5)} 종가 {won(pick.basis.close)}
         </span>
-        <span className="ml-auto text-[11px] text-white/30">% = 종가 대비</span>
       </div>
 
       <div className="mt-2 flex flex-col gap-2">
+        {/* 표 — 정확한 값을 견준다 (2026-09-17). 칩에 붙인 % 로는 가격이 안 보였다 */}
+        <div
+          className={cn(
+            PICK_COLS,
+            'border-b border-white/[0.06] px-1.5 pb-0.5 text-[10px] text-white/35',
+          )}
+        >
+          <span>후보</span>
+          <span className="text-right">가격</span>
+          <span className="text-right">종가 대비</span>
+        </div>
         {GROUPS.map((g) => {
           const opts = pick.options.filter((o) => g.kinds.includes(o.kind))
           const blocked = opts.filter((o) => o.blocked)
           return (
             <div key={g.title}>
-              <div className="mb-1 text-[11px] text-white/40">{g.title}</div>
-              <div className="flex flex-wrap gap-1">
+              <div className="mb-0.5 px-1.5 text-[11px] text-white/40">
+                {g.title}
+              </div>
+              <div className="flex flex-col gap-px">
                 {opts.map((o) => {
                   const on = value?.label === o.label
                   return (
@@ -148,30 +162,32 @@ export function StopPickPanel({
                         )
                       }
                       className={cn(
-                        'rounded-md px-2 py-0.5 text-[12px] disabled:cursor-not-allowed disabled:opacity-35',
+                        PICK_COLS,
+                        'rounded-md px-1.5 py-1 text-left text-[12px] disabled:cursor-not-allowed disabled:opacity-35',
                         on
                           ? 'bg-brand-blue/20 text-brand-blue ring-brand-blue/60 ring-1'
-                          : 'bg-white/[0.06] text-white/75 hover:bg-white/[0.12]',
+                          : 'text-white/80 hover:bg-white/[0.08]',
                       )}
                     >
-                      {o.label}
-                      {o.price != null && (
-                        <span
-                          className={cn(
-                            'font-number ml-1.5 text-[11px] tabular-nums',
-                            on ? 'text-brand-blue/80' : 'text-white/40',
-                          )}
-                        >
-                          {fromClose(o.price)}
-                        </span>
-                      )}
+                      <span className="truncate">{o.label}</span>
+                      <span className="font-number text-right tabular-nums">
+                        {o.price != null ? won(o.price) : '—'}
+                      </span>
+                      <span
+                        className={cn(
+                          'font-number text-right tabular-nums',
+                          on ? 'text-brand-blue/80' : 'text-white/45',
+                        )}
+                      >
+                        {o.price != null ? fromClose(o.price) : ''}
+                      </span>
                     </button>
                   )
                 })}
               </div>
               {/* 못 고르는 까닭 — 그 묶음 바로 밑 (10장 F) */}
               {blocked.length > 0 && (
-                <div className="mt-0.5 text-[11px] text-white/30">
+                <div className="mt-0.5 px-1.5 text-[11px] text-white/30">
                   {blocked.map((o) => `${o.label} — ${o.blocked}`).join(' · ')}
                 </div>
               )}
@@ -247,6 +263,10 @@ export function StopPickPanel({
 }
 
 const DIRECT = '직접'
+
+/** 고르기 표의 열 — 후보 · 가격 · 종가 대비 */
+const PICK_COLS =
+  'grid grid-cols-[minmax(0,1fr)_84px_60px] items-center gap-1.5'
 
 /**
  * 직접 — [원 | R] 을 바꿔 친다 (Q16 5). 스톱가격 칸의 [원 | %] 와 같은 짝.

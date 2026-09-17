@@ -365,11 +365,10 @@ describe('이어서 세우기', () => {
       await user.click(screen.getByRole('button', { name: '3R' }))
       expect(screen.getByRole('button', { name: '등록' })).toBeEnabled()
 
-      // 단을 붙이면 앞 단 +1R 이 골라진 채 온다 · 앞 단 이하는 못 고른다
-      await user.click(screen.getByRole('button', { name: '+ 단 추가' }))
-      const fours = screen.getAllByRole('button', { name: '4R' })
-      expect(fours[1]).toHaveAttribute('aria-pressed', 'true')
-      expect(screen.getAllByRole('button', { name: '3R' })[1]).toBeDisabled()
+      // 「+ 단 추가」 는 뺐다 — 새 계획은 목표 하나다 (2026-09-17)
+      expect(
+        screen.queryByRole('button', { name: '+ 단 추가' }),
+      ).not.toBeInTheDocument()
     },
   )
 

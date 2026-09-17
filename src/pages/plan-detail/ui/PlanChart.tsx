@@ -795,9 +795,6 @@ export function PlanChart({
           💀 여기 같이 넣었더니 값이 길어질 때 `flex-wrap` 이 줄을 접어
              헤더가 높아지고 차트가 그만큼 밀렸다 — 마우스를 옮길 때마다 들썩였다 */}
       <div className="flex items-center gap-x-3 px-1">
-        <span className="text-[11px] font-bold tracking-wide text-white/45">
-          차트
-        </span>
         {/* 칩이 켜지면 그 계열의 색이 들어온다. 색이 곧 범례다 (디자인 2장 ⑦) */}
         <div className="ml-auto flex items-center gap-1.5">
           <Chip on={showSR} tone={SR_TONE} onClick={() => setShowSR((v) => !v)}>
