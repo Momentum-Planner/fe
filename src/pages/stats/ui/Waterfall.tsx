@@ -66,6 +66,7 @@ export function Waterfall({
   onPeriod,
   sells,
   children,
+  bare,
 }: {
   flow: MonthFlow[]
   period: Period | null
@@ -78,6 +79,11 @@ export function Waterfall({
    * 큰 둘」을 말하는 것이라, 카드가 갈리면 둘이 다른 이야기처럼 읽힌다.
    */
   children?: ReactNode
+  /**
+   * 카드 없이 차트만 (Q15 ①③). 요약 판의 네 칸 중 세 칸을 차지하고, 제목과
+   * 기간 고르기는 판의 머리줄이 든다.
+   */
+  bare?: boolean
 }) {
   const svgRef = useRef<SVGSVGElement>(null)
   /**
@@ -137,40 +143,8 @@ export function Waterfall({
 
   const linePts = flow.map((f, i) => `${cx(i)},${y(f.cum)}`).join(' ')
 
-  return (
-    <Panel
-      title="월별 손익과 누적"
-      desc={`매도 ${sells}건 — 분할 매도를 묶지 않습니다 · 막대를 누르면 그 달, 가로로 끌면 그 기간`}
-      right={
-        /**
-         * **끄는 것 말고 «적는» 길도 연다.** 막대를 누르는 것은 「이 달」이
-         * 손에 잡힐 때 빠르지만, 「작년 4분기」처럼 **먼저 아는 기간**은
-         * 끌어서 맞추기 어렵다. 같은 값을 두 손잡이가 쥔다.
-         */
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] text-white/35">기간</span>
-          <MonthPick
-            value={from}
-            months={months}
-            onPick={(m) => onPeriod({ from: m, to: m > to ? m : to })}
-          />
-          <span className="text-[11px] text-white/25">~</span>
-          <MonthPick
-            value={to}
-            months={months}
-            onPick={(m) => onPeriod({ from: m < from ? m : from, to: m })}
-          />
-          <button
-            type="button"
-            onClick={() => onPeriod(null)}
-            disabled={!period}
-            className="rounded-pill border border-white/12 px-3 py-1 text-[11px] text-white/60 transition enabled:hover:bg-white/8 disabled:opacity-25"
-          >
-            전체 기간
-          </button>
-        </div>
-      }
-    >
+  const chart = (
+    <>
       <svg
         ref={svgRef}
         viewBox={`0 0 ${VW} ${VH}`}
@@ -348,15 +322,96 @@ export function Waterfall({
         <Legend />
         <span className="ml-auto text-[11px] text-white/30">
           {period
-            ? `${rangeLabel(period)}로 위의 요약이 다시 계산됩니다`
+            ? `${rangeLabel(period)}로 요약이 다시 계산됩니다`
             : '전체 기간을 보고 있습니다'}
         </span>
       </div>
+    </>
+  )
 
+  if (bare) return <div className="flex flex-col gap-2">{chart}</div>
+
+  return (
+    <Panel
+      title="월별 손익과 누적"
+      desc={`매도 ${sells}건 — 분할 매도를 묶지 않습니다 · 막대를 누르면 그 달, 가로로 끌면 그 기간`}
+      right={
+        /**
+         * **끄는 것 말고 «적는» 길도 연다.** 막대를 누르는 것은 「이 달」이
+         * 손에 잡힐 때 빠르지만, 「작년 4분기」처럼 **먼저 아는 기간**은
+         * 끌어서 맞추기 어렵다. 같은 값을 두 손잡이가 쥔다.
+         */
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-white/35">기간</span>
+          <MonthPick
+            value={from}
+            months={months}
+            onPick={(m) => onPeriod({ from: m, to: m > to ? m : to })}
+          />
+          <span className="text-[11px] text-white/25">~</span>
+          <MonthPick
+            value={to}
+            months={months}
+            onPick={(m) => onPeriod({ from: m < from ? m : from, to: m })}
+          />
+          <button
+            type="button"
+            onClick={() => onPeriod(null)}
+            disabled={!period}
+            className="rounded-pill border border-white/12 px-3 py-1 text-[11px] text-white/60 transition enabled:hover:bg-white/8 disabled:opacity-25"
+          >
+            전체 기간
+          </button>
+        </div>
+      }
+    >
+      {chart}
       {children && (
         <div className="border-t border-white/8 pt-4">{children}</div>
       )}
     </Panel>
+  )
+}
+
+/**
+ * 기간 고르기 — 판의 머리줄에 선다 (Q15). 차트를 누르거나 끄는 것과 **같은 값**을 쥔다.
+ */
+export function PeriodPick({
+  flow,
+  period,
+  onPeriod,
+}: {
+  flow: MonthFlow[]
+  period: Period | null
+  onPeriod: (p: Period | null) => void
+}) {
+  if (flow.length === 0) return null
+  const months = flow.map((f) => f.month)
+  const from = period?.from ?? months[0]!
+  const to = period?.to ?? months[months.length - 1]!
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[11px] text-white/35">기간</span>
+      <MonthPick
+        value={from}
+        months={months}
+        onPick={(m) => onPeriod({ from: m, to: m > to ? m : to })}
+      />
+      <span className="text-[11px] text-white/25">~</span>
+      <MonthPick
+        value={to}
+        months={months}
+        onPick={(m) => onPeriod({ from: m < from ? m : from, to: m })}
+      />
+      <button
+        type="button"
+        onClick={() => onPeriod(null)}
+        disabled={!period}
+        className="rounded-pill border border-white/12 px-3 py-1 text-[11px] text-white/60 transition enabled:hover:bg-white/8 disabled:opacity-25"
+      >
+        전체 기간
+      </button>
+    </div>
   )
 }
 

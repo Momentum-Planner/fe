@@ -1,51 +1,98 @@
 /**
- * 요약 — **성과 넷 + 위험 넷.**
+ * 요약 판 — **네 칸 그리드 하나에 세 층** (Q15).
  *
  * ```text
- * 성과   승률 · 손익비 · 기대값 · 평균 수익률        「벌었나」
- * 위험   위험노출 · 자본 감소 · 연속 손실 · 벽 왼쪽   「무엇을 걸고 벌었나」
+ * [요약  기간 25년 6월 ~ 26년 4월  전체 기간]                           [표본 46건]
+ * [승률      ] [손익비    ] [기대수익  ] [평균 수익률]     1순위 · 26px
+ * [월별 손익과 누적 ───────────────────] [위험 셋    ]     2 · 3순위
+ * [최대 수익 ─────────────] [최대 손실 ─────────────]     3순위 · 한 줄
  * ```
  *
- * ⚠️ **최대 둘은 차트 아래로 갔다** (2026-09-14) — 한 거래의 이야기라
- *    종목명과 스냅샷 열 줄이 딸려 오고, 그것이 지표 여덟과 같은 칸에 서면
- *    「숫자 여덟」 사이에 「문장 둘」이 낀 모양이 된다.
+ * 💀 **성과 넷이 맨 위** (Q15 ①). 차트 중심(가)과 번갈아 보고 골랐다.
  *
- * 💀 **둘을 한 카드로 묶었다.** 같은 기간의 같은 매도 집합을 다른 각도로 접은
- * 것이라, 카드 두 장으로 흩어 두면 「어디까지가 한 기간의 이야기인가」를
- * 카드마다 다시 읽어야 한다. 머리줄의 기간 하나가 아래 여덟 값을 설명한다.
+ * 💀 **네 칸이 세 층을 관통한다** (Q15 ③). 차트 세 칸 · 위험 한 칸 · 최대 둘은
+ * 두 칸씩 — 칸 경계가 세로로 이어져 층이 따로 놀지 않는다.
  *
- * 💀 **워터폴 «옆»에 선다** (2026-09-14) — *「데이터를 같이 봐야 되는데 안
- * 보이잖아」*. 위아래로 두면 달을 고르는 손과 값이 바뀌는 자리가 한 화면에
- * 안 들어와서, 고르고 → 스크롤하고 → 읽고를 반복해야 했다. **고르는 곳과
- * 바뀌는 곳이 같은 판에 있어야 한다.**
+ * 💀 **기간 고르기는 차트가 아니라 판 머리줄에 있다** (Q15 ⑤). 차트는 숫자
+ * «아래»라 거기서 고르면 「아래에서 고르면 위가 바뀐다」. 차트를 누르고 끄는
+ * 길은 그대로 있다.
  */
 
-import type { RiskStat, Summary as Sum, WallStat } from '../model/aggregate'
-import { Summary } from './Summary'
+import type {
+  Closed,
+  MonthFlow,
+  Period,
+  RiskStat,
+  Summary as Sum,
+} from '../model/aggregate'
+import { MIN } from '../model/aggregate'
+import { PeakTrades } from './PeakTrades'
+import { PerfTiles, RiskList } from './Summary'
+import { PeriodPick, Waterfall } from './Waterfall'
+import { SampleNote } from './parts'
 
 export function Overview({
+  flow,
+  period,
+  onPeriod,
+  sells,
+  picked,
   sum,
-  wall,
   risk,
-  range,
 }: {
+  flow: MonthFlow[]
+  period: Period | null
+  onPeriod: (p: Period | null) => void
+  sells: number
+  picked: Closed[]
   sum: Sum
-  wall: WallStat
   risk: RiskStat
-  range: string
 }) {
   return (
-    <div className="card flex h-full flex-col gap-4 px-5 py-4">
-      <header className="flex flex-wrap items-baseline gap-x-2">
+    <div className="card flex flex-col gap-4 px-5 py-4">
+      {/**
+       * **기간이 제목 바로 옆** (Q15 ⑤). 「지금 어느 기간의 숫자인가」가 이 판에서
+       * 가장 먼저 알아야 할 맥락이라 첫 시선에 둔다. 고른 기간이 곧 이름이라
+       * 기간 이름 글자는 따로 적지 않는다.
+       */}
+      <header className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <h2 className="t-h3 m-0 text-white/90">요약</h2>
-        <span className="font-number text-[11px] text-white/40">{range}</span>
-        <span className="ml-auto text-[11px] text-white/25">
-          왼쪽에서 기간을 고르면 다시 계산됩니다
+        <PeriodPick flow={flow} period={period} onPeriod={onPeriod} />
+        <span className="ml-auto">
+          <SampleNote n={sum.n} short={Math.max(0, MIN.avg - sum.n)} />
         </span>
       </header>
 
-      <div className="flex-1">
-        <Summary s={sum} wall={wall} risk={risk} />
+      {/**
+       * **층은 선이 아니라 여백이 가른다** (Q15 ④ 근접성). 층 안은 좁게,
+       * 층 사이는 넓게 — 최대 둘 위의 선을 걷었다.
+       */}
+      <div className="grid grid-cols-4 gap-x-4">
+        <PerfTiles s={sum} />
+      </div>
+
+      <div className="mt-4 grid grid-cols-4 gap-x-4">
+        <div className="col-span-3 flex flex-col gap-1">
+          <div className="flex items-baseline gap-2 text-[11px]">
+            <span className="text-fg-tertiary">월별 손익과 누적</span>
+            <span className="text-white/30">
+              막대를 누르면 그 달, 가로로 끌면 그 기간
+            </span>
+          </div>
+          <Waterfall
+            flow={flow}
+            period={period}
+            onPeriod={onPeriod}
+            sells={sells}
+            bare
+          />
+        </div>
+        {/* 위험 셋은 차트 높이만큼 펼친다 — 아래가 비면 차트의 곁값처럼 읽혔다 (Q15 ④) */}
+        <RiskList risk={risk} />
+      </div>
+
+      <div className="mt-3 grid grid-cols-4 gap-x-4">
+        <PeakTrades closed={picked} />
       </div>
     </div>
   )

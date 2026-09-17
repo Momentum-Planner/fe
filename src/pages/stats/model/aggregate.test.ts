@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { TradeRecord, TradeSnapshot } from '@/entities/tradeRecord'
 import {
-  gatePassed,
   inPeriod,
   isClosed,
   monthRange,
@@ -11,7 +10,6 @@ import {
   isNoneGroup,
   filterGroups,
   groupRows,
-  listStat,
   liveRows,
   recordRows,
   sortGroups,
@@ -205,13 +203,10 @@ describe('위험 관리 — 「무엇을 걸고 벌었나」', () => {
 })
 
 describe('계획 유무 — 둘이다', () => {
-  it('게이트는 «다른» 축이 센다 — 계획이 있으면 트렌드가 몇이든 「있음」이다', () => {
+  it('계획이 있으면 트렌드가 몇이든 「있음」이다', () => {
     expect(planClassOf(buy())).toBe('YES')
     expect(planClassOf(buy({ snapshot: snap({ trendPassed: 7 }) }))).toBe('YES')
     expect(planClassOf(buy({ planId: null }))).toBe('NONE')
-
-    expect(gatePassed(buy())).toBe(true)
-    expect(gatePassed(buy({ snapshot: snap({ trendPassed: 7 }) }))).toBe(false)
   })
 })
 
@@ -299,26 +294,12 @@ describe('목록 — 계획이 제목, 체결이 행 (Q13)', () => {
     )
     expect(g!.sells).toBe(2)
     expect(g!.realized).toBe(200_000)
+    // 수량 가중 % — Σ손익 20만 ÷ Σ(평단 10만 × 10주 × 2건) = 10%
+    expect(g!.returnPct).toBeCloseTo(10)
 
     const [only] = groupRows(recordRows([buy({ planId: 9 })]))
     expect(only!.sells).toBe(0)
-  })
-
-  it('머리줄의 셈은 «매도»를 센다 — 위의 요약과 같은 수여야 한다', () => {
-    const stat = listStat(
-      recordRows([
-        buy({ filledAt: '2025-06-02' }),
-        sell(300_000, { filledAt: '2025-06-20' }),
-        sell(-100_000, { filledAt: '2025-06-25' }),
-        buy({ planId: null, planTitle: null, filledAt: '2025-07-01' }),
-        sell(-50_000, { planId: null, filledAt: '2025-07-05' }),
-      ]),
-    )
-    expect(stat.fills).toBe(5)
-    expect(stat.buys).toBe(2)
-    expect(stat.sells).toBe(3)
-    expect(stat.realized).toBe(150_000)
-    expect(stat.planned + stat.unplanned).toBe(stat.sells)
+    expect(only!.returnPct).toBeNull()
   })
 
   describe('필터', () => {
@@ -347,10 +328,9 @@ describe('목록 — 계획이 제목, 체결이 행 (Q13)', () => {
     const all = LIST_FILTER_ALL
     const count = (f: typeof all) => liveRows(filterGroups(groups(), f)).length
 
-    it('계획 · 게이트 · 종목은 행을 거른다', () => {
+    it('계획 · 종목은 행을 거른다', () => {
       expect(count(all)).toBe(4)
       expect(count({ ...all, plan: 'NONE' })).toBe(2)
-      expect(count({ ...all, gate: 'PASS' })).toBe(2)
       expect(count({ ...all, q: '카카' })).toBe(2)
       expect(count({ ...all, q: '0357' })).toBe(2)
     })

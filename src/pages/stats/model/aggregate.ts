@@ -341,9 +341,6 @@ export const PLAN_CLASS_LABEL: Record<PlanClass, string> = {
 export const planClassOf = (r: TradeRecord): PlanClass =>
   r.planId === null ? 'NONE' : 'YES'
 
-/** 게이트 — ①-1 트렌드 템플릿 8/8. **계획 유무와 «다른» 축이다** */
-export const gatePassed = (r: TradeRecord) => r.snapshot?.trendPassed === 8
-
 // ─────────────── ⑥ 목록 ───────────────
 
 /**
@@ -392,8 +389,11 @@ export interface PlanGroup {
   sells: number
   /** 매도 행 손익의 합. 매도 행은 따로 서므로 분할 매도를 숨기지 않는다 */
   realized: number
-  /** 스냅샷은 계획의 것이다 — 체결마다 반복하지 않는다 (Q13 ③) */
-  snapshot: TradeRecord['snapshot']
+  /**
+   * 매도들을 수량으로 가중한 수익률 % — Σ손익 ÷ Σ(진입 평단 × 수량).
+   * 매도가 없으면 `null` (Q14 ⑥)
+   */
+  returnPct: number | null
 }
 
 /** 계획 없는 줄의 키 머리. 한 줄이 매도 하나다 */
@@ -415,6 +415,8 @@ const makeGroup = (key: string, list: FillRow[]): PlanGroup => {
   )
   const first = asc[0]!.rec
   const closed = asc.map((r) => r.rec).filter(isClosed)
+  const realized = closed.reduce((a, r) => a + r.derived.profit, 0)
+  const cost = closed.reduce((a, r) => a + r.derived.entryPrice * r.quantity, 0)
   return {
     key,
     planId: first.planId,
@@ -425,8 +427,8 @@ const makeGroup = (key: string, list: FillRow[]): PlanGroup => {
     firstAt: first.filledAt,
     lastAt: asc[asc.length - 1]!.rec.filledAt,
     sells: closed.length,
-    realized: closed.reduce((a, r) => a + r.derived.profit, 0),
-    snapshot: asc.find((r) => r.rec.snapshot)?.rec.snapshot ?? null,
+    realized,
+    returnPct: cost > 0 ? (realized / cost) * 100 : null,
   }
 }
 
@@ -502,12 +504,13 @@ export function sortGroups(groups: PlanGroup[], order: ListOrder): PlanGroup[] {
  *
  * 💀 **구분(매수/매도)을 뺐다** (Q13 ⑤). 「매도만」을 누르면 묶음마다 매수
  * 행이 빠져 이야기가 끊긴다 — 브라우징과 부딪히는 유일한 손잡이였다.
- * 매수·매도 수는 요약 줄이 말한다.
+ *
+ * 💀 **게이트(트렌드 8/8)도 뺐다** (Q14 ⑦). 줄에서 ◆/◇ 를 걷은 뒤 거르기만
+ * 남으면 걸린 줄이 왜 남았는지 안 보였다. 「게이트를 지킨 거래가 나았나」는
+ * 목록에서 찾을 질문이 아니라 통계의 질문이다.
  */
 export interface ListFilter {
   plan: 'ALL' | PlanClass
-  /** ①-1 게이트 — 트렌드 8/8. **계획 유무와 다른 축이다** */
-  gate: 'ALL' | 'PASS' | 'SHORT'
   /**
    * 체결일 `YYYY-MM-DD` 포함. 빈 문자열이 「끝 없음」이다.
    *
@@ -525,7 +528,6 @@ export interface ListFilter {
 
 export const LIST_FILTER_ALL: ListFilter = {
   plan: 'ALL',
-  gate: 'ALL',
   from: '',
   to: '',
   q: '',
@@ -533,17 +535,16 @@ export const LIST_FILTER_ALL: ListFilter = {
 
 /** 아무것도 안 걸렸나. **값으로 견준다** — 같은 값의 다른 객체가 온다 */
 export const isAllFilter = (f: ListFilter) =>
-  f.plan === 'ALL' && f.gate === 'ALL' && !f.from && !f.to && !f.q.trim()
+  f.plan === 'ALL' && !f.from && !f.to && !f.q.trim()
 
 const inDays = (r: TradeRecord, f: ListFilter) =>
   (!f.from || r.filledAt >= f.from) && (!f.to || r.filledAt <= f.to)
 
-/** 계획 · 게이트 · 종목은 «행»의 성질이다. 계획 묶음 안에서는 갈리지 않는다 */
+/** 계획 · 종목은 «행»의 성질이다. 계획 묶음 안에서는 갈리지 않는다 */
 const matchRow = (row: FillRow, f: ListFilter) => {
   const q = f.q.trim().toLowerCase()
   return (
     (f.plan === 'ALL' || row.planClass === f.plan) &&
-    (f.gate === 'ALL' || (f.gate === 'PASS') === gatePassed(row.rec)) &&
     (!q ||
       row.rec.stockName.toLowerCase().includes(q) ||
       row.rec.stockCode.startsWith(q))
@@ -554,7 +555,7 @@ const matchRow = (row: FillRow, f: ListFilter) => {
  * 묶음에 필터를 건다.
  *
  * ```text
- * 계획 · 게이트 · 종목   행을 거른다 — 계획 묶음은 통째로 남거나 통째로 빠진다
+ * 계획 · 종목          행을 거른다 — 계획 묶음은 통째로 남거나 통째로 빠진다
  *                      (계획에 없음은 종목이 섞여 있어 행 단위로 갈린다)
  * 체결일               범위 안의 행이 하나라도 있으면 묶음이 남는다. 밖은 dim
  * ```
@@ -580,45 +581,6 @@ export const liveRows = (groups: PlanGroup[]): FillRow[] =>
 export const dateBounds = (rows: FillRow[]) => {
   const days = rows.map((r) => r.rec.filledAt).sort()
   return { min: days[0] ?? '', max: days[days.length - 1] ?? '' }
-}
-
-/**
- * 목록 «위»에 서는 셈. **목록이 통계를 내기 위한 것이라면 그 통계가 보여야
- * 한다** — 행 여든세 개를 눈으로 세게 두지 않는다.
- *
- * ⚠️ 기간 선택에 안 걸린다. **필터에는 걸린다** — 머리줄이 «지금 보고 있는
- *    것»을 설명해야 하므로 거른 뒤의 집합으로 센다.
- */
-export interface ListStat {
-  fills: number
-  buys: number
-  sells: number
-  /** 매도 행 손익금액의 합 — 실현된 것만이다 */
-  realized: number
-  wins: number
-  losses: number
-  /** 계획 유무 둘. 세는 단위는 **매도** 다 — 위의 통계와 같아야 한다 */
-  planned: number
-  unplanned: number
-  /** 게이트(트렌드 8/8) 통과 — 배지 ◆ 가 붙은 매도 */
-  gatePass: number
-}
-
-export function listStat(rows: FillRow[]): ListStat {
-  const records = rows.map((r) => r.rec)
-  const sells = records.filter(isClosed)
-
-  return {
-    fills: records.length,
-    buys: records.length - sells.length,
-    sells: sells.length,
-    realized: sells.reduce((a, r) => a + r.derived.profit, 0),
-    wins: sells.filter((r) => r.derived.profit > 0).length,
-    losses: sells.filter((r) => r.derived.profit <= 0).length,
-    planned: sells.filter((r) => planClassOf(r) === 'YES').length,
-    unplanned: sells.filter((r) => planClassOf(r) === 'NONE').length,
-    gatePass: sells.filter(gatePassed).length,
-  }
 }
 
 // ─────────────── 잔돌 ───────────────

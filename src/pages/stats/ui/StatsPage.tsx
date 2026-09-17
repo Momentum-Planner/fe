@@ -49,14 +49,10 @@ import {
   recordRows,
   riskStat,
   summarize,
-  wallStat,
 } from '../model/aggregate'
 import type { Period } from '../model/aggregate'
 import { Overview } from './Overview'
-import { PeakTrades } from './PeakTrades'
 import { RecordList } from './RecordList'
-import { Waterfall } from './Waterfall'
-import { rangeLabel } from './parts'
 
 export function StatsPage() {
   const { data: records, isError } = useTradeList()
@@ -73,7 +69,6 @@ export function StatsPage() {
   const flow = useMemo(() => monthlyFlow(closed), [closed])
   const rows = useMemo(() => recordRows(records ?? []), [records])
   const sum = useMemo(() => summarize(picked), [picked])
-  const wall = useMemo(() => wallStat(picked), [picked])
   const risk = useMemo(() => riskStat(picked), [picked])
 
   if (isError)
@@ -106,27 +101,18 @@ export function StatsPage() {
   return (
     <Shell>
       {/**
-       * ① 워터폴(왼쪽) + 요약(오른쪽) — **한 판에 같이 선다.**
-       * 달을 고르는 손과 값이 바뀌는 자리가 떨어져 있으면
-       * 고르고 → 스크롤하고 → 읽고를 반복해야 한다.
+       * ① 요약 판 — 성과 넷 · 차트 + 위험 · 최대 둘이 **네 칸 그리드 하나**에 선다
+       * (Q15). 기간을 고르는 손과 값이 바뀌는 자리가 한 판에 있다.
        */}
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <Waterfall
-          flow={flow}
-          period={period}
-          onPeriod={setPeriod}
-          sells={closed.length}
-        >
-          {/* 차트가 「언제」를 말하고, 같은 카드 안에서 「그중 가장 큰 둘」을 */}
-          <PeakTrades closed={picked} range={rangeLabel(period)} />
-        </Waterfall>
-        <Overview
-          sum={sum}
-          wall={wall}
-          risk={risk}
-          range={rangeLabel(period)}
-        />
-      </div>
+      <Overview
+        flow={flow}
+        period={period}
+        onPeriod={setPeriod}
+        sells={closed.length}
+        picked={picked}
+        sum={sum}
+        risk={risk}
+      />
 
       <RecordList rows={rows} />
     </Shell>

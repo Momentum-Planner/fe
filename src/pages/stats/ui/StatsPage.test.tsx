@@ -45,7 +45,8 @@ describe('거래 통계 — 요약 · 워터폴 · 기록', () => {
     // 요약 한 묶음 안에 세 층
     expect(screen.getByText('최대 수익')).toBeInTheDocument()
     expect(screen.getByText('최대 손실')).toBeInTheDocument()
-    expect(screen.getByText('성과')).toBeInTheDocument()
+    // 성과 넷은 칸 이름이 곧 제목이다 — 「성과」 줄 이름은 걷었다 (Q15)
+    expect(screen.getByText('승률')).toBeInTheDocument()
     expect(screen.getByText('위험')).toBeInTheDocument()
     expect(screen.getByText('월별 손익과 누적')).toBeInTheDocument()
     expect(screen.getByText('거래 기록')).toBeInTheDocument()
@@ -70,14 +71,14 @@ describe('거래 통계 — 요약 · 워터폴 · 기록', () => {
       expect(screen.getAllByText(name)).toHaveLength(1)
   })
 
-  it('위험 넷이 성과와 «따로» 선다', async () => {
+  it('위험 셋이 성과와 «따로» 선다', async () => {
     draw()
     await screen.findByText('위험')
-    for (const k of ['평균 위험노출', '자본 감소', '연속 손실', '벽 왼쪽'])
+    for (const k of ['평균 위험노출', '자본 감소', '연속 손실'])
       expect(screen.getByText(k)).toBeInTheDocument()
-    expect(
-      screen.getByText(/1R이 없어 «벽 왼쪽»과 «R 평균» 셈에 없습니다/),
-    ).toBeInTheDocument()
+    // 「벽 왼쪽」 은 뺐고 「기대값」 은 「기대수익」 이다 (Q15 ⑥)
+    expect(screen.queryByText('벽 왼쪽')).not.toBeInTheDocument()
+    expect(screen.getByText('기대수익')).toBeInTheDocument()
   })
 
   it('① 은 «적는» 길도 연다 — 머리줄에서 기간을 고른다', async () => {
@@ -113,7 +114,8 @@ describe('거래 통계 — 요약 · 워터폴 · 기록', () => {
     expect(
       screen.queryByRole('button', { name: /매수\s*37/ }),
     ).not.toBeInTheDocument()
-    expect(screen.getByText('게이트')).toBeInTheDocument()
+    // 게이트 거르기는 뺐다 (Q14 ⑦)
+    expect(screen.queryByText('게이트')).not.toBeInTheDocument()
     expect(
       screen.getByRole('searchbox', { name: '종목 찾기' }),
     ).toBeInTheDocument()
