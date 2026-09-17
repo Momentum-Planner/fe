@@ -12,6 +12,7 @@ import { IndicatorPanel } from './IndicatorPanel'
 import {
   VOLUME_SERIES_ID,
   bandOptions,
+  paneLegend,
   defaultLayers,
   panes,
   specOf,
@@ -216,6 +217,19 @@ type Candle = {
   closePrice: number
 }
 
+/**
+ * 짚은 점의 **시각**으로 봉을 찾는다.
+ *
+ * 💀 `point.index` 로 찾았더니 헤더가 엉뚱한 날을 보였다 — 십자선은 2026-08-06 인데 헤더는
+ *    2025-10-21. `index` 는 «보이는 구간으로 잘린» 배열 안의 순번이라 전체 배열과 어긋난다.
+ */
+function barAt(sorted: Candle[], x: number): HoveredBar | null {
+  return toBar(
+    sorted,
+    sorted.findIndex((c) => toTime(c.tradeDate) === x),
+  )
+}
+
 function toBar(sorted: Candle[], i: number): HoveredBar | null {
   const c = sorted[i]
   if (!c) return null
@@ -320,6 +334,11 @@ export function PlanChart({
    *    (진입 · 스톱 · 목표 …)은 그대로라 **다시 안 돌았다.** 새 차트에는 계획 선이 없었다.
    */
   const [built, setBuilt] = useState(0)
+  /**
+   * 지표 칸마다 윗변 y(px) — 칸 이름과 범례를 캔버스 «밖» HTML 로 얹는 자리.
+   * 💀 축 제목(useHTML)으로 넣었더니 오른쪽 축에서 뻗다가 잘려 「MACD — MACD선 —」 에서 끊겼다.
+   */
+  const [paneTops, setPaneTops] = useState<Record<string, number>>({})
   /**
    * 집기 콜백을 «ref 로» 든다.
    *
@@ -525,7 +544,7 @@ export function PlanChart({
           offset: 0,
           labels: { enabled: false },
         }),
-        // 켜진 지표마다 칸 하나. 이름을 칸 왼쪽 위에 박아 범례를 없앤다 (디자인 2장 ⑦)
+        // 켜진 지표마다 칸 하나. 이름 · 선별 범례는 칸 왼쪽 위 (디자인 2장 ⑦)
         ...own.map((l, i) =>
           priceAxis({
             id: `pane-${l.key}`,
@@ -533,15 +552,7 @@ export function PlanChart({
             height: box.own[i]?.height,
             offset: 0,
             labels: { enabled: false },
-            title: {
-              text: specOf(l.id)?.label,
-              align: 'high',
-              rotation: 0,
-              y: -4,
-              x: 4,
-              textAlign: 'left',
-              style: { color: 'rgba(255,255,255,0.40)', fontSize: '10px' },
-            },
+            // 칸 이름 · 범례는 캔버스 밖 HTML 로 얹는다 (아래 `paneTops`)
           }),
         ),
       ],
@@ -556,7 +567,7 @@ export function PlanChart({
           point: {
             events: {
               mouseOver() {
-                setBar(toBar(sorted, this.index))
+                setBar(barAt(sorted, this.x))
               },
             },
           },
@@ -602,7 +613,7 @@ export function PlanChart({
             color: l.color,
             lineWidth: 1.2,
             marker: { enabled: false },
-            // 밴드형(볼린저·엔벨로프)은 색이 «셋»이라 따로 매핑한다
+            // 선이 여럿인 지표(밴드형 · MACD · 스토캐스틱)는 선마다 색을 따로 매핑한다
             ...(spec?.lines ? bandOptions(l) : {}),
             params:
               l.id === 'obv' || l.id === 'vbp'
@@ -629,6 +640,12 @@ export function PlanChart({
     })
     chartRef.current = chart
     setBuilt((n) => n + 1)
+    setPaneTops(
+      Object.fromEntries(
+        // 칸 배치는 `panes()` 가 정한 픽셀이다 — 플롯 윗변만 더한다
+        own.map((l, i) => [l.key, chart.plotTop + (box.own[i]?.top ?? 0)]),
+      ),
+    )
 
     /**
      * 그 날짜의 봉을 **미리 짚어 둔다.**
@@ -648,7 +665,7 @@ export function PlanChart({
       : undefined
     if (target) {
       chart.xAxis[0]?.drawCrosshair(undefined, target)
-      setBar(toBar(sorted, target.index))
+      setBar(barAt(sorted, target.x))
     }
 
     return () => {
@@ -791,12 +808,17 @@ export function PlanChart({
 
   return (
     <div>
-      {/* 헤더 — **값이 안 변하는 것만** 둔다. 시고저종은 차트 위에 얹는다.
-          💀 여기 같이 넣었더니 값이 길어질 때 `flex-wrap` 이 줄을 접어
-             헤더가 높아지고 차트가 그만큼 밀렸다 — 마우스를 옮길 때마다 들썩였다 */}
-      <div className="flex items-center gap-x-3 px-1">
+      {/* 헤더 — 시고저종 | 칩. **한 줄에** 둔다 (2026-09-17).
+          💀 예전에 여기 같이 넣었더니 값이 길어질 때 `flex-wrap` 이 줄을 접어
+             헤더가 높아지고 차트가 밀렸다. 그래서 차트 위에 따로 얹었는데, 「차트」 글자를
+             빼고 나니 한 줄이 비어 있었다. **줄바꿈을 막고 높이를 박아** 같은 줄로 올린다 —
+             길면 시고저종 쪽이 잘리지 차트가 밀리지 않는다 */}
+      <div className="flex h-7 items-center gap-x-3 px-1">
+        <div className="min-w-0 flex-1 overflow-hidden">
+          {bar && <BarRow bar={bar} />}
+        </div>
         {/* 칩이 켜지면 그 계열의 색이 들어온다. 색이 곧 범례다 (디자인 2장 ⑦) */}
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1.5">
           <Chip on={showSR} tone={SR_TONE} onClick={() => setShowSR((v) => !v)}>
             지지·저항
           </Chip>
@@ -809,26 +831,34 @@ export function PlanChart({
           불러오는 중…
         </div>
       ) : (
-        /* ── 시고저종을 차트 «좌측 최상단»에 얹는다 ──────────────────────
-           겹쳐 놓는데도 봉을 안 가리는 이유는 `chartOptions` 의 `marginTop` 이
-           **플롯 밖에 그만큼 자리를 비워 두기** 때문이다. 줄이 앉는 자리와
-           봉이 그려지는 자리가 애초에 안 겹친다.
-
-           💀 한때 헤더에 «따로 한 줄»로 뺐더니 값이 길어질 때마다 그 줄이
-              접히고 차트가 밀렸다. 겹쳐 두면 아래를 밀 수가 없다.
-           ⚠️ `pointer-events-none` — 이 줄이 마우스를 먹으면 그 밑의 봉을
-              짚을 수 없어 값이 갱신되지 않는다. */
+        /* 차트 판. 시고저종은 위 헤더 줄로 올라갔다 (2026-09-17).
+           위에 얹는 것은 지표 칸 범례뿐이다 — `pointer-events-none` 이라 봉을 짚는 걸 안 막는다 */
         <div className="relative mt-2">
           {/* 집는 중에만 십자 — 평소에는 끌어서 옮기는 판이다 */}
           <div
             ref={boxRef}
             className={cn('w-full', picking && 'cursor-crosshair')}
           />
-          {bar && (
-            <div className="pointer-events-none absolute top-0 left-2 z-10">
-              <BarRow bar={bar} />
-            </div>
-          )}
+          {/* 지표 칸 이름 + 선별 범례 — 칸 왼쪽 위. 색만으로 어느 선인지 읽힌다 */}
+          {layers
+            .filter((l) => paneTops[l.key] != null)
+            .map((l) => {
+              const lg = paneLegend(l)
+              return (
+                <div
+                  key={l.key}
+                  className="bg-bg-surface/85 pointer-events-none absolute left-2 z-10 flex items-baseline gap-2.5 rounded px-1 text-[10px] whitespace-nowrap"
+                  style={{ top: (paneTops[l.key] ?? 0) + 2 }}
+                >
+                  <span className="text-white/45">{lg.label}</span>
+                  {lg.items.map((it) => (
+                    <span key={it.label} style={{ color: it.color }}>
+                      {it.mark} {it.label}
+                    </span>
+                  ))}
+                </div>
+              )
+            })}
           {/* CC BY-NC 크레딧 — **차트 카드 오른쪽 아래** (Q12 · CLAUDE.md 「프론트 미정」 닫힘).
               `credits` 는 끈 채로 두고 캔버스 밖에서 적는다 — 안에 두면 봉과 겹친다 */}
           <div className="mt-1 text-right text-[10px] text-white/30">
@@ -856,7 +886,7 @@ function BarRow({ bar }: { bar: HoveredBar }) {
   const n = (v: number) => v.toLocaleString('ko-KR')
   const up = (bar.rate ?? 0) >= 0
   return (
-    <div className="font-number flex items-baseline gap-x-3 text-[11px] tabular-nums">
+    <div className="font-number flex items-baseline gap-x-3 text-[11px] whitespace-nowrap tabular-nums">
       <span className="text-white/40">{bar.date}</span>
       <Cell label="시" value={n(bar.open)} />
       <Cell label="고" value={n(bar.high)} />

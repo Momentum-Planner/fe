@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { SERIES_COLORS } from '@/shared/lib/chartOptions'
 import { cn } from '@/shared/lib/cn'
 import {
   INDICATORS,
+  PICK_COLORS,
   makeLayer,
   readParam,
   specOf,
@@ -24,8 +24,8 @@ import type { IndicatorSpec, Layer } from './indicators'
  * 보는 것이 트렌드 템플릿을 눈으로 확인하는 방법이라서다 (①-1).
  */
 
-/** 색은 «한 곳»에서 온다 — 차트 기본 팔레트와 패널이 어긋나면 안 된다 */
-const PALETTE = [...SERIES_COLORS]
+/** 색은 «한 곳»에서 온다 — 지표 기본색 + 차트 공용 팔레트 (`indicators.ts`) */
+const PALETTE = PICK_COLORS
 
 export function IndicatorPanel({
   layers,
@@ -184,7 +184,7 @@ export function IndicatorPanel({
                           ✕
                         </button>
 
-                        {/* 밴드형 — 선이 셋이라 색을 하나만 주면 어느 게 상한인지 모른다 */}
+                        {/* 선이 여럿 — 색을 하나만 주면 어느 선이 무엇인지 모른다 (밴드형 · MACD · 스토캐스틱) */}
                         {spec.lines && (
                           <div className="mt-1 flex w-full flex-col gap-1.5 border-t border-white/[0.06] pt-2">
                             {spec.lines.map((ln) => {

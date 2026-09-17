@@ -42,7 +42,7 @@ export type IndicatorSpec = {
   pane: Pane
   params: ParamSpec[]
   /**
-   * 색을 «정하지 않는다» — `SERIES_COLORS` 에서 켜는 순서대로 붙는다.
+   * 색을 «정하지 않는다» — 이평선은 기간으로(`MA_COLOR`), 나머지는 `SAFE` 에서 붙는다.
    * 여기 적는 것은 그 기본을 «벗어나야» 하는 지표뿐이다.
    */
   color?: string
@@ -56,12 +56,67 @@ export type IndicatorSpec = {
    * 색을 하나만 주면 셋이 같은 색으로 겹쳐 나온다 — 어느 선이 상한인지 알 수 없다.
    * 이 목록이 있으면 패널이 선마다 색과 표시를 따로 준다.
    */
-  lines?: { key: BandLine; label: string }[]
+  lines?: { key: LineKey; label: string; def?: string }[]
   /** 밴드 안쪽을 채울 수 있는가 */
   fill?: boolean
 }
 
 export type BandLine = 'top' | 'mid' | 'bottom'
+/**
+ * 한 지표 안의 선 이름. 밴드형은 상·중·하, MACD 는 MACD선 · 시그널 · 히스토그램,
+ * 스토캐스틱은 %K · %D.
+ */
+export type LineKey = BandLine | 'macd' | 'signal' | 'hist' | 'k' | 'd'
+
+/**
+ * 한 지표 안 두 번째 · 세 번째 선의 기본색 (2026-09-17).
+ *
+ * 💀 MACD 가 MACD선 · 시그널 · 히스토그램 셋을 **같은 보라 하나**로 그렸다. 셋이 겹치는
+ *    자리에서 무엇이 무엇인지 알 수 없었다. 선마다 색을 따로 주고 칸 이름 옆에 범례를 단다.
+ *    빨강 · 파랑 · 노랑(#EEB82D) · 흰색은 캔들 · 계획 선 · 지지저항 몫이라 피한다.
+ */
+export const SECOND_LINE = '#FFD166'
+export const THIRD_LINE = '#8FA3B8'
+
+/**
+ * **지표 기본색** — 빨강 · 파랑 · 노랑 · 흰색을 뺀 팔레트 (2026-09-17 · (가) 기간마다 고정색).
+ *
+ * 💀 차트 공용 팔레트(`SERIES_COLORS`)를 켜는 순서대로 썼더니 기본 이평선 150 이 **빨강**
+ *    (오름 캔들 · 목표 면), 스토캐스틱 %K 가 **파랑**(내림 캔들 · 스톱 선)이 됐다.
+ *    그 넷은 캔들 · 계획 선 · 지지저항 몫이다.
+ *
+ * 기본값일 뿐이다 — 패널의 색 점에서 **언제든 다른 색을 고른다** (`PICK_COLORS`).
+ */
+export const MA_COLOR: Record<number, string> = {
+  10: '#A0A0A0',
+  20: '#A0A0A0',
+  21: '#A0A0A0',
+  50: '#34DE7B',
+  150: '#9B8CFF',
+  200: '#8FA3B8',
+}
+const SAFE = ['#34DE7B', '#9B8CFF', '#8FA3B8', '#FFD166', '#5FD3C6', '#C9C1FF']
+/** 자기 칸 지표(MACD · RSI …)의 본선 — 칸이 따로라 서로 안 겹친다 */
+export const OWN_COLOR = '#9B8CFF'
+/** 패널 색 점에서 고를 수 있는 색 — 기본 팔레트 + 차트 공용 팔레트 전부 */
+export const PICK_COLORS = [...new Set([...SAFE, '#A0A0A0', ...SERIES_COLORS])]
+
+/** 지표 한 벌의 기본색 */
+function defaultColor(
+  spec: IndicatorSpec,
+  period: number | undefined,
+  at: number,
+) {
+  if (spec.color) return spec.color
+  if (
+    (spec.id === 'sma' || spec.id === 'ema') &&
+    period != null &&
+    MA_COLOR[period]
+  )
+    return MA_COLOR[period]
+  if (spec.pane === 'own') return OWN_COLOR
+  return SAFE[at % SAFE.length] ?? OWN_COLOR
+}
 
 const period = (def: number, min = 2, max = 400): ParamSpec => ({
   key: 'period',
@@ -152,6 +207,11 @@ export const INDICATORS: IndicatorSpec[] = [
       { key: 'longPeriod', label: '장기', def: 26, min: 3, max: 200 },
       { key: 'signalPeriod', label: '시그널', def: 9, min: 2, max: 100 },
     ],
+    lines: [
+      { key: 'macd', label: 'MACD선' },
+      { key: 'signal', label: '시그널', def: SECOND_LINE },
+      { key: 'hist', label: '히스토그램', def: THIRD_LINE },
+    ],
   },
   {
     id: 'rsi',
@@ -169,6 +229,10 @@ export const INDICATORS: IndicatorSpec[] = [
     params: [
       { key: 'periods', label: '%K', def: 14, min: 2, max: 100, at: 0 },
       { key: 'periods', label: '%D', def: 3, min: 1, max: 50, at: 1 },
+    ],
+    lines: [
+      { key: 'k', label: '%K' },
+      { key: 'd', label: '%D', def: SECOND_LINE },
     ],
   },
   {
@@ -203,19 +267,30 @@ export type Layer = {
   /** 배열 파라미터(스토캐스틱의 `periods`)가 있어 값이 number 만은 아니다 */
   params: Record<string, number | number[]>
   /** 밴드형 지표의 선별 색. 없으면 `color` 하나를 쓴다 */
-  colors?: Partial<Record<BandLine, string>>
+  colors?: Partial<Record<LineKey, string>>
   /** 끈 선들 — 지우지 않고 «숨긴다». 다시 켜면 색이 그대로다 */
-  off?: BandLine[]
+  off?: LineKey[]
   /** 밴드 안쪽 채우기 */
   fillOn?: boolean
 }
 
 /** 밴드형 지표의 기본 색 — 상·하한은 같은 색, 중간선만 다르게 */
-export const bandColors = (mid: string): Partial<Record<BandLine, string>> => ({
+export const bandColors = (mid: string): Partial<Record<LineKey, string>> => ({
   top: SR_LINE,
   mid,
   bottom: SR_LINE,
 })
+
+/** 선마다 기본색 — 밴드형은 상 · 하한이 같은 색, 나머지는 사전의 `def` · 없으면 지표 색 */
+export function lineColors(
+  spec: IndicatorSpec,
+  color: string,
+): Partial<Record<LineKey, string>> {
+  if (spec.fill) return bandColors(color)
+  return Object.fromEntries(
+    (spec.lines ?? []).map((ln) => [ln.key, ln.def ?? color]),
+  )
+}
 
 /** 배열 파라미터 한 칸 읽기 */
 export const readParam = (l: Layer, p: ParamSpec): number => {
@@ -242,7 +317,7 @@ export const specOf = (id: string) => INDICATORS.find((d) => d.id === id)
 
 let seq = 0
 /**
- * @param at  몇 번째로 켜는 지표인가 — 색이 `SERIES_COLORS` 에서 이 순번으로 붙는다
+ * @param at  몇 번째로 켜는 지표인가 — 기간 색이 없는 지표는 `SAFE` 에서 이 순번으로 붙는다
  */
 export function makeLayer(
   spec: IndicatorSpec,
@@ -250,9 +325,8 @@ export function makeLayer(
   at = 0,
 ): Layer {
   seq += 1
-  // 나머지 연산이라 항상 범위 안인데 «타입은 그것을 모른다» — 첫 색을 바닥으로 둔다
-  const color =
-    spec.color ?? SERIES_COLORS[at % SERIES_COLORS.length] ?? SERIES_COLORS[0]
+  const periodDef = spec.params.find((p) => p.key === 'period')?.def
+  const color = defaultColor(spec, override ?? periodDef, at)
   const params: Record<string, number | number[]> = {}
   for (const p of spec.params) {
     const v = p.key === 'period' && override != null ? override : p.def
@@ -270,7 +344,13 @@ export function makeLayer(
     id: spec.id,
     color,
     params,
-    ...(spec.lines ? { colors: bandColors(color), off: [], fillOn: true } : {}),
+    ...(spec.lines
+      ? {
+          colors: lineColors(spec, color),
+          off: [],
+          ...(spec.fill ? { fillOn: true } : {}),
+        }
+      : {}),
   }
 }
 
@@ -290,9 +370,10 @@ export function withAlpha(hex: string, a: number): string {
  * 끈 선은 지우는 게 아니라 `lineWidth: 0` 으로 숨긴다.
  */
 export function bandOptions(l: Layer): Record<string, unknown> {
+  if (l.id === 'macd' || l.id === 'stochastic') return lineOptions(l)
   const c = l.colors ?? {}
   const off = l.off ?? []
-  const line = (k: BandLine) => ({
+  const line = (k: LineKey) => ({
     styles: {
       lineColor: c[k] ?? l.color,
       lineWidth: off.includes(k) ? 0 : 1,
@@ -303,6 +384,59 @@ export function bandOptions(l: Layer): Record<string, unknown> {
     topLine: line('top'),
     bottomLine: line('bottom'),
     fillColor: l.fillOn ? withAlpha(c.mid ?? l.color, 0.06) : 'transparent',
+  }
+}
+
+/**
+ * MACD · 스토캐스틱의 선별 옵션. 받는 자리가 또 다르다 —
+ * ```text
+ * MACD      시리즈 color = 히스토그램 · macdLine.styles · signalLine.styles
+ * 스토캐스틱  시리즈 color = %K · smoothedLine.styles = %D
+ * ```
+ */
+function lineOptions(l: Layer): Record<string, unknown> {
+  const c = l.colors ?? {}
+  const off = l.off ?? []
+  const styles = (k: LineKey) => ({
+    styles: {
+      lineColor: c[k] ?? l.color,
+      lineWidth: off.includes(k) ? 0 : 1.2,
+    },
+  })
+  if (l.id === 'macd')
+    return {
+      color: off.includes('hist')
+        ? 'transparent'
+        : withAlpha(c.hist ?? l.color, 0.55),
+      macdLine: styles('macd'),
+      signalLine: styles('signal'),
+    }
+  return {
+    color: c.k ?? l.color,
+    lineWidth: off.includes('k') ? 0 : 1.2,
+    smoothedLine: styles('d'),
+  }
+}
+
+/**
+ * 칸 이름 옆 범례 — 「MACD  ━ MACD선  ━ 시그널  ▮ 히스토그램」.
+ * 선이 하나인 지표는 이름만. 끈 선은 뺀다.
+ */
+export function paneLegend(l: Layer): {
+  label: string
+  items: { label: string; color: string; mark: string }[]
+} {
+  const spec = specOf(l.id)
+  const lines = spec?.fill ? [] : (spec?.lines ?? [])
+  return {
+    label: spec?.label ?? l.id,
+    items: lines
+      .filter((ln) => !(l.off ?? []).includes(ln.key))
+      .map((ln) => ({
+        label: ln.label,
+        color: l.colors?.[ln.key] ?? l.color,
+        mark: ln.key === 'hist' ? '▮' : '━',
+      })),
   }
 }
 
