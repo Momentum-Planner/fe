@@ -41,14 +41,28 @@ export type Window = {
  * 기본이 **오른쪽 끝**인 이유 — 계획을 세울 때 사용자가 실제로 본 화면이 그것이다.
  * 그날 차트를 열면 그날이 마지막 봉이고, 오른쪽에는 아직 아무것도 없었다.
  * 뒤에 무슨 일이 있었는지를 같이 그리면 «그때는 몰랐던 것»이 판단에 섞인다.
+ *
+ * ⚠️ **이미 세운 계획을 «볼» 때는 2/3 에 선다** (Q12 · 2026-09-17). 계획 선을 스냅샷
+ *    날짜부터 오른쪽으로 그리기로 하자(기간만), 오른쪽 끝에 서면 선이 봉 한두 칸
+ *    폭으로 눌려 안 보였다. 보는 사람은 이미 «그 뒤»를 알고 있고, 계획 이후 실제로
+ *    어떻게 됐는지가 선과 같이 읽혀야 계획을 고칠 수 있다. 세울 때는 여전히 1 이다.
  */
 const ANCHOR_AT = 1
+/** 이미 세운 계획을 볼 때 앵커 자리 */
+export const VIEW_ANCHOR_AT = 2 / 3
 
+/**
+ * @param futureBars  앵커가 «마지막 봉»일 때만 오른쪽에 붙이는 빈 봉 수.
+ *   새 계획은 스냅샷 날짜(≈ 오늘)부터 오른쪽으로 그려지므로(Q12 기간만) 그 자리가
+ *   있어야 선과 면이 보인다. 과거 계획에는 안 붙는다 — 그 뒤에는 실제 봉이 있고,
+ *   그걸 보여주면 «그때는 몰랐던 것»이 섞인다.
+ */
 export function viewWindow(
   times: number[],
   anchorTime: number,
   visibleBars: number,
   anchorAt = ANCHOR_AT,
+  futureBars = 0,
 ): Window {
   if (times.length === 0)
     return { from: anchorTime, to: anchorTime + 86_400_000, padBars: 0 }
@@ -67,6 +81,7 @@ export function viewWindow(
     padBars = hi - last
     hi = last
   }
+  if (anchor === last) padBars = Math.max(padBars, futureBars)
   if (lo < 0) lo = 0
   // 왼쪽이 모자라면 그냥 첫 봉에서 시작한다. 데이터 이전은 «없는» 것이지
   // 비어 있는 것이 아니라, 여유를 만들어 주면 거짓이 된다

@@ -119,4 +119,19 @@ describe('차트가 보여줄 구간', () => {
     const w = viewWindow([], Date.UTC(2026, 0, 1), BARS)
     expect(w.to).toBeGreaterThan(w.from)
   })
+
+  it('Q12 앵커가 마지막 봉이면 오른쪽에 빈칸을 둔다 — 새 계획이 그 자리에 그려진다', () => {
+    const last = bar(199)
+    expect(viewWindow(times, last, BARS, 1, 15).padBars).toBe(15)
+  })
+
+  it('Q12 과거 계획에는 빈칸을 안 붙인다 — 그 뒤에는 실제 봉이 있다', () => {
+    expect(viewWindow(times, bar(100), BARS, 1, 15).padBars).toBe(0)
+  })
+
+  it('Q12 이미 세운 계획을 볼 때는 2/3 에 선다 — 그 뒤가 보인다', () => {
+    const { from, to, padBars } = viewWindow(times, bar(100), BARS, 2 / 3)
+    const cells = idx(to) - idx(from) + padBars
+    expect(((100 - idx(from)) / cells) * 100).toBeCloseTo(66.7, 0)
+  })
 })
