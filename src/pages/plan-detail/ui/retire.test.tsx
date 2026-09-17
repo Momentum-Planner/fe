@@ -55,9 +55,8 @@ const BLANK: PlanCreate = {
   stopPrice: 1_150_000,
   quantity: 5,
   memo: '',
-  raiseAtR: 2,
+  raise: { kind: 'R', r: 2 },
   trail50: false,
-  backstop: false,
   previousPlanId: null,
 }
 
@@ -183,6 +182,32 @@ describe('폐기와 삭제 — 화면', () => {
  * 「서비스가 제시한 값」이 되고, 사용자는 지우지 않고 그냥 저장한다.
  * ④는 *「진입가도 손절선도 서비스가 제시하지 않는다」* 다.
  */
+/**
+ * 새 계획 폼은 **순차 공개**다 (Q11 B) — 날짜를 골라야 ② 가, 칸을 벗어나야 ③ 이 열린다.
+ * 테스트도 사용자가 가는 길 그대로 간다.
+ */
+async function pickLatestDate(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: '스냅샷 날짜' }))
+  const days = await waitFor(() => {
+    const open = screen
+      .getAllByRole('button', { name: /^\d{4}-\d{2}-\d{2}$/ })
+      .filter((b) => !(b as HTMLButtonElement).disabled)
+    expect(open.length).toBeGreaterThan(0)
+    return open
+  })
+  await user.click(days.at(-1)!)
+}
+
+async function fillToQuantity(user: ReturnType<typeof userEvent.setup>) {
+  await pickLatestDate(user)
+  await user.type(screen.getByLabelText('진입 예상가'), '1200000')
+  await user.type(screen.getByLabelText('스톱가격'), '1150000')
+  // 칸을 벗어나야 ③ 이 열린다 (Q11 F)
+  await user.tab()
+  await user.type(await screen.findByLabelText('수량'), '5')
+  await user.tab()
+}
+
 describe('이어서 세우기', () => {
   it('문은 «사슬의 빈 자리»다 — 머리줄에 버튼이 없다', async () => {
     const plan = await planApi.create({ ...BLANK, title: '문이 어디냐' })
@@ -199,11 +224,11 @@ describe('이어서 세우기', () => {
     )
   })
 
-  it('값은 «비어» 있고 스톱 규칙만 물려받는다', async () => {
+  it('값은 «비어» 있고 날짜부터 고른다 — 순차 공개 (Q11 B)', async () => {
     const plan = await planApi.create({
       ...BLANK,
       title: '뿌리 계획',
-      raiseAtR: 3,
+      raise: { kind: 'R', r: 3 },
       trail50: true,
     })
     show(plan)
@@ -214,28 +239,26 @@ describe('이어서 세우기', () => {
     // **사슬의 빈 자리**가 문이다 — 머리줄 버튼이 아니다 (ⓐ-1)
     await user.click(screen.getByRole('button', { name: '이어서 세우기' }))
 
-    // 값은 비어 있다 — 이름·진입가·스톱가·수량이 없으면 못 세운다
-    expect(screen.getByRole('button', { name: '생성' })).toBeDisabled()
+    // 처음에는 ① 근거만 선다. 이름은 안 묻는다 — 자동이다 (Q11 A)
     expect(
-      screen.getByText('이름 · 진입가 · 스톱가격 · 수량이 있어야 계획이다'),
+      screen.getByRole('button', { name: '스냅샷 날짜' }),
     ).toBeInTheDocument()
+    expect(screen.queryByLabelText('진입 예상가')).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('계획 이름')).not.toBeInTheDocument()
+    // 등록은 맨 아래 ⑤ 와 함께 나타난다 (Q12)
+    expect(
+      screen.queryByRole('button', { name: '등록' }),
+    ).not.toBeInTheDocument()
 
     // **세부가 서 있던 그 칸을 차지한다** — 덧붙지 않는다.
-    // 그래서 원래 세부의 「수정」이 이 동안에는 화면에 없다
     expect(
       screen.queryByRole('button', { name: '수정' }),
     ).not.toBeInTheDocument()
-    // 「무엇을 이어받나」는 **사슬이 말한다** — 칸에 글로 안 적는다.
     // 만드는 동안 새 마디가 설 자리가 켜지고, **같은 자리를 다시 누르면 끝난다**
     const gate = screen.getByRole('button', { name: '생성 그만두기' })
-    expect(gate).toBeInTheDocument()
     await user.click(gate)
-    // 세부가 제자리로 돌아온다
     expect(
       await screen.findByRole('button', { name: '수정' }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: '이어서 세우기' }),
     ).toBeInTheDocument()
   })
 
@@ -248,6 +271,7 @@ describe('이어서 세우기', () => {
     await user.click(
       await screen.findByRole('button', { name: '이어서 세우기' }),
     )
+    await pickLatestDate(user)
 
     // ④-1-1-1 의 📦 자료가 「차트」다 — 숫자를 쓰는 것보다 그 자리를 짚는 것
     const arm = screen.getAllByRole('button', { name: '차트에서 집기' })
@@ -276,76 +300,97 @@ describe('이어서 세우기', () => {
     await user.click(
       await screen.findByRole('button', { name: '이어서 세우기' }),
     )
+    await pickLatestDate(user)
 
-    // 값이 없으면 이 계획 몫이 0 이라 대기과 같다
-    const before = plan.riskBefore.toFixed(2)
-    expect(screen.getAllByText(`${before}%`).length).toBeGreaterThan(0)
-
-    // 수량을 넣으면 «실행 후»가 따라 움직인다 (④-1 · 디자인 9장 ④)
-    await user.type(screen.getByPlaceholderText('계획 이름'), '추가매수')
-    await user.type(screen.getByLabelText('진입 예상가'), '1200000')
-    await user.type(screen.getByLabelText('스톱가격'), '1150000')
-    await user.type(screen.getByLabelText('수량'), '5')
-    expect(screen.getByRole('button', { name: '생성' })).toBeEnabled()
     // 후보 선이 «조회와 같은 목록»으로 뜬다 (④-1-1-2)
     expect(screen.getByText('10일선')).toBeInTheDocument()
 
-    // 후보를 누르면 스톱가격이 «그 값»이 된다 — 서비스가 고르지 않고 늘어놓는다
-    await user.click(screen.getByText('20일선'))
-    const stop = screen.getByLabelText('스톱가격')
-    expect((stop as HTMLInputElement).value).not.toBe('')
+    await user.type(screen.getByLabelText('진입 예상가'), '1200000')
+    await user.type(screen.getByLabelText('스톱가격'), '1150000')
+    // 쉼표가 «치는 동안» 찍힌다 (Q11 D)
+    expect(screen.getByLabelText('진입 예상가')).toHaveValue('1,200,000')
+    await user.tab()
+
+    // ③ 이 열리고, 수량을 넣으면 «실행 후»가 따라 움직인다 (④-1 · 디자인 9장 ④)
+    await user.type(await screen.findByLabelText('수량'), '5')
+    const after = (
+      plan.riskBefore +
+      (50_000 * 5 * 100) / plan.accountTotal
+    ).toFixed(2)
+    expect(screen.getByText(`${after}%`)).toBeInTheDocument()
+    await user.tab()
+
+    // 스톱 상향을 이어받았으므로 ④ 는 접힌 채 채워져 있고 ⑤ 와 등록이 선다
+    expect(screen.getByRole('button', { name: '등록' })).toBeEnabled()
+    // 이름이 자동으로 붙는다 — 진입 상태 + 진입가
+    expect(
+      screen.getByText(/^(조기|돌파|눌림|진입 불가) 1,200,000$/),
+    ).toBeInTheDocument()
+
+    // 등록하면 계좌 총액을 «따로» 확인받는다 (Q11 A)
+    await user.click(screen.getByRole('button', { name: '등록' }))
+    expect(
+      screen.getByRole('dialog', { name: '계좌 총액 확인' }),
+    ).toBeInTheDocument()
   })
 
-  it('스톱 규칙은 «이어받아 오되 고칠 수 있다» (④-1-4)', async () => {
-    const plan = await planApi.create({
-      ...BLANK,
-      title: '규칙 고치기',
-      raiseAtR: 3,
-      trail50: true,
-      backstop: false,
-    })
-    show(plan)
-    const user = userEvent.setup()
+  it(
+    '스톱 규칙은 «이어받아 오되 고칠 수 있다» (④-1-4)',
+    { timeout: 20_000 },
+    async () => {
+      const plan = await planApi.create({
+        ...BLANK,
+        title: '규칙 고치기',
+        raise: { kind: 'R', r: 3 },
+        trail50: true,
+      })
+      show(plan)
+      const user = userEvent.setup()
 
-    await screen.findAllByText('규칙 고치기')
-    await user.click(
-      await screen.findByRole('button', { name: '이어서 세우기' }),
-    )
+      await screen.findAllByText('규칙 고치기')
+      await user.click(
+        await screen.findByRole('button', { name: '이어서 세우기' }),
+      )
+      await fillToQuantity(user)
 
-    // 값이 «채워져» 온다 — 진입가·수량과 반대다. 그쪽은 판단, 이쪽은 규칙
-    const trail = screen.getByRole('switch', { name: '50일선 트레일링' })
-    const back = screen.getByRole('switch', { name: '백스톱' })
-    expect(trail).toBeChecked()
-    expect(back).not.toBeChecked()
-    // 꺼둔 규칙도 «자리를 지킨다» (③-3-1)
-    expect(back).toBeInTheDocument()
+      // 값이 «채워져» 온다 — 진입가·수량과 반대다. 그쪽은 판단, 이쪽은 규칙.
+      // 이어받았으므로 접힌 채 요약 한 줄이다 (Q12)
+      expect(
+        screen.getByText('스톱 상향 3R · 50일선 트레일링 켬'),
+      ).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: '고치기 ▸' }))
 
-    // 그리고 고칠 수 있다
-    await user.click(back)
-    expect(back).toBeChecked()
-  })
+      const trail = screen.getByRole('switch', { name: '50일선 트레일링' })
+      expect(trail).toBeChecked()
+      const three = screen.getByRole('button', { name: '3R' })
+      const two = screen.getByRole('button', { name: '2R' })
+      expect(three).toHaveAttribute('aria-pressed', 'true')
+
+      // 스톱 상향은 «끔»이 없다 — 다른 값으로 바꿀 수만 있다 (Q12)
+      await user.click(two)
+      expect(two).toHaveAttribute('aria-pressed', 'true')
+      expect(three).toHaveAttribute('aria-pressed', 'false')
+    },
+  )
 
   it('세우면 «승계»가 붙고 스톱 규칙이 따라온다', async () => {
     const root = await planApi.create({
       ...BLANK,
       title: '승계 뿌리',
-      raiseAtR: 3,
+      raise: { kind: 'AVG' },
       trail50: true,
-      backstop: true,
     })
     // 훅이 하는 일을 API 층에서 그대로 확인한다 — 화면은 이 값을 넘길 뿐이다
     const next = await planApi.create({
       ...BLANK,
       title: '이어진 계획',
       previousPlanId: root.planId,
-      raiseAtR: root.plannedStop.raiseAtR,
+      raise: root.plannedStop.raise,
       trail50: root.plannedStop.trail50,
-      backstop: root.plannedStop.backstop,
     })
     expect(next.previousPlanId).toBe(root.planId)
-    expect(next.plannedStop.raiseAtR).toBe(3)
+    expect(next.plannedStop.raise).toEqual({ kind: 'AVG' })
     expect(next.plannedStop.trail50).toBe(true)
-    expect(next.plannedStop.backstop).toBe(true)
     // 세운 계획은 «대기»로 난다
     expect(next.status).toBe('PLANNED')
   })
@@ -455,6 +500,7 @@ describe('읽을 때와 고칠 때', () => {
     await user.click(
       await screen.findByRole('button', { name: '이어서 세우기' }),
     )
+    await pickLatestDate(user)
     expect(screen.getByText(/^상한 /)).toBeInTheDocument()
     expect(screen.getByText(/평균수익 .* ÷ 손익비/)).toBeInTheDocument()
   })
@@ -475,10 +521,11 @@ describe('읽을 때와 고칠 때', () => {
 
     await screen.findAllByText('규칙 자리')
     // 「어디서 자를까」와 「수익이 나면 어디로 올릴까」는 같은 선의 두 시점이다.
-    // 꺼둔 규칙도 «자리를 지킨다» (③-3-1) — 껐다는 사실을 잊지 않게
+    // 꺼둔 50일선 트레일링도 «자리를 지킨다» (③-3-1) — 껐다는 사실을 잊지 않게
+    // 백스톱은 스톱 상향의 선택지로 들어갔다 (Q12)
     expect(screen.getByText('스톱 갱신 규칙')).toBeInTheDocument()
     expect(screen.getByText('50일선 트레일링')).toBeInTheDocument()
-    expect(screen.getByText('백스톱')).toBeInTheDocument()
+    expect(screen.getByText('스톱 상향 2R')).toBeInTheDocument()
   })
 
   it('근거 블록이 «없다» — 계획 루프를 정한 뒤에 다시 세운다', async () => {

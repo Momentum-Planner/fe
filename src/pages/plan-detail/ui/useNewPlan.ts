@@ -1,7 +1,12 @@
 import { useCallback, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useCreatePlan } from '@/entities/plan'
-import type { PlanCreate, PlanDetail, PlanListItem } from '@/entities/plan'
+import type {
+  PlanCreate,
+  PlanDetail,
+  PlanListItem,
+  StopRaise,
+} from '@/entities/plan'
 import { attachPointId } from './spine'
 
 /**
@@ -22,15 +27,21 @@ import { attachPointId } from './spine'
 
 /** ㉡ 사용자가 채우는 것만. 나머지는 세울 때 붙는다 */
 export type NewPlanDraft = {
-  title: string
+  /**
+   * 스냅샷 날짜 — **사용자가 달력에서 고른다** (Q11 A · D). 비어서 시작한다 (Q11 E).
+   * 이 날짜의 `DailyScreeningResult` 한 행이 계획의 스냅샷이 된다.
+   */
+  snapshotDate: string | null
   entryPrice: number
   stopPrice: number
   quantity: number
   memo: string
-  /** 스톱 갱신 규칙 셋 (③-3 · ④-1-4). 직전 값이 채워져 오고, 고칠 수 있다 */
-  raiseAtR: number | null
+  /**
+   * 스톱 상향 (③-3 · ④-1-4). 직전 값이 채워져 오고, 고칠 수 있다.
+   * **필수다** (Q12) — 첫 계획은 비어 있고(null), 고르기 전에는 못 세운다.
+   */
+  raise: StopRaise | null
   trail50: boolean
-  backstop: boolean
 }
 
 /**
@@ -49,15 +60,14 @@ export type NewPlanDraft = {
  *    이쪽은 «규칙»이라 안 건드리면 이어진다.
  */
 const from = (p?: PlanDetail): NewPlanDraft => ({
-  title: '',
+  snapshotDate: null,
   entryPrice: 0,
   stopPrice: 0,
   quantity: 0,
   memo: '',
-  // 이어받을 계획이 «없으면» 규칙도 물려받을 것이 없다 — 셋 다 꺼진 채로 시작한다
-  raiseAtR: p?.plannedStop.raiseAtR ?? null,
+  // 이어받을 계획이 «없으면» 규칙도 물려받을 것이 없다 — 스톱 상향은 비어서 시작한다
+  raise: p?.plannedStop.raise ?? null,
   trail50: p?.plannedStop.trail50 ?? false,
-  backstop: p?.plannedStop.backstop ?? false,
 })
 
 /**
@@ -83,57 +93,63 @@ export function useNewPlan(
   )
 
   /**
-   * 세울 수 있는 조건.
+   * 세울 수 있는 조건 — 필수 넷 + 스톱 상향 (Q11 C · Q12).
    *
-   * **이름이 필수다** — 같은 종목에 시나리오가 여럿이면 값만 봐서는 사슬에서
-   * 어느 마디인지 못 가른다. 진입가·스톱가·수량은 0 이면 계획이 아니다.
+   * ⚠️ **이름이 여기 없다.** 이름은 자동이다 — 진입 상태 + 진입가 (Q11 A).
+   *    손절가가 진입가보다 낮지 않으면 1R 이 성립하지 않아 계획이 아니다.
    */
   const ready =
     draft != null &&
-    draft.title.trim().length > 0 &&
+    draft.snapshotDate != null &&
     draft.entryPrice > 0 &&
     draft.stopPrice > 0 &&
-    draft.quantity > 0
+    draft.stopPrice < draft.entryPrice &&
+    draft.quantity > 0 &&
+    draft.raise != null
 
-  const submit = useCallback(() => {
-    if (!draft || !ready) return
-    const body: PlanCreate = {
-      stockCode,
-      title: draft.title.trim(),
-      entryPrice: draft.entryPrice,
-      stopPrice: draft.stopPrice,
-      quantity: draft.quantity,
-      memo: draft.memo,
-      // 채워져 온 값을 «고칠 수 있다» (④-1-4)
-      raiseAtR: draft.raiseAtR,
-      trail50: draft.trail50,
-      backstop: draft.backstop,
-      /**
-       * 승계 — **줄기의 끝**에서 갈라진다 (④-2).
-       *
-       * 💀 「지금 보고 있는 계획」에 붙였다가 사고가 났다. 대기 계획을 보면서
-       * 만들면 그 계획에 붙는데, 사슬은 갈래를 줄기 «끝»에서만 꺼내므로
-       * **만든 계획이 화면 어디에도 안 그려졌다.**
-       *
-       * 붙일 곳을 사슬과 «같은 함수»로 낸다 — 유령 선이 가리키는 그 자리다.
-       * 줄기가 없으면(아직 아무것도 실행 안 함) 지금 계획에 붙인다.
-       */
-      previousPlanId: attachPointId(siblings) ?? parent?.planId ?? null,
-    }
-    create.mutate(body, {
-      onSuccess: (next) => {
-        setDraft(null)
-        // 세운 계획으로 간다 — 사슬이 그 마디를 이미 들고 있다
-        void navigate({
-          to: '/stocks/$ticker/plan/$planId',
-          params: {
-            ticker: next.stockCode,
-            planId: String(next.planId),
-          },
-        })
-      },
-    })
-  }, [create, draft, navigate, stockCode, siblings, parent, ready])
+  /** @param title 자동 이름 — 폼이 스냅샷의 진입 상태로 만든다 (`autoPlanTitle`) */
+  const submit = useCallback(
+    (title: string) => {
+      if (!draft || !ready || !draft.raise || !draft.snapshotDate) return
+      const body: PlanCreate = {
+        stockCode,
+        title,
+        snapshotDate: draft.snapshotDate,
+        entryPrice: draft.entryPrice,
+        stopPrice: draft.stopPrice,
+        quantity: draft.quantity,
+        memo: draft.memo,
+        // 채워져 온 값을 «고칠 수 있다» (④-1-4)
+        raise: draft.raise,
+        trail50: draft.trail50,
+        /**
+         * 승계 — **줄기의 끝**에서 갈라진다 (④-2).
+         *
+         * 💀 「지금 보고 있는 계획」에 붙였다가 사고가 났다. 대기 계획을 보면서
+         * 만들면 그 계획에 붙는데, 사슬은 갈래를 줄기 «끝»에서만 꺼내므로
+         * **만든 계획이 화면 어디에도 안 그려졌다.**
+         *
+         * 붙일 곳을 사슬과 «같은 함수»로 낸다 — 유령 선이 가리키는 그 자리다.
+         * 줄기가 없으면(아직 아무것도 실행 안 함) 지금 계획에 붙인다.
+         */
+        previousPlanId: attachPointId(siblings) ?? parent?.planId ?? null,
+      }
+      create.mutate(body, {
+        onSuccess: (next) => {
+          setDraft(null)
+          // 세운 계획으로 간다 — 사슬이 그 마디를 이미 들고 있다
+          void navigate({
+            to: '/stocks/$ticker/plan/$planId',
+            params: {
+              ticker: next.stockCode,
+              planId: String(next.planId),
+            },
+          })
+        },
+      })
+    },
+    [create, draft, navigate, stockCode, siblings, parent, ready],
+  )
 
   return {
     draft,

@@ -1,47 +1,75 @@
+import { useEffect, useState } from 'react'
 import { cn } from '@/shared/lib/cn'
-import { RiskBar } from './RiskBar'
-import { clampExposure, needCash, ownRisk, stopWidthPct } from '@/entities/plan'
+import type { DailyScreening } from '@/shared/lib/snapshots'
+import {
+  AVG_STOP_MIN_SAMPLES,
+  autoPlanTitle,
+  clampExposure,
+  needCash,
+  ownRisk,
+  stopRaiseLabel,
+  stopWidthPct,
+} from '@/entities/plan'
 import type { PlanDefaults } from '@/entities/plan'
+import { SnapshotCalendar } from './SnapshotCalendar'
+import { StopRaisePicker } from './StopRaisePicker'
+import { LIT_PANEL } from './panel'
 import type { useNewPlan } from './useNewPlan'
 
 /**
- * 새 계획을 쓰는 자리 — **세부가 서 있던 그 칸을 그대로 쓴다.**
+ * 새 계획 폼 — **10장 A~F 를 순서대로 닫아 세웠다** (Q11 · Q12).
  *
- * 💀 처음엔 세부 «위에» 칸을 하나 덧붙였다. 이 열이 392px 이라 6칸짜리 폼이
- * 눌려서 제대로 안 보였고, 아래 내용을 밀어내는 바람에 **쓰는 동안 정작 근거가
- * 화면 밖으로** 나갔다. 한 자리에 하나만 세우면 둘 다 없어진다.
+ * ```text
+ * ① 근거     스냅샷 날짜 (달력)
+ * ② 1R       진입 예상가 | 스톱가격 [원|%]  + 후보 선 · 상한 줄
+ * ③ 규모     수량 | 위험노출 (t-stat)      + 필요 현금 · ÷ 계좌 총액
+ * ④ 스톱 갱신 규칙   스톱 상향(필수) · 50일선 트레일링.  이어받은 값이 있으면 접힘
+ * ⑤ 메모 (선택)  + 등록 → 계좌 총액 확인
+ * ```
  *
- * 그리고 **쓰는 모양이 곧 될 모양이다** — 세부의 1층과 같은 두 칸 격자를 쓰므로
- * 세우고 나서 배울 것이 없다.
+ * **순차 공개** (Q11 B) — 앞 섹션이 차야 다음 섹션이 나타난다. 여는 때는
+ * «값이 맞아지는 순간»이 아니라 **칸을 벗어날 때**다 (Q11 F). 손절가에 `7` 만 쳐도
+ * 「진입가보다 낮은 값」이라 규칙상 맞는데, 치는 도중이다.
  *
- * ⚠️ 위험노출은 **여기서도 계산된다** (④-1). 수량을 넣는 동안 그 수량이 계좌를
- *    몇 % 거는지가 같이 움직여야 «보고 정한다»가 성립한다 (디자인 9장 ④).
- *    다만 실행 «전» 값은 부모 계획의 것을 쓴다 — 아직 내 스냅샷이 없다.
+ * **✕ · ⚠ 메시지도 칸을 벗어날 때** 뜬다 (Q11 F). 1R · 위험노출 · 필요 현금 같은
+ * «결과값»만 치는 동안 따라 움직인다 — 그래야 보고 정한다 (디자인 9장 ④).
+ *
+ * ⚠️ 이름을 안 묻는다 — 진입 상태 + 진입가로 자동이다 (Q11 A · `autoPlanTitle`).
  */
 const won = (n: number) => n.toLocaleString('ko-KR')
+const RISK_WARN = 2.5
+
+type Stage = 1 | 2 | 3 | 4 | 5
 
 export function NewPlanForm({
   born,
   defaults,
+  rows,
   picking,
   onPicking,
 }: {
   born: ReturnType<typeof useNewPlan>
-  /**
-   * 계좌 · 통계 · 종목에서 오는 값들.
-   *
-   * 💀 이걸 «이어받는 계획»에서 읽고 있었다. 그러면 계획이 하나도 없는 종목에서
-   * 계획을 못 세운다 — 첫 계획이 제일 필요한 자리인데. 셋 다 원래 계획의 값이
-   * 아니다(계좌 총액은 계좌가, 상한은 ⑦ 통계가, 후보 선은 종목이 든다).
-   */
+  /** 계좌 · 통계 · 종목에서 오는 값들 — 계획이 아니라 «그 밖»에서 온다 */
   defaults: PlanDefaults
-  /** 지금 차트에서 집는 중인 칸 */
+  /** 이 종목의 스크리닝 행 — 달력이 고를 수 있는 날이고, 고른 날의 스냅샷이다 */
+  rows: DailyScreening[]
   picking: 'entry' | 'stop' | null
   onPicking: (v: 'entry' | 'stop' | null) => void
 }) {
   const d = born.draft
+  /** 어디까지 열렸나 — 한 번 열린 섹션은 값이 틀려져도 안 닫는다 */
+  const [stage, setStage] = useState<Stage>(1)
+  /** 칸을 벗어날 때 «확정된» 값 — ✕ · ⚠ 는 이 값으로만 판정한다 (Q11 F) */
+  const [seen, setSeen] = useState({ entry: 0, stop: 0, qty: 0 })
+  /** 스톱 갱신 규칙을 펼쳤나. 이어받은 값이 있으면 접힌 채 시작한다 (Q12) */
+  const [rulesOpen, setRulesOpen] = useState(d?.raise == null)
+  const [confirming, setConfirming] = useState(false)
+
+  // ⚠️ 폼을 «닫으면» 부모가 이 컴포넌트를 내린다 — 다시 열면 상태가 처음부터다
+
   if (!d) return null
 
+  const snap = rows.find((r) => r.date === d.snapshotDate)
   const width = stopWidthPct(d.entryPrice, d.stopPrice)
   const cash = needCash(d.entryPrice, d.quantity)
   const own = ownRisk(
@@ -50,148 +78,165 @@ export function NewPlanForm({
     d.quantity,
     defaults.accountTotal,
   )
-  // 위험노출에 음수가 없다 — 0 이 바닥이다 (③-2 를 한 칸 뒤집는다)
   const after = clampExposure(defaults.riskBefore + own)
-  // 매수로 고정이라 현금 검사는 늘 돈다 (④-1-3)
+  const ok1R = d.entryPrice > 0 && d.stopPrice > 0 && d.stopPrice < d.entryPrice
+  const title =
+    snap && d.entryPrice > 0
+      ? autoPlanTitle(snap.entryState, d.entryPrice)
+      : null
+
+  // ── 칸을 벗어날 때 확정하고, 맞으면 다음 섹션을 연다 ──
+  const commit1R = () => {
+    setSeen((v) => ({ ...v, entry: d.entryPrice, stop: d.stopPrice }))
+    if (ok1R && stage === 2) setStage(3)
+  }
+  const commitQty = () => {
+    setSeen((v) => ({ ...v, qty: d.quantity }))
+    if (d.quantity > 0 && stage === 3) setStage(d.raise ? 5 : 4)
+  }
+
+  // ── 확정된 값으로만 판정하는 메시지 ──
+  const seenWidth = stopWidthPct(seen.entry, seen.stop)
+  const stopBlock =
+    seen.entry > 0 && seen.stop > 0 && seen.stop >= seen.entry
+      ? '✕ 진입가보다 낮아야 한다'
+      : undefined
+  const stopWarn =
+    !stopBlock && seen.stop > 0 && seenWidth > defaults.stopLimit
+      ? `⚠ 상한 ${defaults.stopLimit}% 초과`
+      : undefined
+  const seenCash = needCash(d.entryPrice, seen.qty)
+  const cashBlock =
+    seen.qty > 0 && seenCash > defaults.accountCash
+      ? `✕ 현금 ${won(defaults.accountCash)} 보다 ${won(seenCash - defaults.accountCash)} 크다`
+      : undefined
   const overCash = cash > defaults.accountCash
+  const riskWarn = seen.qty > 0 && after > RISK_WARN
+
+  /** 상한 줄 — 손절폭이 상한을 넘으면 후보 목록 맨 위에 선다 (Q11 E) */
+  const limitPrice =
+    d.entryPrice > 0
+      ? Math.round(d.entryPrice * (1 - defaults.stopLimit / 100))
+      : 0
+  const candidates = [
+    ...(stopWarn && limitPrice > 0
+      ? [
+          {
+            label: `상한 ${defaults.stopLimit}%`,
+            price: limitPrice,
+            width: defaults.stopLimit,
+            overLimit: false,
+            limit: true,
+          },
+        ]
+      : []),
+    ...defaults.stopCandidates
+      .filter(
+        (c) => c.label !== '직접 넣은 값' && !c.label.startsWith('스톱 하한'),
+      )
+      .map((c) => ({ ...c, limit: false })),
+  ]
 
   return (
-    <section className="card min-w-0 px-5 py-4">
-      {/* 머리줄 — 세부와 «같은 자리»에 같은 모양으로 */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="bg-brand-blue/15 text-brand-blue rounded-md px-2 py-0.5 text-[11px] font-bold">
+    <section className={cn(LIT_PANEL, 'min-w-0 px-4 py-4')}>
+      {/* 머리줄 — 이름이 «자동»이다. 버튼은 취소 하나 (등록은 맨 아래) */}
+      <div className="flex items-center gap-2">
+        <span className="bg-brand-blue/15 text-brand-blue shrink-0 rounded-md px-2 py-0.5 text-[11px] font-bold">
           새 계획
         </span>
-        <input
-          value={d.title}
-          onChange={(e) => born.set('title', e.target.value)}
-          autoFocus
-          placeholder="계획 이름"
-          className="bg-bg-input w-[200px] rounded-md px-2 py-0.5 text-[15px] font-bold text-white outline-none placeholder:font-normal placeholder:text-white/25 focus:ring-1 focus:ring-white/30"
-        />
-        <div className="ml-auto flex items-center gap-1.5">
-          <Btn onClick={born.submit} disabled={!born.ready || born.pending} go>
-            {born.pending ? '만드는 중…' : '생성'}
-          </Btn>
-          <Btn onClick={born.cancel}>취소</Btn>
-        </div>
+        <span
+          className={cn(
+            'truncate text-[14px] font-bold',
+            title ? 'text-white' : 'text-white/25',
+          )}
+        >
+          {title ?? '이름은 자동으로 붙는다'}
+        </span>
+        <Btn onClick={born.cancel} className="ml-auto shrink-0">
+          취소
+        </Btn>
       </div>
 
-      {/* ⚠️ 「무엇을 이어받는다」를 **글로 안 적는다.** 사슬이 그 일을 이미
-          하고 있다 — 새 마디가 «어디에 붙는지»가 자리로 보이고, 쓰는 동안
-          그 자리가 「쓰는 중」으로 켜진다. 글로 또 적으면 같은 말이 두 번이고,
-          칸의 맨 위(제일 먼저 읽히는 자리)를 설명이 먹는다. */}
-
-      {/* ── 위험노출 — **맨 위, 오른쪽.** ────────────────────────────────
-          아래에서 무엇을 넣든 «결과»가 여기로 온다. 결론이 먼저 오고 근거가
-          따라오는 순서다 (디자인 9장 ⑨ — 행 왼쪽의 콜아웃).
-          입력 밑에 두면 수량을 고치는 동안 눈이 위아래로 오간다. */}
-      <div className="mt-2.5 rounded-[10px] bg-white/[0.04] px-3.5 py-3">
-        <RiskBar before={defaults.riskBefore} after={after} />
-      </div>
-
-      {/* ── 「얼마에 얼마나」 — 한 줄 ────────────────────────────────────
-          진입가와 수량은 **같은 판단의 두 쪽**이다. 얼마에 사느냐가 정해져야
-          몇 주가 얼마인지 나오고, 둘이 곱해져 필요 현금이 된다.
-          스톱가격은 «다른 판단»이라 아래로 뗀다 — 그건 「어디서 자를까」다. */}
-      <div className="mt-2 grid grid-cols-2 gap-2">
-        <Field
-          label="진입 예상가"
-          hint="차트를 눌러서 집는다"
-          num={d.entryPrice}
-          onNum={(n) => born.set('entryPrice', n)}
-          picking={picking === 'entry'}
-          onPick={() => onPicking(picking === 'entry' ? null : 'entry')}
+      {/* ① 근거 */}
+      <Section title="① 근거" first>
+        <div className="mb-1 text-[10px] text-white/40">스냅샷 날짜</div>
+        <SnapshotCalendar
+          value={d.snapshotDate}
+          enabled={rows.map((r) => r.date)}
+          onPick={(date) => {
+            born.set('snapshotDate', date)
+            if (stage === 1) setStage(2)
+          }}
         />
-        <Field
-          label="수량"
-          hint={cash > 0 ? `필요 현금 ${won(cash)}` : '버림 — 상한을 안 넘는다'}
-          num={d.quantity}
-          onNum={(n) => born.set('quantity', n)}
-          block={
-            overCash
-              ? `✕ 현금 ${won(defaults.accountCash)} 보다 ${won(cash - defaults.accountCash)} 크다`
-              : undefined
-          }
-        />
-      </div>
+      </Section>
 
-      {/* ── 스톱가격 — **따로 선다** ────────────────────────────────────
-          「어디서 자를까」는 「얼마에 얼마나」와 다른 판단이고, 고를 후보가
-          딸려 있어 칸 하나로 안 끝난다 (④-1-1-2). */}
-      <div className="mt-2 rounded-[10px] bg-white/[0.04] px-3 py-2.5">
-        <div className="grid grid-cols-2 items-end gap-2">
-          <Field
-            label="스톱가격"
-            hint={
-              d.entryPrice > 0 && d.stopPrice > 0
-                ? `1R ${won(d.entryPrice - d.stopPrice)} · ${width.toFixed(2)}%`
-                : '진입가 아래 어느 선에'
-            }
-            num={d.stopPrice}
-            onNum={(n) => born.set('stopPrice', n)}
-            picking={picking === 'stop'}
-            onPick={() => onPicking(picking === 'stop' ? null : 'stop')}
-            warn={
-              width > defaults.stopLimit
-                ? `⚠ 상한 ${defaults.stopLimit}% 초과`
-                : undefined
-            }
-          />
-          {/**
-           * 손절폭 상한 — **생성과 수정에서만 뜬다.** 읽는 화면에는 없다.
-           *
-           * 고를 때 쓰는 선이다 (④-1-1-2 — `min(평균수익 ÷ 손익비, 10%)`).
-           * 정하는 것이 차트가 아니라 **내 평균 수익**이라, 어디까지 내려갈 수
-           * 있는지를 «지금 정하는 사람»만 알면 된다. 이미 정해진 값을 보는
-           * 자리에서는 상한이 아무 일도 안 한다.
-           */}
-          <div className="pb-1 text-right text-[10px] leading-tight">
-            <span className="text-white/45">상한 {defaults.stopLimit}%</span>
-            <div className="text-white/25">
-              {defaults.stopLimitBasis
-                ? `평균수익 ${defaults.stopLimitBasis.avgWin}% ÷ 손익비 ${defaults.stopLimitBasis.targetRR}`
-                : '통계 없음 — 10%'}
-            </div>
+      {/* ② 1R */}
+      {stage >= 2 && (
+        <Section title="② 1R">
+          <div className="grid grid-cols-2 gap-2">
+            <MoneyField
+              label="진입 예상가"
+              value={d.entryPrice}
+              onChange={(n) => born.set('entryPrice', n)}
+              onBlur={commit1R}
+              picking={picking === 'entry'}
+              onPick={() => onPicking(picking === 'entry' ? null : 'entry')}
+            />
+            <StopField
+              entry={d.entryPrice}
+              value={d.stopPrice}
+              onChange={(n) => born.set('stopPrice', n)}
+              onBlur={commit1R}
+              picking={picking === 'stop'}
+              onPick={() => onPicking(picking === 'stop' ? null : 'stop')}
+              block={stopBlock}
+              warn={stopWarn}
+            />
           </div>
-        </div>
+          <div className="mt-1 flex items-baseline justify-between text-[10px]">
+            <span className="font-number text-white/45">
+              {ok1R
+                ? `1R ${won(d.entryPrice - d.stopPrice)} · ${width.toFixed(2)}%`
+                : '1R —'}
+            </span>
+            {/* 손절폭 상한 — 고를 때 쓰는 선이다 (④-1-1-2) */}
+            <span className="text-right text-white/35">
+              상한 {defaults.stopLimit}%
+              <span className="ml-1 text-white/20">
+                {defaults.stopLimitBasis
+                  ? `평균수익 ${defaults.stopLimitBasis.avgWin}% ÷ 손익비 ${defaults.stopLimitBasis.targetRR}`
+                  : '통계 없음 — 10%'}
+              </span>
+            </span>
+          </div>
 
-        {/* 후보 선 — **서비스가 하나를 정해 주지 않는다.** 늘어놓고 고르게 한다.
-            ⚠️ 새 계획은 아직 스냅샷이 없어 «이어받는 계획»의 후보를 쓴다 —
-               후보는 이동평균선·저항선이라 계획이 아니라 «종목»의 값이다
-
-            💀 상한 초과를 «흐림»으로 말했었다. 그런데 이 앱에서 흐림은 이미
-               「못 누른다」다 (아래 `Btn` 의 `disabled:opacity-40`). 같은 변수가
-               한 화면에서 두 뜻을 지면 관례가 이긴다 — 넘는 선이 «막힌» 것처럼
-               읽혔다. 막지 않는 것이 이 서비스의 전제이므로 흐림을 걷고
-               **색조 + ⚠** 로 옮겼다 (교재 9장 「전주의적 변수」).
-               색만으로 판정하지 않는다 — `RiskBar` 가 2.5% 에 ⚠ 를 붙이는 것과 같다. */}
-        <div className="mt-1.5 flex flex-col gap-0.5 border-t border-white/[0.06] pt-1.5">
-          {defaults.stopCandidates
-            // 이어받는 계획이 «직접 넣은 값»을 썼으면 그건 그 계획의 선택이지
-            // 이 종목의 선이 아니다 — 새 계획의 후보로 내려오면 안 된다
-            // ⚠️ 「스톱 하한 N%」는 N 이 사용자마다 달라 이름이 고정이 아니다
-            .filter(
-              (c) =>
-                c.label !== '직접 넣은 값' && !c.label.startsWith('스톱 하한'),
-            )
-            .map((c) => (
+          {/* 후보 선 — 서비스가 하나를 정해 주지 않는다. 늘어놓고 고르게 한다 */}
+          <div className="mt-1.5 flex flex-col gap-0.5 border-t border-white/[0.06] pt-1.5">
+            {candidates.map((c) => (
               <button
                 key={c.label}
                 type="button"
-                onClick={() => born.set('stopPrice', c.price)}
-                aria-label={`${c.label} ${won(c.price)} 손절폭 ${c.width}%${
-                  c.overLimit ? ' · 상한 초과' : ''
-                }`}
+                onClick={() => {
+                  born.set('stopPrice', c.price)
+                  setSeen((v) => ({ ...v, entry: d.entryPrice, stop: c.price }))
+                  if (d.entryPrice > c.price && stage === 2) setStage(3)
+                }}
+                aria-label={`${c.label} ${won(c.price)} 손절폭 ${c.width}%${c.overLimit ? ' · 상한 초과' : ''}`}
                 className={cn(
-                  'grid grid-cols-[110px_1fr_64px] items-center gap-2 rounded-md px-2 py-1 text-left text-[12px] hover:bg-white/[0.10]',
+                  'grid grid-cols-[1fr_76px_50px] items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[11px] hover:bg-white/[0.10]',
                   c.price === d.stopPrice && 'bg-white/[0.09]',
+                  c.limit && 'ring-warning/40 ring-1',
                 )}
               >
                 <span
-                  className={
-                    c.price === d.stopPrice ? 'text-white' : 'text-white/50'
-                  }
+                  className={cn(
+                    'truncate',
+                    c.limit
+                      ? 'text-warning'
+                      : c.price === d.stopPrice
+                        ? 'text-white'
+                        : 'text-white/50',
+                  )}
                 >
                   {c.label}
                 </span>
@@ -200,7 +245,7 @@ export function NewPlanForm({
                 </span>
                 <span
                   className={cn(
-                    'font-number flex items-center justify-end gap-0.5 tabular-nums',
+                    'font-number text-right tabular-nums',
                     c.overLimit ? 'text-warning' : 'text-white/40',
                   )}
                 >
@@ -208,178 +253,413 @@ export function NewPlanForm({
                 </span>
               </button>
             ))}
-        </div>
-
-        {/**
-         * 스톱 갱신 규칙 셋 — **스톱가격과 같이 선다**. 세부 화면과 같은 자리다.
-         *
-         * ④-1-4 가 *「직전 값이 채워져 있다. 안 고치면 그대로 유지된다」* 라
-         * **이어받아 오되 고칠 수 있다.** 진입가·스톱가격·수량과 반대다 —
-         * 그쪽은 «판단»이라 매번 새로 하고, 이쪽은 «규칙»이라 이어진다.
-         *
-         * **꺼둔 규칙도 자리를 지킨다** (③-3-1) — 무엇을 껐는지가 사라지면 잊는다.
-         */}
-        <div className="mt-2 border-t border-white/[0.06] pt-2">
-          <div className="mb-1.5 text-[10px] text-white/40">
-            스톱 갱신 규칙{' '}
-            <span className="text-white/25">— 이어받은 값. 고칠 수 있다</span>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {/* 스톱 상향은 «임계 R» 을 같이 고른다 — 켬/끔만으로는 안 된다 */}
-            <Sw
-              on={d.raiseAtR != null}
-              onClick={() =>
-                born.set('raiseAtR', d.raiseAtR == null ? 2 : null)
-              }
-            >
-              스톱 상향
-            </Sw>
-            {d.raiseAtR != null &&
-              [2, 3].map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => born.set('raiseAtR', r)}
-                  className={cn(
-                    'font-number rounded-md px-2 py-0.5 text-[11px]',
-                    d.raiseAtR === r
-                      ? 'bg-white/[0.14] text-white'
-                      : 'bg-white/[0.04] text-white/40 hover:text-white/70',
-                  )}
-                >
-                  {r}R
-                </button>
-              ))}
-            <Sw on={d.trail50} onClick={() => born.set('trail50', !d.trail50)}>
-              50일선 트레일링
-            </Sw>
-            <Sw
-              on={d.backstop}
-              onClick={() => born.set('backstop', !d.backstop)}
-            >
-              백스톱
-            </Sw>
+        </Section>
+      )}
+
+      {/* ③ 규모 — 수량은 진입가 아래, 위험노출은 스톱가격 아래 (Q12 같은 두 칸) */}
+      {stage >= 3 && (
+        <Section title="③ 규모">
+          <div className="grid grid-cols-2 items-end gap-2">
+            <div>
+              <MoneyField
+                label="수량"
+                unit="주"
+                value={d.quantity}
+                onChange={(n) => born.set('quantity', n)}
+                onBlur={commitQty}
+                block={cashBlock}
+              />
+            </div>
+            <div>
+              <div className="font-number text-[10px] text-white/40">
+                위험노출 {defaults.riskBefore.toFixed(2)}% →
+              </div>
+              {/* 결론이 입력칸들 사이에서 먼저 읽힌다 — 숫자만 키운다 (Q12) */}
+              <div
+                className={cn(
+                  't-stat font-number leading-tight',
+                  riskWarn ? 'text-warning' : 'text-white',
+                )}
+              >
+                {after.toFixed(2)}%
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+          <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-2 text-[10px]">
+            <span
+              className={cn(
+                'font-number',
+                overCash ? 'text-brand-red' : 'text-white/45',
+              )}
+            >
+              필요 현금 {won(cash)}
+            </span>
+            <span className="font-number text-white/35">
+              ÷ 계좌 총액 {won(defaults.accountTotal)}
+              <span className="font-text ml-1 text-white/25">지금</span>
+            </span>
+          </div>
+          {riskWarn && (
+            <div className="text-warning mt-0.5 text-[10px]">
+              ⚠ {RISK_WARN}% 초과 — 경고만 한다
+            </div>
+          )}
+        </Section>
+      )}
 
-      {/* ⚠️ **근거 날짜를 «안 묻는다».** 계획은 자율적으로 세운다 — 진입가·
-          스톱가격·수량이면 계획이 성립한다 (④-1). 고르게 하려면 그날의 트렌드
-          8조건·펀더 세 축·VCP·RS 를 다 보여줘야 하는데, 근거가 25개 값이라
-          계획을 «세우는» 칸이 그걸 못 진다.
-          스냅샷은 서버가 그 시점 판정을 붙인다 (F4). 고르는 길은 **계획 갱신**을
-          만들 때 다시 본다 — 「무엇을 보여줘야 개선이 되는가」가 그때의 질문이다. */}
+      {/* ④ 스톱 갱신 규칙 — 스톱 상향은 필수 (Q12) */}
+      {stage >= 4 && (
+        <Section
+          title="④ 스톱 갱신 규칙"
+          tail={
+            d.raise && !rulesOpen ? (
+              <button
+                type="button"
+                onClick={() => setRulesOpen(true)}
+                className="text-[10px] text-white/40 hover:text-white/80"
+              >
+                고치기 ▸
+              </button>
+            ) : null
+          }
+        >
+          {d.raise && !rulesOpen ? (
+            <div className="text-[11px] text-white/60">
+              스톱 상향 {stopRaiseLabel(d.raise)} · 50일선 트레일링{' '}
+              {d.trail50 ? '켬' : '끔'}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              <StopRaisePicker
+                value={d.raise}
+                onChange={(v) => {
+                  born.set('raise', v)
+                  if (stage === 4) setStage(5)
+                }}
+                avgLocked={
+                  defaults.sampleCount < AVG_STOP_MIN_SAMPLES
+                    ? `통계 ${AVG_STOP_MIN_SAMPLES}건부터`
+                    : null
+                }
+              />
+              <Sw
+                on={d.trail50}
+                onClick={() => born.set('trail50', !d.trail50)}
+              >
+                50일선 트레일링
+              </Sw>
+            </div>
+          )}
+        </Section>
+      )}
 
-      <textarea
-        value={d.memo}
-        onChange={(e) => born.set('memo', e.target.value)}
-        rows={3}
-        placeholder="왜 여기서 사려는가"
-        className="bg-bg-input mt-2 w-full resize-y rounded-md px-2.5 py-2 text-[12px] leading-relaxed text-white outline-none placeholder:text-white/25 focus:ring-1 focus:ring-white/30"
-      />
+      {/* ⑤ 메모 (선택) + 등록 — 콜투액션은 먼저 읽는 것 «뒤»에 (Q12 시선의 흐름) */}
+      {stage >= 5 && (
+        <Section
+          title="⑤ 메모"
+          tail={
+            <span className="text-[10px] font-normal text-white/30">선택</span>
+          }
+        >
+          <textarea
+            value={d.memo}
+            onChange={(e) => born.set('memo', e.target.value)}
+            rows={3}
+            placeholder="왜 여기서 사려는가"
+            className="bg-bg-input w-full resize-y rounded-md px-2.5 py-2 text-[12px] leading-relaxed text-white outline-none placeholder:text-white/25 focus:ring-1 focus:ring-white/30"
+          />
+          <div className="mt-2.5 flex justify-end">
+            <Btn
+              go
+              onClick={() => setConfirming(true)}
+              disabled={!born.ready || overCash || born.pending}
+            >
+              {born.pending ? '등록 중…' : '등록'}
+            </Btn>
+          </div>
+        </Section>
+      )}
 
-      {!born.ready && (
-        <div className="mt-2 text-[11px] text-white/35">
-          이름 · 진입가 · 스톱가격 · 수량이 있어야 계획이다
-        </div>
+      {confirming && title && (
+        <AccountConfirm
+          total={defaults.accountTotal}
+          cash={defaults.accountCash}
+          title={title}
+          pending={born.pending}
+          onCancel={() => setConfirming(false)}
+          onConfirm={() => born.submit(title)}
+        />
       )}
     </section>
   )
 }
 
 /**
- * 새 계획 칸 하나.
+ * 등록 전 **계좌 총액 확인** — 따로 띄운다 (Q11 A · ③-2-3 · ④-1-3).
  *
- * 세부 1층의 `Cell` 과 다른 것은 **비어 있는 채로 시작한다**는 점이다 —
- * 그쪽은 이미 정해진 값을 보여주다 고치는 자리고, 여기는 처음부터 채우는 자리다.
- * `hint` 가 「무엇을 넣는 칸인가」를 말한다. 값을 제시하지는 않는다.
- *
- * 경고가 두 종인 것도 `Cell` 과 같다 — `warn` 은 넘어도 가는 것(⚠),
- * `block` 은 막는 것(✕). 기호가 형태로 갈리므로 색이 무너져도 남는다.
+ * 계좌 총액은 위험노출의 분모다. 계획마다 적으면 종목끼리 분모가 달라지므로 계좌가 든
+ * 값을 쓰고, «지금 이 상태가 맞는가»만 한 번 확인받는다.
  */
-function Field({
+function AccountConfirm({
+  total,
+  cash,
+  title,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  total: number
+  cash: number
+  title: string
+  pending: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && onCancel()
+    document.addEventListener('keydown', esc)
+    return () => document.removeEventListener('keydown', esc)
+  }, [onCancel])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="계좌 총액 확인"
+        className={cn(LIT_PANEL, 'w-[340px] px-5 py-4')}
+      >
+        <div className="text-[14px] font-bold text-white">등록 전 확인</div>
+        <div className="mt-1 text-[12px] text-white/50">
+          「{title}」 — 기록상 계좌가 지금과 같은가
+        </div>
+        <dl className="font-number mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[13px]">
+          <dt className="font-text text-white/45">계좌 총액</dt>
+          <dd className="text-right text-white">{won(total)}</dd>
+          <dt className="font-text text-white/45">현금</dt>
+          <dd className="text-right text-white/80">{won(cash)}</dd>
+        </dl>
+        <div className="mt-1.5 text-[10px] text-white/30">
+          다르면 계좌 기록부터 고친다 — 위험노출의 분모가 틀어진다
+        </div>
+        <div className="mt-4 flex justify-end gap-1.5">
+          <Btn onClick={onCancel}>돌아가기</Btn>
+          <Btn go onClick={onConfirm} disabled={pending}>
+            {pending ? '등록 중…' : '맞다 · 등록'}
+          </Btn>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** 섹션 하나 — 구분선 + 소제목 (Q12 게슈탈트 「구분선」) */
+function Section({
+  title,
+  tail,
+  first,
+  children,
+}: {
+  title: string
+  tail?: React.ReactNode
+  first?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <div
+      className={cn(
+        'pt-2.5 pb-1',
+        first ? 'mt-1.5' : 'mt-2 border-t border-white/[0.06]',
+      )}
+    >
+      <div className="mb-1.5 flex items-baseline gap-2">
+        <span className="text-[12px] font-bold text-white/80">{title}</span>
+        {tail && <span className="ml-auto">{tail}</span>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+/**
+ * 숫자 칸 — **숫자와 쉼표만 받고, 치는 동안 쉼표를 찍는다** (Q11 D · F).
+ * 그 밖의 글자는 아예 안 찍힌다. 「만」「억」은 안 읽는다.
+ */
+function MoneyField({
   label,
-  hint,
-  warn,
+  value,
+  onChange,
+  onBlur,
+  unit,
   block,
-  num,
-  onNum,
-  text,
-  onText,
-  placeholder,
+  warn,
   picking,
   onPick,
 }: {
   label: string
-  hint?: string
-  warn?: string
+  value: number
+  onChange: (n: number) => void
+  onBlur: () => void
+  unit?: string
   block?: string
-  num?: number
-  onNum?: (n: number) => void
-  text?: string
-  onText?: (v: string) => void
-  placeholder?: string
-  /** 이 칸을 차트에서 집는 중이다 */
+  warn?: string
   picking?: boolean
   onPick?: () => void
 }) {
-  /**
-   * ⚠️ `<label>` 로 감싸지 «않는다». 안에 버튼을 두면 그 버튼을 눌러도 라벨이
-   *    딸린 입력칸이 같이 반응한다 — 집기를 켜려는 클릭이 입력칸 포커스까지
-   *    끌고 간다. 이름은 `aria-label` 이 이미 지고 있으므로 감쌀 이유가 없다.
-   */
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="flex items-center gap-1.5 text-[10px] text-white/40">
-        {label}
-        {/* ④-1-1-1 의 📦 자료가 「차트」다 — 숫자를 쓰는 것보다 그 «자리»를
-            짚는 것이 실제 동작이다. 켜 두면 차트 커서가 십자가 된다 */}
-        {onPick && (
-          <button
-            type="button"
-            onClick={onPick}
-            className={cn(
-              'rounded-full px-1.5 py-[1px] text-[9px] transition-colors',
-              picking
-                ? 'bg-brand-blue/25 text-brand-blue'
-                : 'bg-white/[0.06] text-white/35 hover:text-white/70',
-            )}
-          >
-            {picking ? '차트에서 집는 중' : '차트에서 집기'}
-          </button>
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <FieldLabel label={label} picking={picking} onPick={onPick} />
+      <div className="relative">
+        <input
+          aria-label={label}
+          value={value ? won(value) : ''}
+          onChange={(e) =>
+            onChange(Number(e.target.value.replace(/[^0-9]/g, '')) || 0)
+          }
+          onBlur={onBlur}
+          inputMode="numeric"
+          className={cn(
+            'bg-bg-input font-number w-full rounded-md px-2 py-1 text-right text-[13px] text-white outline-none focus:ring-1 focus:ring-white/30',
+            unit && 'pr-6',
+            block && 'ring-brand-red/50 ring-1',
+            picking && 'ring-brand-blue/60 ring-1',
+          )}
+        />
+        {unit && (
+          <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-[11px] text-white/35">
+            {unit}
+          </span>
         )}
-      </span>
-      <input
-        /**
-         * ⚠️ `aria-label` 을 «따로» 건다. `<label>` 이 힌트와 경고까지 감싸고
-         *    있어서, 그것만 믿으면 접근성 이름이 「진입 예상가차트를 보고
-         *    넣는다」가 된다 — 읽는 쪽에서 칸 이름과 설명이 안 갈린다.
-         */
-        aria-label={label}
-        value={onNum ? num || '' : text}
-        onChange={(e) =>
-          onNum
-            ? onNum(Number(e.target.value.replace(/[^0-9]/g, '')) || 0)
-            : onText?.(e.target.value)
-        }
-        inputMode={onNum ? 'numeric' : undefined}
-        placeholder={placeholder}
-        className={cn(
-          'bg-bg-input font-number rounded-md px-2 py-1 text-[14px] text-white outline-none placeholder:text-white/20 focus:ring-1 focus:ring-white/30',
-          block && 'ring-brand-red/50 ring-1',
-          picking && 'ring-brand-blue/60 ring-1',
-        )}
-      />
-      {block ? (
-        <span className="text-brand-red text-[10px]">{block}</span>
-      ) : warn ? (
-        <span className="text-warning text-[10px]">{warn}</span>
-      ) : (
-        hint && <span className="text-[10px] text-white/25">{hint}</span>
-      )}
+      </div>
+      <Message block={block} warn={warn} />
     </div>
   )
 }
+
+/**
+ * 스톱가격 — **[원|%] 전환** (Q11 D).
+ * % 로 치면 칸을 벗어날 때 진입가 기준 가격으로 바꿔 넣는다. % 칸만 점(.)을 받는다.
+ */
+function StopField({
+  entry,
+  value,
+  onChange,
+  onBlur,
+  picking,
+  onPick,
+  block,
+  warn,
+}: {
+  entry: number
+  value: number
+  onChange: (n: number) => void
+  onBlur: () => void
+  picking: boolean
+  onPick: () => void
+  block?: string
+  warn?: string
+}) {
+  const [unit, setUnit] = useState<'won' | 'pct'>('won')
+  const [pct, setPct] = useState('')
+  const pctBlock =
+    unit === 'pct' && pct !== '' && entry <= 0
+      ? '✕ 진입가를 먼저 넣는다'
+      : undefined
+
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <FieldLabel label="스톱가격" picking={picking} onPick={onPick} />
+      <div className="flex gap-1">
+        <input
+          aria-label={unit === 'won' ? '스톱가격' : '스톱가격 %'}
+          value={unit === 'won' ? (value ? won(value) : '') : pct}
+          onChange={(e) =>
+            unit === 'won'
+              ? onChange(Number(e.target.value.replace(/[^0-9]/g, '')) || 0)
+              : setPct(e.target.value.replace(/[^0-9.]/g, ''))
+          }
+          onBlur={() => {
+            if (unit === 'pct' && entry > 0 && Number(pct) > 0)
+              onChange(Math.round(entry * (1 - Number(pct) / 100)))
+            onBlur()
+          }}
+          inputMode={unit === 'won' ? 'numeric' : 'decimal'}
+          placeholder={unit === 'pct' ? '3.5' : undefined}
+          className={cn(
+            'bg-bg-input font-number w-full min-w-0 rounded-md px-2 py-1 text-right text-[13px] text-white outline-none placeholder:text-white/20 focus:ring-1 focus:ring-white/30',
+            (block ?? pctBlock) && 'ring-brand-red/50 ring-1',
+            picking && 'ring-brand-blue/60 ring-1',
+          )}
+        />
+        <div className="flex shrink-0 overflow-hidden rounded-md ring-1 ring-white/10">
+          {(['won', 'pct'] as const).map((u) => (
+            <button
+              key={u}
+              type="button"
+              aria-pressed={unit === u}
+              onClick={() => {
+                setUnit(u)
+                setPct('')
+              }}
+              className={cn(
+                'px-1.5 text-[10px]',
+                unit === u ? 'bg-white/[0.14] text-white' : 'text-white/40',
+              )}
+            >
+              {u === 'won' ? '원' : '%'}
+            </button>
+          ))}
+        </div>
+      </div>
+      {unit === 'pct' && value > 0 && !pctBlock && (
+        <span className="font-number text-[10px] text-white/35">
+          → {won(value)}
+        </span>
+      )}
+      <Message block={block ?? pctBlock} warn={warn} />
+    </div>
+  )
+}
+
+function FieldLabel({
+  label,
+  picking,
+  onPick,
+}: {
+  label: string
+  picking?: boolean
+  onPick?: () => void
+}) {
+  return (
+    <span className="flex items-center gap-1.5 text-[10px] text-white/40">
+      {label}
+      {/* ④-1-1-1 의 📦 자료가 「차트」다 — 그 «자리»를 짚는 것이 실제 동작이다 */}
+      {onPick && (
+        <button
+          type="button"
+          onClick={onPick}
+          className={cn(
+            'rounded-full px-1.5 py-[1px] text-[9px] transition-colors',
+            picking
+              ? 'bg-brand-blue/25 text-brand-blue'
+              : 'bg-white/[0.06] text-white/35 hover:text-white/70',
+          )}
+        >
+          {picking ? '차트에서 집는 중' : '차트에서 집기'}
+        </button>
+      )}
+    </span>
+  )
+}
+
+/** ✕ 는 막는 것, ⚠ 는 넘어도 가는 것 — 기호가 형태로 갈리므로 색이 무너져도 남는다 */
+const Message = ({ block, warn }: { block?: string; warn?: string }) =>
+  block ? (
+    <span className="text-brand-red text-[10px]">{block}</span>
+  ) : warn ? (
+    <span className="text-warning text-[10px]">{warn}</span>
+  ) : null
 
 /** 켬/끔 하나. 세부 화면의 `Toggle` 과 같은 모양이다 */
 const Sw = ({
@@ -397,7 +677,7 @@ const Sw = ({
     aria-checked={on}
     onClick={onClick}
     className={cn(
-      'flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] transition-colors',
+      'flex items-center gap-1.5 self-start rounded-md px-2 py-0.5 text-[11px] transition-colors',
       on
         ? 'bg-white/[0.12] text-white/85'
         : 'bg-white/[0.03] text-white/35 hover:text-white/60',
@@ -418,11 +698,13 @@ const Btn = ({
   onClick,
   disabled,
   go,
+  className,
 }: {
   children: React.ReactNode
   onClick?: () => void
   disabled?: boolean
   go?: boolean
+  className?: string
 }) => (
   <button
     type="button"
@@ -433,6 +715,7 @@ const Btn = ({
       go
         ? 'bg-brand-red/85 hover:bg-brand-red text-white'
         : 'bg-white/[0.06] text-white/70 hover:bg-white/[0.12] hover:text-white',
+      className,
     )}
   >
     {children}
