@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { cn } from '@/shared/lib/cn'
 import {
   PLAN_STATUS_LABEL,
@@ -75,6 +75,20 @@ export function PlanCard({
   const update = useUpdatePlan(plan.planId)
   const { editing, shown, derived, patch, dirty, begin, cancel, set } = draft
   const [seenQty, setSeenQty] = useState(shown.quantity)
+  /**
+   * 칸을 벗어날 때 «확정된» 진입 · 스톱 — ✕ · ⚠ 는 이 값으로만 판정한다 (2026-09-17).
+   *
+   * 💀 카드 수정은 치는 즉시 판정해서, 진입가를 1 → 12 → 125 … 로 치는 동안 매 글자마다
+   *    「✕ 스톱가격은 진입가보다 낮아야 한다」 가 깜빡였다. 새 계획 폼은 칸을 벗어날 때 판정한다
+   *    (Q11 F · 10장 F). 쓰는 화면과 고치는 화면을 맞춘다. **저장 버튼은 여전히 즉시 꺼진다.**
+   */
+  const [seen, setSeen] = useState({ entry: 0, stop: 0 })
+  useEffect(() => {
+    if (editing) setSeen({ entry: shown.entryPrice, stop: shown.stopPrice })
+    // 수정을 «시작할 때»만 채운다 — 치는 동안 따라가면 즉시 판정과 같아진다
+  }, [editing])
+  const commitPrices = () =>
+    setSeen({ entry: shown.entryPrice, stop: shown.stopPrice })
 
   const walked = plan.status === 'RUNNING' || plan.status === 'DONE'
   const width = derived.stopWidth
@@ -123,6 +137,19 @@ export function PlanCard({
         plan.initialStopWidth,
       ) ?? goalsProblem([...locked.map((g) => g.r), ...shown.goals]))
     : null
+  /** 칸에 띄우는 ✕ — 확정된 값으로. 사다리 칩은 누르는 순간이 곧 확정이라 바로 본다 */
+  const shownConflict = editing
+    ? (priceConflict(seen.entry, seen.stop, goal, plan.initialStopWidth) ??
+      goalsProblem([...locked.map((g) => g.r), ...shown.goals]))
+    : null
+  const seenWidth =
+    seen.entry > 0 ? ((seen.entry - seen.stop) / seen.entry) * 100 : 0
+  const seenWarn =
+    seenWidth > HARD_LIMIT
+      ? `⚠ 손절폭 ${HARD_LIMIT}% 초과 — 포기하는 자리다`
+      : seenWidth > plan.stopLimit
+        ? `⚠ 상한 ${plan.stopLimit}% 초과`
+        : undefined
   const stopWarn =
     width > HARD_LIMIT
       ? `⚠ 손절폭 ${HARD_LIMIT}% 초과 — 포기하는 자리다`
@@ -192,7 +219,7 @@ export function PlanCard({
                 label="진입 예상가"
                 value={shown.entryPrice}
                 onChange={(n) => set('entryPrice', n)}
-                onBlur={() => undefined}
+                onBlur={commitPrices}
               />
             }
             right={
@@ -200,9 +227,9 @@ export function PlanCard({
                 entry={shown.entryPrice}
                 value={shown.stopPrice}
                 onChange={(n) => set('stopPrice', n)}
-                onBlur={() => undefined}
-                block={conflict ?? undefined}
-                warn={stopWarn}
+                onBlur={commitPrices}
+                block={shownConflict ?? undefined}
+                warn={seenWarn}
               />
             }
           />
@@ -254,7 +281,11 @@ export function PlanCard({
             limit={plan.stopLimit}
             items={plan.stopCandidates}
             chosen={shown.stopPrice}
-            onPick={(price) => set('stopPrice', price)}
+            onPick={(price) => {
+              set('stopPrice', price)
+              // 후보를 누르는 것은 칸을 벗어난 것과 같다
+              setSeen({ entry: shown.entryPrice, stop: price })
+            }}
           />
         )}
       </Section>
