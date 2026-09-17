@@ -394,14 +394,14 @@ export const handlers = [
     const body = (await request.json()) as Parameters<typeof createPlan>[0]
     const made = createPlan(body)
     // 기록상 현금보다 큰 매수는 «막는다» — 화면만 막으면 우회된다 (④-1-3)
-    // 목표 · 진입 · 스톱은 같은 값일 수 없다
+    // 목표 > 진입 > 스톱 순서여야 한다
     if (made === 'bad-goals')
       return fail(400, 'BAD_GOALS', '스톱 사다리의 목표가 올바르지 않습니다')
-    if (made === 'same-price')
+    if (made === 'price-order')
       return fail(
         400,
-        'SAME_PRICE',
-        '목표 · 진입 · 스톱은 같은 값일 수 없습니다',
+        'PRICE_ORDER',
+        '목표 > 진입가 > 스톱가격 순서여야 합니다',
       )
     if (made === 'no-cash')
       return fail(
@@ -460,11 +460,11 @@ export const handlers = [
   http.patch('/api/v1/plans/:planId', async ({ params, request }) => {
     const body = (await request.json()) as Record<string, unknown>
     const next = patchPlan(Number(params.planId), body)
-    if (next === 'same-price')
+    if (next === 'price-order')
       return fail(
         400,
-        'SAME_PRICE',
-        '목표 · 진입 · 스톱은 같은 값일 수 없습니다',
+        'PRICE_ORDER',
+        '목표 > 진입가 > 스톱가격 순서여야 합니다',
       )
     // 닿은 단을 바꾸려 했거나 목표가 오름차순이 아니다 (Q16 6)
     if (next === 'bad-goals')

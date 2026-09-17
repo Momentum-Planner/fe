@@ -122,11 +122,8 @@ export function NewPlanForm({
 
   // ── 확정된 값으로만 판정하는 메시지 ──
   const seenWidth = stopWidthPct(seen.entry, seen.stop)
-  const stopBlock =
-    priceConflict(seen.entry, seen.stop, null) ??
-    (seen.entry > 0 && seen.stop > 0 && seen.stop > seen.entry
-      ? '✕ 진입가보다 낮아야 한다'
-      : undefined)
+  // 목표 > 진입 > 스톱 — 스톱이 진입가 이상이면 막는다 (priceConflict)
+  const stopBlock = priceConflict(seen.entry, seen.stop, null) ?? undefined
   /** 목표 — 사다리 ① 단의 가격. 진입 · 스톱과 같으면 막는다 (차트도 이 단 하나만 그린다) */
   const first = d.goals[0] ?? null
   const goal =

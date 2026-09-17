@@ -697,7 +697,7 @@ describe('④ 계획의 불변식', () => {
       expect(p.riskAfter - p.riskBefore).toBeLessThan(sumOfOwn)
   })
 
-  it('목표 · 진입 · 스톱은 같은 값일 수 없다 — 생성도 수정도 서버가 막는다', async () => {
+  it('목표 > 진입 > 스톱 순서가 아니면 생성도 수정도 서버가 막는다', async () => {
     const body = {
       stockCode: '000660',
       title: '같은 값',
@@ -710,6 +710,12 @@ describe('④ 계획의 불변식', () => {
     }
     const made = await send('POST', '/api/v1/plans', body)
     expect(made.status).toBe(400)
+    // 스톱이 진입가 «위»여도 막는다
+    const above = await send('POST', '/api/v1/plans', {
+      ...body,
+      stopPrice: 1_150_000,
+    })
+    expect(above.status).toBe(400)
 
     const ok = (
       await send('POST', '/api/v1/plans', { ...body, stopPrice: 1_062_000 })

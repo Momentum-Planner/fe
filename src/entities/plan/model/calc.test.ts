@@ -163,24 +163,33 @@ describe('Q16 닿은 날 후보 — 전부 늘어놓고, 스톱 이하 · 목표
   })
 })
 
-describe('목표 · 진입 · 스톱은 같은 값일 수 없다', () => {
-  it('진입 = 스톱이면 막는다 — 1R 이 0 이다', () => {
-    expect(priceConflict(1_120_000, 1_120_000, null)).toMatch(/진입과 스톱/)
+describe('목표 > 진입 > 스톱 순서가 아니면 막는다', () => {
+  it('스톱이 진입가 이상이면 막는다 — 1R 이 0 이하다', () => {
+    expect(priceConflict(1_120_000, 1_120_000, null)).toMatch(
+      /진입가보다 낮아야/,
+    )
+    expect(priceConflict(1_120_000, 1_160_000, null)).toMatch(
+      /진입가보다 낮아야/,
+    )
   })
-  it('Q16 1R 이 박힌 계획은 본전(진입 = 스톱)을 막지 않는다', () => {
-    expect(priceConflict(1_120_000, 1_120_000, null, 40_000)).toBeNull()
-  })
-  it('목표가 진입이나 스톱과 같으면 막는다', () => {
+  it('목표가 진입가 · 스톱가격 이하면 막는다', () => {
     expect(priceConflict(1_100_000, 1_062_000, 1_100_000)).toMatch(
-      /목표와 진입/,
+      /목표는 진입가보다/,
     )
-    expect(priceConflict(1_100_000, 1_062_000, 1_062_000)).toMatch(
-      /목표와 스톱/,
+    expect(priceConflict(1_100_000, 1_062_000, 1_050_000)).toMatch(
+      /목표는 진입가보다/,
+    )
+    expect(priceConflict(1_120_000, 1_300_000, 1_280_000, 40_000)).toMatch(
+      /목표는 스톱가격보다/,
     )
   })
-  it('셋이 다 다르면 통과 · 0 은 «아직 없다»라 안 본다', () => {
+  it('순서가 맞으면 통과 · 0 은 «아직 없다»라 안 본다', () => {
     expect(priceConflict(1_100_000, 1_062_000, 1_176_000)).toBeNull()
     expect(priceConflict(0, 0, null)).toBeNull()
+  })
+  it('Q16 1R 이 박힌 계획은 스톱이 진입가 이상이어도 된다 — 목표에 도착해 올린 스톱이다', () => {
+    expect(priceConflict(1_120_000, 1_120_000, null, 40_000)).toBeNull()
+    expect(priceConflict(1_120_000, 1_160_000, 1_280_000, 40_000)).toBeNull()
   })
 })
 

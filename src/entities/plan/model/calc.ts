@@ -199,14 +199,21 @@ export const toStopPick = (o: StopPickOption): StopPick => ({
 })
 
 /**
- * 목표 · 진입 · 스톱이 **같은 값이면 안 된다** (2026-09-17) — 생성과 수정 둘 다.
+ * **목표 > 진입 > 스톱** 순서가 아니면 세울 수도 고칠 수도 없다 (2026-09-17 사용자).
  *
- * 진입 = 스톱이면 1R 이 0 이라 위험노출도 R배수도 못 잰다. 목표가 진입이나 스톱과 같으면
- * 「여기까지 오르면 올린다」가 뜻을 잃는다. 0 은 「아직 없다」라 빼고 본다.
+ * ```text
+ * 스톱 ≥ 진입     1R 이 0 이하 — 위험노출도 R배수도 못 잰다
+ * 목표 ≤ 진입     「여기까지 오르면 올린다」 가 뜻을 잃는다
+ * 목표 ≤ 스톱     스톱이 목표 위에 선다 — 닿기도 전에 걸린다
+ * ```
+ * 0 은 「아직 없다」라 빼고 본다.
  *
- * ⚠️ **실행된 계획(1R 이 박힘)은 진입 = 스톱을 막지 않는다.** 사다리에서 본전을 고르면
- *    스톱이 매입가 그대로 간다 (Q16 — 수수료 · 세금은 거래 기록 때 묻는다). 1R 은 이미
- *    `initialStopWidth` 로 박혀 있어 0 이 되지 않는다.
+ * 💀 처음엔 «같은 값»만 막았다. 스톱이 진입가 «위»로 들어가도 통과해서 카드에
+ *    「1R 40,000 · −3.57%」 같은 음수 손절폭이 떴다.
+ *
+ * ⚠️ **실행된 계획(1R 이 박힘)은 스톱 ≥ 진입을 막지 않는다.** 목표에 도착해 본전 · +1R 로
+ *    옮긴 스톱은 진입가 이상이 맞다 (Q16). 1R 은 `initialStopWidth` 로 박혀 0 이 안 된다.
+ *    그래도 **목표보다는 아래**여야 한다.
  *
  * @returns 막는 까닭. 문제없으면 null
  */
@@ -221,13 +228,13 @@ export const priceConflict = (
     initialStopWidth == null &&
     entryPrice > 0 &&
     stopPrice > 0 &&
-    entryPrice === stopPrice
+    stopPrice >= entryPrice
   )
-    return '✕ 진입과 스톱은 같은 값일 수 없다'
-  if (g > 0 && entryPrice > 0 && g === entryPrice)
-    return '✕ 목표와 진입은 같은 값일 수 없다'
-  if (g > 0 && stopPrice > 0 && g === stopPrice)
-    return '✕ 목표와 스톱은 같은 값일 수 없다'
+    return '✕ 스톱가격은 진입가보다 낮아야 한다'
+  if (g > 0 && entryPrice > 0 && g <= entryPrice)
+    return '✕ 목표는 진입가보다 높아야 한다'
+  if (g > 0 && stopPrice > 0 && g <= stopPrice)
+    return '✕ 목표는 스톱가격보다 높아야 한다'
   return null
 }
 

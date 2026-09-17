@@ -78,6 +78,17 @@ export function PlanCard({
   const walked = plan.status === 'RUNNING' || plan.status === 'DONE'
   const width = derived.stopWidth
   const oneR = plan.initialStopWidth ?? derived.oneR
+  /**
+   * 1R 의 % — **처음 1R 로** 잰다. 실행된 계획은 스톱을 본전 · +1R 로 올려도 1R 이 안 변한다 (③-2-1).
+   * 💀 지금 스톱으로 쟀더니 올린 계획에 「1R 40,000 · −3.57%」 처럼 음수가 떴다.
+   */
+  const oneRPct =
+    plan.initialStopWidth != null && shown.entryPrice > 0
+      ? (plan.initialStopWidth / shown.entryPrice) * 100
+      : width
+  // 스톱이 진입가 이상이면 1R 이 성립하지 않는다 — 음수를 보이지 않고 비운다 (저장은 막힌다)
+  const oneRText =
+    oneR > 0 ? `1R ${won(oneR)} · ${oneRPct.toFixed(2)}%` : '1R —'
   const cashBlock =
     editing && seenQty * shown.entryPrice > plan.accountCash
       ? `✕ 현금 ${won(plan.accountCash)} 보다 ${won(seenQty * shown.entryPrice - plan.accountCash)} 크다`
@@ -94,7 +105,7 @@ export function PlanCard({
         )
       : null
   const locked = lockedGoals(plan)
-  // 목표 · 진입 · 스톱은 같은 값일 수 없다 · 사다리는 오름차순 — 고칠 때 막는다
+  // 목표 > 진입 > 스톱 · 사다리는 오름차순 — 고칠 때 막는다 (저장이 꺼진다)
   const conflict = editing
     ? (priceConflict(
         shown.entryPrice,
@@ -192,9 +203,7 @@ export function PlanCard({
               <>
                 <Value label="진입 예상가">{won(shown.entryPrice)}</Value>
                 {/* 1R 은 진입가에서 재는 값이라 진입가 밑에 */}
-                <Foot>
-                  1R {won(oneR)} · {width.toFixed(2)}%
-                </Foot>
+                <Foot>{oneRText}</Foot>
               </>
             }
             right={
@@ -213,9 +222,7 @@ export function PlanCard({
         )}
         <div className="mt-1 flex items-baseline justify-between text-[11px]">
           {editing && (
-            <span className="font-number text-white/45">
-              1R {won(oneR)} · {width.toFixed(2)}%
-            </span>
+            <span className="font-number text-white/45">{oneRText}</span>
           )}
           {/* 상한은 «고를 때» 쓰는 선이다 — 읽을 때는 안 띄운다 (④-1-1-2) */}
           {editing && (

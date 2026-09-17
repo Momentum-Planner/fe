@@ -779,7 +779,7 @@ export function patchPlan(
     memo?: string
     goals?: number[]
   },
-): PlanDetail | null | 'same-price' | 'bad-goals' {
+): PlanDetail | null | 'price-order' | 'bad-goals' {
   // ⚠️ `findIndex` + `SEEDS[i]` 로 꺼내면 «인덱스가 유효한지»와 «값이 있는지»가
   //    따로 놀아 `noUncheckedIndexedAccess` 가 걸린다. 값을 먼저 찾는다
   const s = SEEDS.find((x) => x.planId === planId)
@@ -834,7 +834,7 @@ export function patchPlan(
       next.initialStopWidth,
     )
   )
-    return 'same-price'
+    return 'price-order'
   SEEDS[i] = next
 
   const built = build(next)
@@ -853,7 +853,7 @@ export function patchPlan(
  * ⚠️ 목에는 스냅샷이 손으로 박은 네 개뿐이라 **날짜로 못 찾으면 종목의 아무 것을
  *    쓴다.** 실제로는 `DailyScreeningResult` 조회다.
  */
-/** 목표 · 진입 · 스톱이 같은 값이면 서버도 막는다 — 화면만 막으면 우회된다 */
+/** 목표 > 진입 > 스톱 순서가 아니면 서버도 막는다 — 화면만 막으면 우회된다 */
 const conflicts = (
   entryPrice: number,
   stopPrice: number,
@@ -874,7 +874,7 @@ const conflicts = (
 
 export function createPlan(
   body: PlanCreate,
-): PlanDetail | 'no-cash' | 'same-price' | 'bad-goals' {
+): PlanDetail | 'no-cash' | 'price-order' | 'bad-goals' {
   if (goalsProblem(body.goals)) return 'bad-goals'
   if (
     conflicts(
@@ -884,7 +884,7 @@ export function createPlan(
       null,
     )
   )
-    return 'same-price'
+    return 'price-order'
   /**
    * **기록상 현금보다 큰 매수는 막는다** (④-1-3 · ⑥).
    *
