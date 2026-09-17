@@ -1,9 +1,24 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
 import { server } from 'mocks/server'
 import { StatsPage } from './StatsPage'
+
+// 라우터 없이 그린다 — 링크가 어디로 가려 했는지만 남긴다
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({ children, to }: { children: React.ReactNode; to?: string }) => (
+    <a data-to={to}>{children}</a>
+  ),
+}))
 
 /**
  * ⑦ 이 **세 덩어리로 서는지** 본다. 값이 맞는지는 `model/aggregate.test.ts`
@@ -67,54 +82,63 @@ describe('거래 통계 — 요약 · 워터폴 · 기록', () => {
 
   it('① 은 «적는» 길도 연다 — 머리줄에서 기간을 고른다', async () => {
     draw()
-    await screen.findByText('월별 손익과 누적')
-    expect(screen.getByText('기간')).toBeInTheDocument()
+    const title = await screen.findByText('월별 손익과 누적')
+    // 「기간」은 거래 기록의 열 이름에도 있다 — 워터폴 카드 안에서 찾는다
+    const card = title.closest('.card') as HTMLElement
+    expect(within(card).getByText('기간')).toBeInTheDocument()
     expect(screen.getAllByRole('combobox')).toHaveLength(2)
     expect(screen.getByRole('button', { name: '전체 기간' })).toBeDisabled()
   })
 
-  it('② 는 한 번에 30행만 세운다 — 나머지는 «내려가면» 붙는다', async () => {
+  it('② 는 «접힌 색인»이다 — 한 줄이 계획 하나, 손익 합계 순 (Q14)', async () => {
     draw()
     const table = (await screen.findAllByRole('table')).at(-1)!
-    // 목의 체결은 83건 — 첫 판은 30행이다
-    expect(within(table).getAllByRole('row').length).toBe(1 + 30)
-    // 「더 보기」 바는 없다 — 표가 자기 스크롤을 가진다
+    const heads = within(table).getAllByRole('button', { expanded: false })
+    expect(heads.length).toBeGreaterThanOrEqual(30)
+    // 펼친 것이 없다 — 행은 머리줄뿐
     expect(
-      screen.queryByRole('button', { name: /더 보기/ }),
-    ).not.toBeInTheDocument()
+      within(table).queryAllByRole('button', { expanded: true }),
+    ).toHaveLength(0)
+    expect(
+      screen.getByRole('button', { name: '수익 큰 순' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: '손실 큰 순' }),
+    ).toBeInTheDocument()
   })
 
-  it('② 는 계획 칸이 2값이다 — 통계 축과 같은 둘', async () => {
+  it('② 는 구분(매수/매도) 손잡이가 없고 · 종목 찾기가 있다', async () => {
     draw()
-    expect(await screen.findByText('거래 기록')).toBeInTheDocument()
-    expect(screen.getAllByText('계획에 없음').length).toBeGreaterThan(0)
+    await screen.findByText('거래 기록')
+    expect(
+      screen.queryByRole('button', { name: /매수\s*37/ }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText('게이트')).toBeInTheDocument()
+    expect(
+      screen.getByRole('searchbox', { name: '종목 찾기' }),
+    ).toBeInTheDocument()
   })
 
-  it('② 의 머리줄 셈이 «손잡이»다 — 누르면 목록이 걸린다', async () => {
+  it('② 는 전체 건수를 올리지 않는다 — count() 쿼리를 안 쓴다 (Q14 ⑤)', async () => {
+    draw()
+    await screen.findByText('거래 기록')
+    expect(screen.queryByText(/체결 83건/)).not.toBeInTheDocument()
+    expect(screen.queryByText('보고 있는 것')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '있음' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '없음' })).toBeInTheDocument()
+  })
+
+  it('② 의 거르기는 오른쪽에서 걸린다 — 걸면 해제가 선다', async () => {
     const user = userEvent.setup()
     draw()
     await screen.findByText('거래 기록')
 
-    // 손잡이 셋 — 「구분」「계획」은 열 이름과 같은 말이라 둘씩 뜬다
-    expect(screen.getByText('게이트')).toBeInTheDocument()
-    expect(screen.getAllByText('구분')).toHaveLength(2)
-
-    const before = screen.getByText('보고 있는 것').nextSibling?.textContent
-    expect(before).toBe('83건')
-
-    // 「매수 37」 을 누르면 매수만 남는다
-    await user.click(screen.getByRole('button', { name: /매수\s*37/ }))
-    expect(screen.getByText('보고 있는 것').nextSibling?.textContent).toBe(
-      '37건',
-    )
-    // 거르기 전의 수는 손잡이에 그대로 남는다 — 무엇이 있는지가 보여야 한다
-    expect(
-      screen.getByRole('button', { name: /매도\s*46/ }),
-    ).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '없음' }))
+    // 계획 없는 매도 열둘이 한 줄씩
+    expect(screen.getAllByText('계획에 없음').length).toBeGreaterThanOrEqual(12)
+    expect(screen.queryByText(/돌파 183,500/)).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '거르기 해제' }))
-    expect(screen.getByText('보고 있는 것').nextSibling?.textContent).toBe(
-      '83건',
-    )
+    expect(screen.getByText(/돌파 183,500/)).toBeInTheDocument()
   })
 })

@@ -8,9 +8,13 @@ import {
   monthlyFlow,
   planClassOf,
   LIST_FILTER_ALL,
-  filterRows,
+  isNoneGroup,
+  filterGroups,
+  groupRows,
   listStat,
+  liveRows,
   recordRows,
+  sortGroups,
   riskStat,
   summarize,
   wallStat,
@@ -56,9 +60,12 @@ const buy = (over: Partial<TradeRecord> = {}): TradeRecord => ({
 
 const sell = (
   profit: number,
-  over: Partial<TradeRecord> & { rMultiple?: number | null } = {},
+  over: Partial<TradeRecord> & {
+    rMultiple?: number | null
+    holdingDays?: number
+  } = {},
 ): Closed => {
-  const { rMultiple = profit > 0 ? 2 : -1, ...rest } = over
+  const { rMultiple = profit > 0 ? 2 : -1, holdingDays = 18, ...rest } = over
   return {
     ...buy(),
     side: 'SELL',
@@ -67,7 +74,7 @@ const sell = (
       entryPrice: 100_000,
       returnPct: profit / 1000,
       profit,
-      holdingDays: 18,
+      holdingDays,
       rMultiple,
       riskPct: 1.5,
       riskBand: 'MID',
@@ -219,22 +226,82 @@ describe('③ 요약 지표', () => {
   })
 })
 
-describe('목록 — 한 행이 체결 하나다 (건당)', () => {
-  it('계획으로 묶지 않는다 — 체결마다 한 행', () => {
+describe('목록 — 계획이 제목, 체결이 행 (Q13)', () => {
+  it('행은 여전히 체결 하나다 — 최신이 위', () => {
     const rows = recordRows([
       buy({ filledAt: '2025-06-02' }),
       sell(1, { filledAt: '2025-06-20' }),
       sell(1, { filledAt: '2025-06-25' }),
     ])
     expect(rows).toHaveLength(3)
-    // 최신이 위
     expect(rows.map((r) => r.rec.filledAt)).toEqual([
       '2025-06-25',
       '2025-06-20',
       '2025-06-02',
     ])
-    // 계획은 «줄마다» 다시 선다
-    expect(rows.every((r) => r.planClass === 'YES')).toBe(true)
+  })
+
+  it('계획으로 묶고 · 묶음 안은 시간 오름차순 · 묶음끼리는 손익 합계 순 (Q14)', () => {
+    const groups = groupRows(
+      recordRows([
+        buy({ planId: 1, filledAt: '2025-06-02' }),
+        sell(100_000, { planId: 1, filledAt: '2025-06-20' }),
+        buy({ planId: 2, filledAt: '2025-06-05' }),
+        sell(500_000, { planId: 2, filledAt: '2025-07-01' }),
+        buy({ planId: 3, filledAt: '2025-08-01' }),
+      ]),
+    )
+    // 수익 큰 순 — 매도 없는 계획은 맨 끝
+    expect(groups.map((g) => g.planId)).toEqual([2, 1, 3])
+    expect(sortGroups(groups, 'LOSS').map((g) => g.planId)).toEqual([1, 2, 3])
+    const one = groups.find((g) => g.planId === 1)!
+    expect(one.rows.map((r) => r.rec.filledAt)).toEqual([
+      '2025-06-02',
+      '2025-06-20',
+    ])
+    expect([one.firstAt, one.lastAt]).toEqual(['2025-06-02', '2025-06-20'])
+  })
+
+  it('계획 없는 체결은 «매도 하나가 한 줄» — 그 매수는 보유일수로 거슬러 붙는다', () => {
+    const groups = groupRows(
+      recordRows([
+        buy({ planId: null, stockCode: 'A', filledAt: '2025-06-02' }),
+        sell(-1, {
+          planId: null,
+          stockCode: 'A',
+          filledAt: '2025-06-10',
+          holdingDays: 8,
+        }),
+        buy({ planId: null, stockCode: 'B', filledAt: '2025-06-03' }),
+        sell(1, {
+          planId: null,
+          stockCode: 'B',
+          filledAt: '2025-06-04',
+          holdingDays: 1,
+        }),
+        buy({ planId: null, stockCode: 'C', filledAt: '2025-06-05' }),
+      ]),
+    )
+    const none = groups.filter(isNoneGroup)
+    expect(none).toHaveLength(3)
+    expect(none.map((g) => g.rows.length)).toEqual([2, 2, 1])
+    // 짝 없는 매수는 결과가 없어 맨 끝
+    expect(none.at(-1)!.sells).toBe(0)
+  })
+
+  it('머리줄 합계는 매도 행의 합 — 매도가 없으면 0건이다 (0원으로 적지 않는다)', () => {
+    const [g] = groupRows(
+      recordRows([
+        buy({ filledAt: '2025-06-02' }),
+        sell(300_000, { filledAt: '2025-06-20' }),
+        sell(-100_000, { filledAt: '2025-06-25' }),
+      ]),
+    )
+    expect(g!.sells).toBe(2)
+    expect(g!.realized).toBe(200_000)
+
+    const [only] = groupRows(recordRows([buy({ planId: 9 })]))
+    expect(only!.sells).toBe(0)
   })
 
   it('머리줄의 셈은 «매도»를 센다 — 위의 요약과 같은 수여야 한다', () => {
@@ -251,61 +318,54 @@ describe('목록 — 한 행이 체결 하나다 (건당)', () => {
     expect(stat.buys).toBe(2)
     expect(stat.sells).toBe(3)
     expect(stat.realized).toBe(150_000)
-    expect(stat.wins).toBe(1)
-    expect(stat.losses).toBe(2)
-    // 계획 유무 둘의 합이 매도 건수다
     expect(stat.planned + stat.unplanned).toBe(stat.sells)
-    expect(stat.unplanned).toBe(1)
   })
 
-  it('손잡이 셋은 «따로» 걸린다 — 구분 · 계획 · 게이트', () => {
-    const rows = recordRows([
-      buy({ filledAt: '2025-06-02' }),
-      sell(1, { filledAt: '2025-06-20' }),
-      buy({
-        planId: null,
-        planTitle: null,
-        filledAt: '2025-07-01',
-        snapshot: snap({ trendPassed: 6 }),
-      }),
-      sell(-1, {
-        planId: null,
-        filledAt: '2025-07-05',
-        snapshot: snap({ trendPassed: 6 }),
-      }),
-    ])
+  describe('필터', () => {
+    const groups = () =>
+      groupRows(
+        recordRows([
+          buy({ planId: 1, filledAt: '2025-06-02' }),
+          sell(1, { planId: 1, filledAt: '2025-07-20' }),
+          buy({
+            planId: null,
+            planTitle: null,
+            stockName: '카카오',
+            stockCode: '035720',
+            filledAt: '2025-07-01',
+            snapshot: snap({ trendPassed: 6 }),
+          }),
+          sell(-1, {
+            planId: null,
+            stockName: '카카오',
+            stockCode: '035720',
+            filledAt: '2025-07-05',
+            snapshot: snap({ trendPassed: 6 }),
+          }),
+        ]),
+      )
     const all = LIST_FILTER_ALL
+    const count = (f: typeof all) => liveRows(filterGroups(groups(), f)).length
 
-    expect(filterRows(rows, all)).toHaveLength(4)
-    expect(filterRows(rows, { ...all, side: 'SELL' })).toHaveLength(2)
-    expect(filterRows(rows, { ...all, plan: 'NONE' })).toHaveLength(2)
-    expect(filterRows(rows, { ...all, gate: 'PASS' })).toHaveLength(2)
-    // 겹쳐서도 걸린다
-    expect(
-      filterRows(rows, {
-        ...all,
-        side: 'SELL',
-        plan: 'NONE',
-        gate: 'SHORT',
-      }),
-    ).toHaveLength(1)
+    it('계획 · 게이트 · 종목은 행을 거른다', () => {
+      expect(count(all)).toBe(4)
+      expect(count({ ...all, plan: 'NONE' })).toBe(2)
+      expect(count({ ...all, gate: 'PASS' })).toBe(2)
+      expect(count({ ...all, q: '카카' })).toBe(2)
+      expect(count({ ...all, q: '0357' })).toBe(2)
+    })
 
-    // 날짜는 «따로» 논다 — 워터폴의 달과 성질이 다르다
-    expect(filterRows(rows, { ...all, from: '2025-07-01' })).toHaveLength(2)
-    expect(
-      filterRows(rows, { ...all, from: '2025-06-20', to: '2025-07-01' }),
-    ).toHaveLength(2)
-  })
-
-  it('머리줄의 셈은 «거른 뒤»를 센다 — 보고 있는 것이 설명돼야 한다', () => {
-    const rows = recordRows([
-      buy({ filledAt: '2025-06-02' }),
-      sell(300_000, { filledAt: '2025-06-20' }),
-      sell(-100_000, { planId: null, filledAt: '2025-07-05' }),
-    ])
-    const only = filterRows(rows, { ...LIST_FILTER_ALL, plan: 'YES' })
-    expect(listStat(only).realized).toBe(300_000)
-    expect(listStat(rows).realized).toBe(200_000)
+    it('체결일에 걸친 묶음은 «통째로» 나오고 범위 밖은 흐리게 따라온다', () => {
+      const f = { ...all, from: '2025-07-10' }
+      const shown = filterGroups(groups(), f)
+      // 계획 1 은 7/20 매도가 범위 안 → 6/2 매수도 흐리게 따라온다
+      const plan = shown.find((g) => g.planId === 1)!
+      expect(plan.rows.map((r) => !!r.dim)).toEqual([true, false])
+      // 계획에 없음은 범위 안의 행이 없어 빠진다
+      expect(shown.find(isNoneGroup)).toBeUndefined()
+      // 흐린 행은 셈에 없다
+      expect(liveRows(shown)).toHaveLength(1)
+    })
   })
 })
 
