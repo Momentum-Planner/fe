@@ -8,6 +8,7 @@ import {
   usePickStop,
 } from '@/entities/plan'
 import type { PlanDetail, StopPick, StopPickOption } from '@/entities/plan'
+import { RLadder } from './RHelp'
 import { won } from './planParts'
 
 /**
@@ -116,6 +117,13 @@ export function StopPickPanel({
         </span>
         <span className="font-number text-[11px] text-white/45">
           {pick.basis.date.slice(5)} 종가 {won(pick.basis.close)}
+        </span>
+        <span className="ml-auto">
+          <RLadder
+            entryPrice={plan.entryPrice}
+            oneR={plan.initialStopWidth ?? 0}
+            goalR={pick.goal.r}
+          />
         </span>
       </div>
 

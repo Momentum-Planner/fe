@@ -8,6 +8,7 @@ import {
   useUpdatePlan,
 } from '@/entities/plan'
 import type { PlanDetail } from '@/entities/plan'
+import { RLadder, RTerm } from './RHelp'
 import { StopLadderEditor, StopLadderView } from './StopLadder'
 import { StopPickPanel } from './StopPickPanel'
 import type { PickChoice, pickOptionsOf } from './StopPickPanel'
@@ -88,7 +89,15 @@ export function PlanCard({
       : width
   // 스톱이 진입가 이상이면 1R 이 성립하지 않는다 — 음수를 보이지 않고 비운다 (저장은 막힌다)
   const oneRText =
-    oneR > 0 ? `1R ${won(oneR)} · ${oneRPct.toFixed(2)}%` : '1R —'
+    oneR > 0 ? (
+      <>
+        <RTerm>1R</RTerm> {won(oneR)} · {oneRPct.toFixed(2)}%
+      </>
+    ) : (
+      <>
+        <RTerm>1R</RTerm> —
+      </>
+    )
   const cashBlock =
     editing && seenQty * shown.entryPrice > plan.accountCash
       ? `✕ 현금 ${won(plan.accountCash)} 보다 ${won(seenQty * shown.entryPrice - plan.accountCash)} 크다`
@@ -298,7 +307,16 @@ export function PlanCard({
       </Section>
 
       {/* ④ 스톱 갱신 규칙 — 스톱 사다리 (Q16). 닿은 단은 잠기고, 안 닿은 단만 고친다 */}
-      <Section title="④ 스톱 갱신 규칙">
+      <Section
+        title="④ 스톱 갱신 규칙"
+        tail={
+          <RLadder
+            entryPrice={shown.entryPrice}
+            oneR={oneR}
+            goalR={shown.goals[0] ?? null}
+          />
+        }
+      >
         {editing ? (
           <StopLadderEditor
             value={shown.goals}

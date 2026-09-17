@@ -13,6 +13,7 @@ import {
 } from '@/entities/plan'
 import type { PlanDefaults } from '@/entities/plan'
 import { SnapshotCalendar } from './SnapshotCalendar'
+import { RLadder, RTerm } from './RHelp'
 import { StopLadderEditor } from './StopLadder'
 import { LIT_PANEL } from './panel'
 import {
@@ -221,9 +222,10 @@ export function NewPlanForm({
                   onPick={() => onPicking(picking === 'entry' ? null : 'entry')}
                 />
                 <Foot>
+                  <RTerm>1R</RTerm>{' '}
                   {ok1R
-                    ? `1R ${won(d.entryPrice - d.stopPrice)} · ${width.toFixed(2)}%`
-                    : '1R —'}
+                    ? `${won(d.entryPrice - d.stopPrice)} · ${width.toFixed(2)}%`
+                    : '—'}
                 </Foot>
               </>
             }
@@ -318,7 +320,16 @@ export function NewPlanForm({
 
       {/* ④ 스톱 갱신 규칙 — 스톱 사다리. 목표만 건다 · 옮길 자리는 닿은 날 고른다 (Q16) */}
       {stage >= 4 && (
-        <Section title="④ 스톱 갱신 규칙">
+        <Section
+          title="④ 스톱 갱신 규칙"
+          tail={
+            <RLadder
+              entryPrice={d.entryPrice}
+              oneR={ok1R ? d.entryPrice - d.stopPrice : 0}
+              goalR={d.goals[0] ?? null}
+            />
+          }
+        >
           <div className="mb-1 text-[11px] text-white/35">
             목표에 닿으면 그날 스톱을 옮길 자리를 고른다
           </div>
