@@ -3,6 +3,7 @@ import { cn } from '@/shared/lib/cn'
 import {
   INDICATORS,
   PICK_COLORS,
+  defaultLayers,
   makeLayer,
   readParam,
   specOf,
@@ -115,6 +116,14 @@ export function IndicatorPanel({
                 }}
               />
             ))}
+            {/* 이 종목에 저장된 것을 버리고 코드의 기본값(이평선 50·150·200)으로 */}
+            <button
+              type="button"
+              onClick={() => onChange(defaultLayers())}
+              className="mt-3 w-full rounded-md px-2 py-1.5 text-left text-[12px] text-white/40 hover:bg-white/[0.06] hover:text-white/75"
+            >
+              기본값으로
+            </button>
           </div>
 
           {/* 오른쪽 — 어떻게 */}

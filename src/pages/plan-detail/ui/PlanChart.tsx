@@ -14,6 +14,8 @@ import {
   bandOptions,
   paneLegend,
   defaultLayers,
+  loadLayers,
+  saveLayers,
   panes,
   specOf,
 } from './indicators'
@@ -318,7 +320,22 @@ export function PlanChart({
   pickLine?: { label: string; price: number } | null
 }) {
   const [showSR, setShowSR] = useState(true)
-  const [layers, setLayers] = useState<Layer[]>(defaultLayers)
+  const [layers, setLayers] = useState<Layer[]>(
+    () => loadLayers(stockCode) ?? defaultLayers(),
+  )
+  /**
+   * 지금 `layers` 가 «어느 종목 것»인가. 종목이 바뀌는 렌더에서 옛 종목 설정을 새 종목 이름으로
+   * 저장해 버리지 않게 한다 — 바뀌면 먼저 새 종목 것을 읽고, 그다음부터 저장한다.
+   */
+  const layersOf = useRef(stockCode)
+  useEffect(() => {
+    if (layersOf.current === stockCode) return
+    layersOf.current = stockCode
+    setLayers(loadLayers(stockCode) ?? defaultLayers())
+  }, [stockCode])
+  useEffect(() => {
+    if (layersOf.current === stockCode) saveLayers(stockCode, layers)
+  }, [layers, stockCode])
   /**
    * 커서가 짚은 봉. **차트 «밖»에서 그린다.**
    *

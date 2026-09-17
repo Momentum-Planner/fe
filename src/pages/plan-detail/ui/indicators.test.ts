@@ -10,9 +10,12 @@ import {
   INDICATORS,
   IND_H,
   VOLUME_SERIES_ID,
+  defaultLayers,
+  loadLayers,
   makeLayer,
   panes,
   readParam,
+  saveLayers,
   specOf,
   writeParam,
 } from './indicators'
@@ -214,5 +217,34 @@ describe('보조지표 사전', () => {
         ],
       } as Highcharts.Options),
     ).toThrow(/volumeSeriesID/)
+  })
+})
+
+describe('보조지표 설정은 종목마다 저장된다', () => {
+  it('저장한 지표 · 색이 그 종목에서만 돌아온다', () => {
+    localStorage.clear()
+    const macd = specOf('macd')
+    if (!macd) throw new Error('MACD 가 사전에 없다')
+    const layers = [
+      ...defaultLayers(),
+      { ...makeLayer(macd), color: '#FF6678' },
+    ]
+    saveLayers('000660', layers)
+
+    const back = loadLayers('000660')
+    expect(back?.map((l) => l.id)).toEqual(['sma', 'sma', 'sma', 'macd'])
+    expect(back?.at(-1)?.color).toBe('#FF6678')
+    // 다른 종목은 저장된 것이 없다 — 기본값으로 선다
+    expect(loadLayers('005930')).toBeNull()
+  })
+
+  it('사전에 없는 지표 · 깨진 값은 버린다', () => {
+    localStorage.setItem(
+      'bultagi:indicators:v1:000660',
+      JSON.stringify([{ key: 'x', id: 'vwap', color: '#fff' }, 3]),
+    )
+    expect(loadLayers('000660')).toEqual([])
+    localStorage.setItem('bultagi:indicators:v1:000660', '{깨짐')
+    expect(loadLayers('000660')).toBeNull()
   })
 })

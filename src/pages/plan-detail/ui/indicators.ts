@@ -461,6 +461,48 @@ export function defaultLayers(): Layer[] {
   return [50, 150, 200].map((n, i) => makeLayer(sma, n, i))
 }
 
+/* ── 종목마다 저장 ─────────────────────────────────────────────────────── */
+
+/**
+ * 켠 지표 · 기간 · 선 색을 **종목마다** 이 브라우저에 남긴다 (2026-09-17 사용자 「종목마다 따로」).
+ *
+ * 💀 새로고침하면 기본 이평선 셋으로 돌아가 매번 다시 켜야 했다.
+ *
+ * ⚠️ 기본값(처음 켜는 색 · 기간)은 **코드에 있다** — `MA_COLOR` · `OWN_COLOR` · `SECOND_LINE` ·
+ *    `THIRD_LINE` · `defaultLayers`. 저장된 값이 없거나 「기본값으로」 를 누르면 그 값으로 선다.
+ * ⚠️ 저장소는 막혀 있을 수 있다(사생활 보호 창 등) — 읽기 · 쓰기가 실패해도 기본값으로 그린다.
+ */
+const storeKey = (stockCode: string) => `bultagi:indicators:v1:${stockCode}`
+
+export function loadLayers(stockCode: string): Layer[] | null {
+  try {
+    const raw = localStorage.getItem(storeKey(stockCode))
+    if (!raw) return null
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return null
+    // 사전에 없는 지표(이름이 바뀌었거나 뺀 지표)는 버린다 — 차트가 모르는 타입이면 통째로 깨진다
+    const layers = parsed.filter(
+      (l): l is Layer =>
+        !!l &&
+        typeof l === 'object' &&
+        typeof (l as Layer).key === 'string' &&
+        typeof (l as Layer).color === 'string' &&
+        specOf((l as Layer).id) != null,
+    )
+    return layers
+  } catch {
+    return null
+  }
+}
+
+export function saveLayers(stockCode: string, layers: Layer[]) {
+  try {
+    localStorage.setItem(storeKey(stockCode), JSON.stringify(layers))
+  } catch {
+    // 저장이 안 되면 이번 화면에서만 유지된다 — 그리는 데는 지장이 없다
+  }
+}
+
 /* ── 칸 배치 ───────────────────────────────────────────────────────────── */
 
 export const PRICE_H = 300
