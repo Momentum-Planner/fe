@@ -252,9 +252,11 @@ describe('이어서 세우기', () => {
     expect(
       screen.queryByRole('button', { name: '수정' }),
     ).not.toBeInTheDocument()
-    // 만드는 동안 새 마디가 설 자리가 켜지고, **같은 자리를 다시 누르면 끝난다**
-    const gate = screen.getByRole('button', { name: '생성 그만두기' })
-    await user.click(gate)
+    // 세우는 동안 사슬 자리는 «새 계획 전에 볼 것» 이 쓴다 (Q17 2) — 사슬은 「사슬 보기」 뒤에
+    expect(await screen.findByText('새 계획 전에 볼 것')).toBeInTheDocument()
+    expect(screen.getByText('최근 매매 성적')).toBeInTheDocument()
+    // 끝내는 문은 폼의 「취소」 다
+    await user.click(screen.getByRole('button', { name: '취소' }))
     expect(
       await screen.findByRole('button', { name: '수정' }),
     ).toBeInTheDocument()
@@ -321,10 +323,14 @@ describe('이어서 세우기', () => {
     // ④ 사다리는 빈 ① 단으로 시작한다 — 목표를 골라야 ⑤ 와 등록이 선다 (Q16)
     await user.click(screen.getByRole('button', { name: '2R' }))
     expect(screen.getByRole('button', { name: '등록' })).toBeEnabled()
-    // 이름이 자동으로 붙는다 — 진입 상태 + 진입가
-    expect(
-      screen.getByText(/^(조기|돌파|눌림|진입 불가) 1,200,000$/),
-    ).toBeInTheDocument()
+    // 이름 칸 — 비워 두면 자동 이름(진입 상태 + 진입가)이 자리 표시로 선다 · 직접 붙일 수 있다
+    const name = screen.getByLabelText('계획 이름')
+    expect(name).toHaveAttribute(
+      'placeholder',
+      expect.stringMatching(/^(조기|돌파|눌림|진입 불가) 1,200,000$/),
+    )
+    await user.type(name, '내 이름')
+    expect(name).toHaveValue('내 이름')
 
     // 등록하면 계좌 총액을 «따로» 확인받는다 (Q11 A)
     await user.click(screen.getByRole('button', { name: '등록' }))

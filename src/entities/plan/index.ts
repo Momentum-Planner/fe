@@ -5,6 +5,7 @@ export {
   usePlanDetail,
   useStockPosition,
   usePlanDefaults,
+  usePlanBriefing,
   usePickStop,
   useCreatePlan,
   useUpdatePlan,

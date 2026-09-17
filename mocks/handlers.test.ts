@@ -478,6 +478,31 @@ describe('계획 폐기와 삭제', () => {
     expect(next.status).toBe(200)
   })
 
+  it('Q17 새 계획 전에 볼 것 — 연속 손실 · 승률 · 이 종목 · 진입 상태별', async () => {
+    const b = (await get('/api/v1/stocks/000660/plan-briefing')).data as {
+      recent: {
+        lossStreak: number
+        recentN: number
+        overallN: number
+        overallWinRate: number | null
+        accountRisk: number
+      }
+      stock: { trades: number; wins: number; losses: number; holding: unknown }
+      byEntryState: Record<string, { n: number; winRate: number }>
+    }
+    expect(b.recent.overallN).toBeGreaterThan(0)
+    expect(b.recent.recentN).toBeLessThanOrEqual(10)
+    expect(b.recent.lossStreak).toBeGreaterThanOrEqual(0)
+    expect(b.recent.accountRisk).toBeGreaterThan(0)
+    // 이 종목은 실행 중 계획이 있다 — 들고 있는 것이 붙는다
+    expect(b.stock.holding).not.toBeNull()
+    expect(b.stock.wins + b.stock.losses).toBe(b.stock.trades)
+    const groups = Object.values(b.byEntryState)
+    expect(groups.reduce((n, g) => n + g.n, 0)).toBeLessThanOrEqual(
+      b.recent.overallN,
+    )
+  })
+
   it('Q12 계획 기본값에 표본 수가 온다 — 평균 수익률 후보를 고를 수 있는지가 여기서 갈린다', async () => {
     const d = (await get('/api/v1/stocks/000660/plan-defaults')).data as {
       sampleCount: number

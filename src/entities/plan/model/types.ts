@@ -455,6 +455,47 @@ export interface PlanDefaults {
   sampleCount: number
 }
 
+/**
+ * **새 계획 전에 볼 것** (Q17 2) — 이전 결과에서 «결론»만 뽑는다.
+ *
+ * ```text
+ * recent    내 최근 매매 (전 종목)   연속 손실 · 최근 10건 승률 · 계좌 전체 위험노출
+ * stock     이 종목              몇 승 몇 패 · 마지막 결과 · 들고 있는 것 · 마지막 판 뒤 한 줄
+ * byEntry   이 조건에서 나         진입 상태별 · 레짐별 승률 (새 계획의 조건으로 골라 본다)
+ * ```
+ *
+ * 💀 사슬은 계획의 «모양»이라 「이 종목에서 내가 어땠나」 는 마디를 하나씩 눌러야 나왔다.
+ */
+export interface PlanBriefing {
+  recent: {
+    /** 지금 이어지는 연속 손실 — 마지막 매도부터 거꾸로 센다 */
+    lossStreak: number
+    recentN: number
+    /** 최근 10건 승률 % · 표본이 없으면 null */
+    recentWinRate: number | null
+    overallN: number
+    overallWinRate: number | null
+    /** 지금 계좌 전체 위험노출 % — 실행 중 계획들의 합 */
+    accountRisk: number
+  }
+  stock: {
+    trades: number
+    wins: number
+    losses: number
+    last: {
+      filledAt: string
+      rMultiple: number | null
+      returnPct: number
+    } | null
+    holding: { quantity: number; stopPrice: number } | null
+    /** 마지막 매도의 판 뒤 한 줄 — 회고 자리가 생기기 전까지 이것이 회고다 */
+    lastNote: string | null
+  }
+  /** 진입 상태별 — 매도 기록의 스냅샷으로 가른다 */
+  byEntryState: Partial<Record<EntryState, { n: number; winRate: number }>>
+  byRegime: Partial<Record<string, { n: number; winRate: number }>>
+}
+
 export interface PlanListResponse {
   plans: PlanListItem[]
 }

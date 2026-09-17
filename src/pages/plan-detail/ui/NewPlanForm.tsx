@@ -11,8 +11,13 @@ import {
   priceConflict,
   stopWidthPct,
 } from '@/entities/plan'
-import type { PlanDefaults } from '@/entities/plan'
+import type { PlanBriefing, PlanDefaults } from '@/entities/plan'
 import { SnapshotCalendar } from './SnapshotCalendar'
+import {
+  ACCOUNT_RISK_WARN,
+  LOSS_STREAK_WARN,
+  entryStateNote,
+} from './PlanBriefing'
 import { RLadder, RTerm } from './RHelp'
 import { StopLadderEditor } from './StopLadder'
 import { LIT_PANEL } from './panel'
@@ -46,7 +51,7 @@ import type { useNewPlan } from './useNewPlan'
  * **✕ · ⚠ 메시지도 칸을 벗어날 때** 뜬다 (Q11 F). 1R · 위험노출 · 필요 현금 같은
  * «결과값»만 치는 동안 따라 움직인다 — 그래야 보고 정한다 (디자인 9장 ④).
  *
- * ⚠️ 이름을 안 묻는다 — 진입 상태 + 진입가로 자동이다 (Q11 A · `autoPlanTitle`).
+ * 이름은 머리줄에서 직접 붙인다. 비우면 진입 상태 + 진입가로 자동이다 (`autoPlanTitle`).
  */
 const RISK_WARN = 2.5
 
@@ -58,6 +63,7 @@ export function NewPlanForm({
   rows,
   picking,
   onPicking,
+  briefing,
 }: {
   born: ReturnType<typeof useNewPlan>
   /** 계좌 · 통계 · 종목에서 오는 값들 — 계획이 아니라 «그 밖»에서 온다 */
@@ -66,6 +72,11 @@ export function NewPlanForm({
   rows: DailyScreening[]
   picking: 'entry' | 'stop' | null
   onPicking: (v: 'entry' | 'stop' | null) => void
+  /**
+   * 새 계획 전에 볼 것 (Q17 2 · (다)) — 결정을 내리는 칸 옆에서 경고를 한 번 더 띄운다.
+   * 사슬 자리의 브리핑은 스크롤하면 사라지지만 수량을 정하는 순간엔 여기 있다.
+   */
+  briefing?: PlanBriefing
 }) {
   const d = born.draft
   /** 어디까지 열렸나 — 한 번 열린 섹션은 값이 틀려져도 안 닫는다 */
@@ -73,6 +84,11 @@ export function NewPlanForm({
   /** 칸을 벗어날 때 «확정된» 값 — ✕ · ⚠ 는 이 값으로만 판정한다 (Q11 F) */
   const [seen, setSeen] = useState({ entry: 0, stop: 0, qty: 0 })
   const [confirming, setConfirming] = useState(false)
+  /**
+   * 사용자가 붙인 이름 — **비우면 자동 이름**(진입 상태 + 진입가)을 쓴다 (2026-09-17 사용자).
+   * 💀 Q11 A 는 「이름을 안 묻는다 — 자동」 이었다. 사슬 · 목록에서 가리키는 이름이라 직접 붙일 수 있어야 한다.
+   */
+  const [name, setName] = useState('')
 
   /**
    * **차트에서 집기가 끝나면 칸을 벗어난 것과 같다** (2026-09-17).
@@ -110,6 +126,8 @@ export function NewPlanForm({
     snap && d.entryPrice > 0
       ? autoPlanTitle(snap.entryState, d.entryPrice)
       : null
+  /** 등록할 이름 — 직접 붙였으면 그것, 아니면 자동 */
+  const finalTitle = name.trim() || title
 
   // ── 칸을 벗어날 때 확정하고, 맞으면 다음 섹션을 연다 ──
   const commit1R = () => {
@@ -148,6 +166,11 @@ export function NewPlanForm({
       : undefined
   const overCash = cash > defaults.accountCash
   const riskWarn = seen.qty > 0 && after > RISK_WARN
+  const entryNote = briefing ? entryStateNote(briefing, snap) : null
+  /** 이 계획까지 더한 계좌 전체 위험노출 — 이 종목의 지금 몫을 이 계획 후 값으로 갈아 끼운다 */
+  const accountAfter = briefing
+    ? briefing.recent.accountRisk - defaults.riskBefore + after
+    : 0
 
   /** 상한 줄 — 손절폭이 상한을 넘으면 후보 목록 맨 위에 선다 (Q11 E) */
   const limitPrice =
@@ -180,14 +203,13 @@ export function NewPlanForm({
         <span className="bg-brand-blue/15 text-brand-blue shrink-0 rounded-md px-2 py-0.5 text-[12px] font-bold">
           새 계획
         </span>
-        <span
-          className={cn(
-            'truncate text-[15px] font-bold',
-            title ? 'text-white' : 'text-white/25',
-          )}
-        >
-          {title ?? '이름은 자동으로 붙는다'}
-        </span>
+        <input
+          aria-label="계획 이름"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder={title ?? '계획 이름 — 비우면 자동'}
+          className="min-w-0 flex-1 rounded-md bg-transparent px-1 py-0.5 text-[15px] font-bold text-white outline-none placeholder:font-normal placeholder:text-white/30 hover:bg-white/[0.04] focus:bg-white/[0.06]"
+        />
         <Btn onClick={born.cancel} className="ml-auto shrink-0">
           취소
         </Btn>
@@ -204,6 +226,19 @@ export function NewPlanForm({
             if (stage === 1) setStage(2)
           }}
         />
+        {/* 진입 상태가 정해지면 — 이 진입 상태에서 내가 어땠나 (Q17 2) */}
+        {briefing && entryNote && (
+          <div
+            className={cn(
+              'mt-1 text-[11px]',
+              entryNote.warn ? 'text-warning' : 'text-white/45',
+            )}
+          >
+            {entryNote.warn && '⚠ '}
+            {entryNote.text}
+            {entryNote.warn && ' — 내 전체 승률보다 낮다'}
+          </div>
+        )}
       </Section>
 
       {/* ② 1R */}
@@ -315,6 +350,18 @@ export function NewPlanForm({
               ⚠ {RISK_WARN}% 초과 — 경고만 한다
             </div>
           )}
+          {/* 규모를 정하는 순간 — 최근 매매 상태 (Q17 2 · (다)) */}
+          {briefing && briefing.recent.lossStreak >= LOSS_STREAK_WARN && (
+            <div className="text-warning mt-0.5 text-[11px]">
+              ⚠ 연속 손실 {briefing.recent.lossStreak}회 — 규모를 줄일 때
+            </div>
+          )}
+          {briefing && accountAfter > ACCOUNT_RISK_WARN && (
+            <div className="text-warning mt-0.5 text-[11px]">
+              ⚠ 계좌 전체 위험노출 {accountAfter.toFixed(2)}% — 이 계획까지
+              더하면
+            </div>
+          )}
         </Section>
       )}
 
@@ -381,14 +428,14 @@ export function NewPlanForm({
         </Section>
       )}
 
-      {confirming && title && (
+      {confirming && finalTitle && (
         <AccountConfirm
           total={defaults.accountTotal}
           cash={defaults.accountCash}
-          title={title}
+          title={finalTitle}
           pending={born.pending}
           onCancel={() => setConfirming(false)}
-          onConfirm={() => born.submit(title)}
+          onConfirm={() => born.submit(finalTitle)}
         />
       )}
     </section>

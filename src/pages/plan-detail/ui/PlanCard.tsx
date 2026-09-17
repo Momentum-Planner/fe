@@ -45,7 +45,7 @@ import type { usePlanDraft } from './usePlanDraft'
  * 읽는 모양이 갈렸다.** 읽을 때는 값, 고칠 때는 같은 자리가 입력칸이 된다.
  *
  * ⚠️ ① 근거가 없다 — 스냅샷은 사후에 못 바꾼다(F4). 차트 아래 표가 그 값을 보여준다.
- * ⚠️ 이름을 안 고친다 — 이름은 자동이다 (Q11 A).
+ * 이름은 수정할 때 머리줄에서 고친다 (2026-09-17 — 사용자가 붙일 수 있어야 한다).
  */
 const HARD_LIMIT = 10
 const RISK_WARN = 2.5
@@ -183,9 +183,19 @@ export function PlanCard({
         >
           {PLAN_STATUS_LABEL[plan.status]}
         </span>
-        <span className="truncate text-[15px] font-bold text-white">
-          {plan.title}
-        </span>
+        {editing ? (
+          <input
+            aria-label="계획 이름"
+            value={shown.title}
+            onChange={(e) => set('title', e.target.value)}
+            placeholder={plan.title}
+            className="min-w-0 flex-1 rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[15px] font-bold text-white outline-none placeholder:font-normal placeholder:text-white/30 focus:ring-1 focus:ring-white/30"
+          />
+        ) : (
+          <span className="truncate text-[15px] font-bold text-white">
+            {plan.title}
+          </span>
+        )}
         <div className="ml-auto flex shrink-0 items-center gap-1.5">
           {editing ? (
             <>

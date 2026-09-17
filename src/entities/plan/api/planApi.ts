@@ -7,6 +7,7 @@ import type {
   PlanPatch,
   PlanListFilters,
   PlanListResponse,
+  PlanBriefing,
   StockPositionView,
   StopPickBody,
 } from '../model/types'
@@ -75,6 +76,10 @@ export const planApi = {
    */
   getDefaults: (stockCode: string) =>
     api.get<PlanDefaults>(`/api/v1/stocks/${stockCode}/plan-defaults`),
+
+  /** 새 계획 전에 볼 것 — 내 최근 매매 · 이 종목 · 조건별 승률 (Q17 2) */
+  getBriefing: (stockCode: string) =>
+    api.get<PlanBriefing>(`/api/v1/stocks/${stockCode}/plan-briefing`),
 
   /** 종목 포지션 — 계획 화면이 「지금 어디에 서 있나」를 알려면 필요하다 */
   getPosition: (stockCode: string) =>

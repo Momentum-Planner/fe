@@ -358,6 +358,81 @@ export const handlers = [
     })
   }),
 
+  /**
+   * 새 계획 전에 볼 것 (Q17 2) — 거래 기록 · 실행 중 계획에서 «결론»만 뽑는다.
+   * 계획 목이 거래 기록 목을 부르면 순환이라 여기서 합친다 (plan-defaults 와 같다).
+   */
+  http.get('/api/v1/stocks/:code/plan-briefing', ({ params }) => {
+    const code = String(params.code)
+    const sells = TRADE_RECORDS.filter(
+      (r) => r.side === 'SELL' && r.derived != null,
+    ).sort((a, b) => a.filledAt.localeCompare(b.filledAt))
+    const won = (r: (typeof sells)[number]) => (r.derived?.profit ?? 0) > 0
+    const rate = (xs: typeof sells) =>
+      xs.length ? +((xs.filter(won).length / xs.length) * 100).toFixed(1) : null
+
+    let lossStreak = 0
+    for (let i = sells.length - 1; i >= 0; i--) {
+      const r = sells[i]
+      if (!r || won(r)) break
+      lossStreak += 1
+    }
+    const recent = sells.slice(-10)
+    const running = PLANS.filter((p) => p.status === 'RUNNING')
+    const accountRisk = +running.reduce((n, p) => n + p.riskAfter, 0).toFixed(2)
+
+    const mine = sells.filter((r) => r.stockCode === code)
+    const lastSell = mine.at(-1)
+    const lastNote =
+      [...mine].reverse().find((r) => r.reason.trim())?.reason ?? null
+    const run = running.find((p) => p.stockCode === code)
+    const bought = run?.records.filter((r) => r.side === 'BUY') ?? []
+
+    const groupBy = (
+      key: (r: (typeof sells)[number]) => string | undefined,
+    ) => {
+      const out: Record<string, { n: number; winRate: number }> = {}
+      const keys = new Set(sells.map(key).filter((k): k is string => !!k))
+      for (const k of keys) {
+        const xs = sells.filter((r) => key(r) === k)
+        out[k] = { n: xs.length, winRate: rate(xs) ?? 0 }
+      }
+      return out
+    }
+
+    return ok({
+      recent: {
+        lossStreak,
+        recentN: recent.length,
+        recentWinRate: rate(recent),
+        overallN: sells.length,
+        overallWinRate: rate(sells),
+        accountRisk,
+      },
+      stock: {
+        trades: mine.length,
+        wins: mine.filter(won).length,
+        losses: mine.filter((r) => !won(r)).length,
+        last: lastSell?.derived
+          ? {
+              filledAt: lastSell.filledAt,
+              rMultiple: lastSell.derived.rMultiple,
+              returnPct: lastSell.derived.returnPct,
+            }
+          : null,
+        holding: run
+          ? {
+              quantity: bought.reduce((n, r) => n + r.quantity, 0),
+              stopPrice: run.stopPrice,
+            }
+          : null,
+        lastNote,
+      },
+      byEntryState: groupBy((r) => r.snapshot?.entryState),
+      byRegime: groupBy((r) => r.snapshot?.regime),
+    })
+  }),
+
   // 종목 포지션 (③). ④의 자료가 「스냅샷 + ③의 손절가·위험노출·보유 수량 + 계좌 총액」이라
   // 계획 화면이 이 값 없이는 「지금 어디에 서 있나」를 못 보여준다.
   // ⚠️ StockPosition API 도 백엔드에 없다.

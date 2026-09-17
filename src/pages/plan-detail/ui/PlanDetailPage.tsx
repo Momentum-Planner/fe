@@ -6,6 +6,7 @@ import { useRegimeInsight, useScreening } from '@/entities/stock'
 import {
   goalPrice,
   nextGoal,
+  usePlanBriefing,
   usePlanDefaults,
   usePlanDetail,
   usePlanList,
@@ -17,6 +18,7 @@ import type {
   StockPositionView,
 } from '@/entities/plan'
 import { PlanChain } from './PlanChain'
+import { PlanBriefing } from './PlanBriefing'
 import { PlanCard } from './PlanCard'
 import { PlanChart } from './PlanChart'
 import type { GhostPlan } from './PlanChart'
@@ -109,6 +111,7 @@ export function PlanDetailPage({
 function FirstPlanView({ stockCode }: { stockCode: string }) {
   const { data: defaults } = usePlanDefaults(stockCode)
   const born = useNewPlan(stockCode, [])
+  const { data: briefing } = usePlanBriefing(stockCode, born.draft != null)
   const { data: rows = [] } = useScreening(stockCode)
   const picked = rows.find((r) => r.date === born.draft?.snapshotDate)
   const [picking, setPicking] = useState<'entry' | 'stop' | null>(null)
@@ -136,6 +139,16 @@ function FirstPlanView({ stockCode }: { stockCode: string }) {
             onCreate={born.draft ? born.cancel : born.open}
             creating={born.draft != null}
           />
+          {/* 첫 계획이라도 «내 최근 매매» 와 조건별 성과는 있다 (Q17 2) */}
+          {born.draft && briefing && (
+            <div className="mt-1 border-t border-white/[0.06]">
+              <PlanBriefing
+                briefing={briefing}
+                snap={picked}
+                stopLimit={defaults?.stopLimit}
+              />
+            </div>
+          )}
         </div>
       </section>
 
@@ -181,6 +194,7 @@ function FirstPlanView({ stockCode }: { stockCode: string }) {
             rows={rows}
             picking={picking}
             onPicking={setPicking}
+            briefing={briefing}
           />
         ) : (
           <section
@@ -265,6 +279,14 @@ function PlanDetailView({
   useEffect(() => setChoice(null), [plan.planId, pick?.index])
 
   const drafting = born.draft != null
+  /**
+   * 새 계획 전에 볼 것 (Q17 2) — 세우는 동안 사슬 자리를 쓴다.
+   * 💀 사슬은 «모양»이라 새 계획에 필요한 «결론»을 안 준다. 참조할 계획을 차트에 고를 때만
+   *    「사슬 보기」 로 돌아간다.
+   */
+  const { data: briefing } = usePlanBriefing(plan.stockCode, drafting)
+  const [showChain, setShowChain] = useState(false)
+  useEffect(() => setShowChain(false), [drafting])
   useEffect(() => setSnapOpen(null), [drafting])
   /** 이 종목의 스크리닝 행 — 새 계획의 달력이 고르고, 고른 날이 스냅샷이 된다 (Q11 A) */
   const { data: rows = [] } = useScreening(plan.stockCode)
@@ -390,45 +412,72 @@ function PlanDetailView({
             ⚠️ 「계획 사슬」 이름표를 뺐다 (2026-09-11) — 보면 사슬인 걸 안다 */}
         {/* 좁힌 사슬은 마디가 넷 안팎이라 210 → 170 (Q12 — 보조로 내리고 높이만 줄인다).
             대기 둘이 세로로 쌓이는 높이까지는 든다 */}
-        <div>
-          <PlanChain
-            // 좁힌 사슬 — 직전 → 실행 중 → 대기. 나머지는 「지난 계획」 안 (Q12)
-            plans={narrowed.shown}
-            lead={
-              <PastPlansPopover
-                hidden={narrowed.hidden}
-                onPull={(id) => setPulled((v) => [...v, id])}
-              />
-            }
-            waitsMore={
-              <PastPlansPopover
-                label="대기"
-                hidden={narrowed.waiting}
-                onPull={(id) => setPulled((v) => [...v, id])}
-              />
-            }
-            // 세우는 동안 사슬은 뒤로 물러난다 — 올린 마디만 진해진다 (Q12)
-            faded={drafting}
-            // 흰 테두리 하나 = 고른 계획. 쓰는 중이면 참조로 고른 마디다
-            currentId={drafting ? refId : lit ? plan.planId : null}
-            // 쓰는 동안 그 자리가 **「쓰는 중」으로 켜진다.** 없애지 않는다 —
-            // 세부 칸이 «어느 마디»를 만드는 중인지를 사슬이 말해야 한다
-            // 만드는 중에 다시 누르면 «끝낸다» — 켠 자리에서 끈다
-            onCreate={born.draft ? born.cancel : born.open}
-            creating={born.draft != null}
-            // 사슬의 «어느 마디든» 치울 수 있다 — 문턱 판정은 마디가 스스로 한다
-            onClose={close.openFor}
-            onRemove={remove.askFor}
-            // 쓰는 중에는 누르면 옮겨 가지 않고 «고르기만» 한다 — 폼이 안 날아간다
-            // 고른 마디를 다시 누르면 풀린다
-            // 볼 때는 지금 계획 마디만 켜고 끈다 — 다른 마디는 링크대로 옮겨 간다
-            onPick={(id) => {
-              if (drafting) return setRefId((v) => (v === id ? null : id))
-              if (id !== plan.planId) return false
-              if (!editing) setLit((v) => !v)
-            }}
+        {drafting && briefing && !showChain ? (
+          <PlanBriefing
+            briefing={briefing}
+            snap={picked}
+            stopLimit={defaults?.stopLimit}
+            onShowChain={() => setShowChain(true)}
           />
-        </div>
+        ) : (
+          <div>
+            {/* 브리핑의 「사슬 보기 ▸」 와 «같은 자리»에서 되돌린다 — 머리줄 오른쪽 */}
+            {drafting && briefing && (
+              <div className="flex items-baseline gap-2 pt-2">
+                <span className="text-[13px] font-bold text-white/85">
+                  사슬
+                </span>
+                <span className="text-[11px] text-white/35">
+                  참조할 계획을 차트에 고른다
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowChain(false)}
+                  className="ml-auto rounded px-1.5 text-[11px] text-white/40 hover:text-white/75"
+                >
+                  새 계획 전에 볼 것 ▸
+                </button>
+              </div>
+            )}
+            <PlanChain
+              // 좁힌 사슬 — 직전 → 실행 중 → 대기. 나머지는 「지난 계획」 안 (Q12)
+              plans={narrowed.shown}
+              lead={
+                <PastPlansPopover
+                  hidden={narrowed.hidden}
+                  onPull={(id) => setPulled((v) => [...v, id])}
+                />
+              }
+              waitsMore={
+                <PastPlansPopover
+                  label="대기"
+                  hidden={narrowed.waiting}
+                  onPull={(id) => setPulled((v) => [...v, id])}
+                />
+              }
+              // 세우는 동안 사슬은 뒤로 물러난다 — 올린 마디만 진해진다 (Q12)
+              faded={drafting}
+              // 흰 테두리 하나 = 고른 계획. 쓰는 중이면 참조로 고른 마디다
+              currentId={drafting ? refId : lit ? plan.planId : null}
+              // 쓰는 동안 그 자리가 **「쓰는 중」으로 켜진다.** 없애지 않는다 —
+              // 세부 칸이 «어느 마디»를 만드는 중인지를 사슬이 말해야 한다
+              // 만드는 중에 다시 누르면 «끝낸다» — 켠 자리에서 끈다
+              onCreate={born.draft ? born.cancel : born.open}
+              creating={born.draft != null}
+              // 사슬의 «어느 마디든» 치울 수 있다 — 문턱 판정은 마디가 스스로 한다
+              onClose={close.openFor}
+              onRemove={remove.askFor}
+              // 쓰는 중에는 누르면 옮겨 가지 않고 «고르기만» 한다 — 폼이 안 날아간다
+              // 고른 마디를 다시 누르면 풀린다
+              // 볼 때는 지금 계획 마디만 켜고 끈다 — 다른 마디는 링크대로 옮겨 간다
+              onPick={(id) => {
+                if (drafting) return setRefId((v) => (v === id ? null : id))
+                if (id !== plan.planId) return false
+                if (!editing) setLit((v) => !v)
+              }}
+            />
+          </div>
+        )}
       </section>
 
       {/* ── 두 단 · 축이 없는 것들 ─────────────────────────────────────── */}
@@ -535,6 +584,7 @@ function PlanDetailView({
             rows={rows}
             picking={picking}
             onPicking={setPicking}
+            briefing={briefing}
           />
         ) : (
           <PlanCard

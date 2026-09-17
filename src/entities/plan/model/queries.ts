@@ -22,6 +22,17 @@ export const planKeys = {
     [...planKeys.all, 'position', stockCode] as const,
   defaults: (stockCode: string) =>
     [...planKeys.all, 'defaults', stockCode] as const,
+  briefing: (stockCode: string) =>
+    [...planKeys.all, 'briefing', stockCode] as const,
+}
+
+/** 새 계획 전에 볼 것 (Q17 2) — 세우기를 켤 때만 부른다 */
+export function usePlanBriefing(stockCode: string, enabled = true) {
+  return useQuery({
+    queryKey: planKeys.briefing(stockCode),
+    queryFn: () => planApi.getBriefing(stockCode),
+    enabled: enabled && !!stockCode,
+  })
 }
 
 export function usePlanList(filters: PlanListFilters = {}) {
