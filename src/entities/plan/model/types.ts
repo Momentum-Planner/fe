@@ -63,39 +63,98 @@ export interface PlannedStopBand {
 }
 
 /**
- * 스톱 상향 — **필수다. 넷 중 하나를 고른다** (Q12 · ③-3-1).
+ * **스톱 사다리의 한 단** (Q16 · ③-3-1).
  *
  * ```text
- * R    2R · 3R · 직접 입력(R배수)   발동하면 스톱을 본전(매입가 + 수수료 + 세금)으로
- * AVG  백스톱 : 평균수익률          발동하면 스톱을 평균수익률 자리로
+ * 계획 때       목표 R 만 건다                   r
+ * 종가가 닿으면  그날 후보가 전부 뜬다              hitAt
+ * 하나를 고르면  스톱이 그 가격으로 한 번 옮겨진다     picked
+ * 안 고른 채 다음 단도 닿으면 「안 고름」으로 닫힌다    skipped
  * ```
  *
- * 💀 백스톱은 원래 따로 켜고 끄는 규칙이었다. 평균수익률을 스톱 상향의 발동 조건으로
- * 넣자 **발동 조건이 같은 규칙이 둘** 생겼고 옮기는 자리만 달랐다. 그래서 한 계획에는
- * 본전과 평균수익률 중 **한 방어선만** 건다.
- *
- * ⚠️ «끔»이 없다. 차트의 위쪽 면(+R)이 늘 이 값까지 칠해진다.
+ * 💀 Q12 까지는 「스톱 상향(언제) + 50일선 트레일링(어디로)」 둘이었다. 성질이 달라 같은 칸에서
+ * 안 읽혔고, 실제로 하는 일은 «목표에 닿으면 스톱을 바꾼다» 하나였다. 옮길 자리는
+ * 계획 때 정하지 않는다 — 이평선 값은 닿은 날에만 있다.
  */
-export type StopRaise = { kind: 'R'; r: number } | { kind: 'AVG' }
-
-/** 고르기 쉬운 R 둘. 나머지는 직접 넣는다 */
-export const STOP_RAISE_PRESETS = [2, 3] as const
+export interface StopGoal {
+  /** 목표 R배수 — 1R 은 실행 때 박힌 `initialStopWidth` 로 잰다 */
+  r: number
+  /** 종가가 목표에 닿은 날 (LocalDate). 안 닿았으면 null */
+  hitAt: string | null
+  /** 닿은 날 고른 자리. 닿았는데 null 이고 `skipped` 가 아니면 «고를 차례»다 */
+  picked: StopPick | null
+  /** 닿았지만 안 고름 — 다음 단이 닿으면서 닫았다. **지우지 않는다** */
+  skipped: boolean
+}
 
 /**
- * 백스톱을 고를 수 있는 표본 수. 평균수익률이 표본 5건부터 나온다 (⑦ 표본 경계).
+ * 닿은 날 고르는 자리 (Q16 5).
+ *
+ * ```text
+ * BREAKEVEN  본전 — 매입가 그대로.  수수료 · 세금은 거래 기록 때 묻는다
+ * R          +N R
+ * AVG        평균 수익률 N%          통계 5건부터
+ * MA20 · MA50 그날 이평선 값 — «한 번» 옮긴다.  매일 따라가지 않는다
+ * DIRECT     직접 [원 | R]
+ * ```
+ */
+export type StopPickKind =
+  | 'BREAKEVEN'
+  | 'R'
+  | 'AVG'
+  | 'MA20'
+  | 'MA50'
+  | 'DIRECT'
+
+export interface StopPick {
+  kind: StopPickKind
+  /** kind R 일 때 +몇 R */
+  r?: number
+  /** 옮긴 스톱가격 — 고른 날 값으로 박힌다 */
+  price: number
+}
+
+export const STOP_PICK_LABEL: Record<StopPickKind, string> = {
+  BREAKEVEN: '본전',
+  R: 'R',
+  AVG: '평균 수익률',
+  MA20: '20일선',
+  MA50: '50일선',
+  DIRECT: '직접',
+}
+
+/** 목표로 누르기 쉬운 R. 끝수는 직접 넣는다 */
+export const GOAL_R_PRESETS = [2, 3, 4, 5] as const
+
+/**
+ * 「평균 수익률」 후보를 고를 수 있는 표본 수. 평균수익률이 표본 5건부터 나온다 (⑦ 표본 경계).
  * ⚠️ 5 는 책에 근거가 없다 — CLAUDE.md 「검증 대상」.
  */
 export const AVG_STOP_MIN_SAMPLES = 5
 
-export const stopRaiseLabel = (raise: StopRaise) =>
-  raise.kind === 'AVG' ? '백스톱 : 평균수익률' : `${raise.r}R`
+/** 단 하나의 지금 — 기다림 · 고를 차례 · 골랐음 · 안 고름 */
+export const goalState = (g: StopGoal) =>
+  g.hitAt == null
+    ? 'WAIT'
+    : g.picked
+      ? 'PICKED'
+      : g.skipped
+        ? 'SKIPPED'
+        : 'PICK'
 
-export const sameStopRaise = (a: StopRaise | null, b: StopRaise | null) =>
-  a === b ||
-  (a != null &&
-    b != null &&
-    a.kind === b.kind &&
-    (a.kind === 'AVG' || (b.kind === 'R' && a.r === b.r)))
+/** 다음에 닿을 단 — 차트가 이 목표 «하나만» 그린다 (Q16 8) */
+export const nextGoal = (goals: StopGoal[]) =>
+  goals.find((g) => g.hitAt == null) ?? null
+
+/** 고를 차례인 단. 새 목표가 앞 단을 닫으므로 늘 하나 이하다 (Q16 6) */
+export const pendingGoal = (goals: StopGoal[]) => {
+  const i = goals.findIndex((g) => goalState(g) === 'PICK')
+  return i < 0 ? null : { index: i, goal: goals[i] as StopGoal }
+}
+
+/** 고른 자리를 사람이 읽는 이름으로 — 「+1R」 「20일선」 */
+export const stopPickLabel = (p: StopPick) =>
+  p.kind === 'R' ? `+${p.r ?? 0}R` : STOP_PICK_LABEL[p.kind]
 
 /**
  * 어디서 자르고 어떻게 올릴지. **한 값객체다** — 둘이 같은 판단이고 같이 바뀐다.
@@ -103,10 +162,8 @@ export const sameStopRaise = (a: StopRaise | null, b: StopRaise | null) =>
  */
 export interface PlannedStop {
   bands: PlannedStopBand[]
-  /** 스톱 상향. 필수 */
-  raise: StopRaise
-  /** 50일선 트레일링 */
-  trail50: boolean
+  /** 스톱 사다리 — 한 단 이상. R 오름차순 (Q16) */
+  goals: StopGoal[]
 }
 
 export interface PlannedPosition {
@@ -166,9 +223,15 @@ export interface PlanListItem {
   /** 사슬을 그리려면 목록에도 있어야 한다 */
   previousPlanId: number | null
   /**
-   * 스톱 상향 — 사슬 마디에 올렸을 때 그 계획의 위쪽 면(+R)까지 그리려면 목록에도 있어야 한다 (Q12 브러싱).
+   * 스톱 사다리 — 사슬에서 고른 계획의 다음 목표 면을 그리고, 「고를 차례」 점을 찍으려면
+   * 목록에도 있어야 한다 (Q16).
    */
-  raise: StopRaise
+  goals: StopGoal[]
+  /**
+   * 처음 1R — 실행될 때 박힌다. 대기면 null.
+   * 사슬에서 고른 계획의 위쪽 면(+R)을 그리려면 목록에도 있어야 한다 (③-2-1).
+   */
+  initialStopWidth: number | null
 }
 
 /**
@@ -236,6 +299,21 @@ export interface PlanDetail extends PlanListItem {
    * 10% 가 그대로 상한이다.
    */
   stopLimitBasis: { avgWin: number; targetRR: number } | null
+  /**
+   * 「고를 차례」 단의 후보 가격을 재는 그날 값 (Q16 5). 고를 차례가 없으면 null.
+   *
+   * 이평선은 계획의 값이 아니라 종목의 값이지만, **닿은 날의 값**이어야 해서
+   * 서버가 그 날짜로 찍어 준다. 화면이 지금 캔들로 재면 며칠 뒤에 열었을 때 값이 달라진다.
+   */
+  pickBasis: {
+    date: string
+    close: number
+    ma20: number
+    ma50: number
+    /** 내 평균 수익률 % — 통계가 없으면 null */
+    avgWinPct: number | null
+    sampleCount: number
+  } | null
 }
 
 /**
@@ -255,9 +333,17 @@ export interface PlanPatch {
   stopPrice?: number
   quantity?: number
   memo?: string
-  /** 스톱 상향. 필수라 «끄는» 값이 없다 — 바꿀 수만 있다 */
-  raise?: StopRaise
-  trail50?: boolean
+  /**
+   * 사다리의 목표 R «전부». **닿은 단은 못 바꾼다** — 앞에서부터 그대로 들어 있어야 하고,
+   * 다르면 서버가 거절한다 (Q16 6). 바꾸고 싶으면 새 단을 붙인다.
+   */
+  goals?: number[]
+}
+
+/** 닿은 단에서 스톱을 옮길 자리를 고른다 (Q16) */
+export interface StopPickBody {
+  goalIndex: number
+  pick: StopPick
 }
 
 /**
@@ -285,8 +371,8 @@ export interface PlanCreate {
   stopPrice: number
   quantity: number
   memo: string
-  raise: StopRaise
-  trail50: boolean
+  /** 스톱 사다리의 목표 R — 한 단 이상 · 오름차순. 이어받지 않는다 (Q16) */
+  goals: number[]
   /** 승계 — 추가매수로 이어 세우는 계획이면 이전 계획을 가리킨다 (④-2) */
   previousPlanId: number | null
 }
@@ -364,7 +450,7 @@ export interface PlanDefaults {
   stopCandidates: StopCandidate[]
   /**
    * 통계의 표본 수 — 매도 기록 하나가 한 건이다 (⑥).
-   * `AVG_STOP_MIN_SAMPLES` 보다 적으면 「백스톱 : 평균수익률」을 못 고른다.
+   * `AVG_STOP_MIN_SAMPLES` 보다 적으면 「평균 수익률」 후보를 못 고른다.
    */
   sampleCount: number
 }

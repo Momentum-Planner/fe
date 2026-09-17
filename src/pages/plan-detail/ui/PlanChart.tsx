@@ -60,10 +60,14 @@ const ENTRY = '#FFFFFF'
 const STOP = '#34ADE4'
 const RAISE = '#FF3636'
 const SR_TONE = '#EEB82D'
-/** 유령 — 과거 계획을 같은 모양으로 옅게 (Q12 브러싱) */
-const GHOST = 0.35
+/**
+ * 고정한 과거 계획 — 같은 모양을 조금 옅게.
+ * 💀 35% · 70% 로는 캔들 위에서 안 보였다. **새 계획과 같은 진하기**로 그린다 —
+ *    시간 구간이 달라(과거 계획은 오늘까지, 새 계획은 오늘부터) 섞이지 않는다.
+ */
+const GHOST = 1
 
-/** 과거 계획 하나 — 브러싱으로 뜬다 */
+/** 과거 계획 하나 — 새 계획을 쓰는 동안 사슬에서 눌러 고정한다 */
 export type GhostPlan = {
   entryPrice: number
   stopPrice: number
@@ -123,8 +127,8 @@ function planMarks(o: {
       rect(e, raiseTo, rgba(RAISE, 0.1 * a)),
       line(raiseTo, rgba(RAISE, 0.7 * a), 1, 'ShortDash'),
     )
-  if (e > 0) shapes.push(line(e, rgba(ENTRY, a), a < 1 ? 1.2 : 2))
-  if (st > 0) shapes.push(line(st, rgba(STOP, a), a < 1 ? 1.2 : 2, 'Dash'))
+  if (e > 0) shapes.push(line(e, rgba(ENTRY, a), a < 1 ? 1.6 : 2))
+  if (st > 0) shapes.push(line(st, rgba(STOP, a), a < 1 ? 1.6 : 2, 'Dash'))
 
   /**
    * 가격 글자 — **선의 왼쪽 끝, 선 바로 위(스톱은 아래)** 에 색 글자로 둔다.
@@ -151,14 +155,18 @@ function planMarks(o: {
   })
   const labels: object[] = []
   if (o.priceLabels) {
-    if (e > 0) labels.push(tag(e, `진입 ${e.toLocaleString('ko-KR')}`, ENTRY))
-    if (st > 0)
+    // 진입 = 스톱(본전으로 올린 계획)이면 한 줄로 — 둘을 겹쳐 쓰면 둘 다 안 읽힌다
+    if (e > 0 && e === st)
+      labels.push(tag(e, `진입 = 스톱 ${e.toLocaleString('ko-KR')}`, ENTRY))
+    else if (e > 0)
+      labels.push(tag(e, `진입 ${e.toLocaleString('ko-KR')}`, ENTRY))
+    if (st > 0 && st !== e)
       labels.push(tag(st, `스톱 ${st.toLocaleString('ko-KR')}`, STOP, true))
     if (e > 0 && raiseTo != null && raiseTo > e)
       labels.push(
         tag(
           raiseTo,
-          `상향 ${Math.round(raiseTo).toLocaleString('ko-KR')}`,
+          `목표 ${Math.round(raiseTo).toLocaleString('ko-KR')}`,
           RAISE,
           true,
         ),
@@ -239,11 +247,12 @@ export function PlanChart({
   writtenAt,
   marksFrom,
   raiseTo = null,
-  ghost = null,
+  ghosts = [],
   editing = false,
   drafting = false,
   picking,
   onPick,
+  pickLine = null,
 }: {
   stockCode: string
   /** 0 이면 «안 그린다» — 새 계획은 아직 값이 없다 */
@@ -257,10 +266,10 @@ export function PlanChart({
    * 오른쪽은 늘 끝까지다.
    */
   marksFrom?: string
-  /** 스톱 상향이 발동하는 가격 — 위쪽 빨강 면이 여기까지. 없으면 안 칠한다 */
+  /** 목표 — 스톱 상향이 발동하는 가격. 위쪽 빨강 면이 여기까지. 없으면 안 칠한다 */
   raiseTo?: number | null
   /** 사슬 마디에 올린 과거 계획 — 유령으로 뜬다 */
-  ghost?: GhostPlan | null
+  ghosts?: GhostPlan[]
   /** 차트를 눌러서 «집는» 중인 칸. 집는 동안 커서가 십자가 된다 */
   picking?: 'entry' | 'stop' | null
   /** 누른 자리의 «가격». y축 값을 그대로 준다 */
@@ -275,6 +284,11 @@ export function PlanChart({
    * 볼 때는 작성일이 2/3 에 서서 그 뒤가 보인다 (Q12).
    */
   drafting?: boolean
+  /**
+   * 사다리 목표에 도착해 고른 **새 스톱 자리** (Q16). 스톱과 같은 파랑 점선으로 선다 —
+   * 옮기면 그 자리가 곧 스톱이다. 후보를 전부 긋지 않는다: 고른 하나만.
+   */
+  pickLine?: { label: string; price: number } | null
 }) {
   const [showSR, setShowSR] = useState(true)
   const [layers, setLayers] = useState<Layer[]>(defaultLayers)
@@ -300,6 +314,13 @@ export function PlanChart({
   const boxRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<Highcharts.Chart | null>(null)
   /**
+   * 차트를 **새로 세울 때마다** 오른다 — 선을 갈아끼우는 효과가 이것을 보고 다시 돈다.
+   *
+   * 💀 베이스 · 지표가 캔들보다 늦게 오면 차트가 한 번 더 세워지는데, 선 효과의 의존성
+   *    (진입 · 스톱 · 목표 …)은 그대로라 **다시 안 돌았다.** 새 차트에는 계획 선이 없었다.
+   */
+  const [built, setBuilt] = useState(0)
+  /**
    * 집기 콜백을 «ref 로» 든다.
    *
    * ⚠️ 차트는 `useEffect` 안에서 «한 번» 만들어지고, 그때 잡힌 `onPick` 은
@@ -320,10 +341,12 @@ export function PlanChart({
    * 결과를 본다」(디자인 9장 ④)가 성립한다 — 칠 때마다 차트가 무너지면 못 본다.
    */
   /** 도형의 x 는 «시간»이다. 오른쪽 끝과 왼쪽 끝을 차트를 세울 때 적어 둔다 */
-  const edgesRef = useRef<{ first: number; last: number }>({
-    first: 0,
-    last: 0,
-  })
+  const edgesRef = useRef<{
+    first: number
+    last: number
+    /** 일봉의 시각 */
+    bars: number[]
+  }>({ first: 0, last: 0, bars: [] })
 
   useEffect(() => {
     const el = boxRef.current
@@ -379,7 +402,11 @@ export function PlanChart({
       (_, i) => [lastT + (i + 1) * stepMs, null],
     )
     const axisMax = padPoints.at(-1)?.[0] ?? to
-    edgesRef.current = { first: times[0] ?? from, last: axisMax }
+    edgesRef.current = {
+      first: times[0] ?? from,
+      last: axisMax,
+      bars: times,
+    }
 
     // 고른 선은 stopPrice 로 따로 그리므로 여기서 뺀다 — 같은 자리에 두 번 긋지 않는다.
     // 그리고 **고치는 중일 때만** 그린다 (④-1-1-2 는 「고를 때」의 자료다)
@@ -601,6 +628,7 @@ export function PlanChart({
         : [],
     })
     chartRef.current = chart
+    setBuilt((n) => n + 1)
 
     /**
      * 그 날짜의 봉을 **미리 짚어 둔다.**
@@ -651,51 +679,86 @@ export function PlanChart({
     if (!chart || !axis) return
 
     chart.removeAnnotation('plan-now')
-    chart.removeAnnotation('plan-ghost')
+    for (let i = 0; i < 4; i++) chart.removeAnnotation(`plan-ghost-${i}`)
 
-    const { first, last } = edgesRef.current
+    const { first, last, bars } = edgesRef.current
     const at = (d: string) => Math.max(first, Math.min(last, toTime(d)))
+    /** 마지막 일봉 — 이미 선 계획은 여기서 끝난다. 오른쪽 빈칸은 새 계획의 자리다 */
+    const lastBar = bars.at(-1) ?? last
+    /**
+     * 구간은 **작성일(회색 점선)부터 마지막 일봉까지**다 (2026-09-17).
+     *
+     * 💀 빈칸까지 뻗으면 봉이 없는 자리에 면만 떠 있었다. 짧은 구간을 늘리려고 시작을 왼쪽으로
+     *    당겼더니 작성일보다 앞에서 시작해 거짓이 됐고, 끝을 오른쪽 빈칸으로 늘렸더니 다시 봉이
+     *    없는 자리에 섰다. **늘리지 않는다.** 작성일이 최근이면 좁은 대로 둔다.
+     */
+    const span = (x0: number, x1: number) => ({
+      x0,
+      x1: Math.max(x0, Math.min(x1, lastBar)),
+    })
 
-    // 지금 계획 — 스냅샷 날짜부터 오른쪽 끝까지 (Q12 기간만)
+    // 지금 계획 — 스냅샷 날짜부터 (Q12 기간만).
+    // 새로 쓰는 계획은 오늘 이후 빈칸이 자리라 자르지 않는다
+    const nowSpan = drafting
+      ? { x0: marksFrom ? at(marksFrom) : first, x1: last }
+      : span(marksFrom ? at(marksFrom) : first, last)
     const now = planMarks({
       id: 'plan-now',
       entryPrice,
       stopPrice,
       raiseTo,
-      x0: marksFrom ? at(marksFrom) : first,
-      x1: last,
+      ...nowSpan,
       strength: 1,
       priceLabels: true,
     })
     if (now) chart.addAnnotation(now)
 
     // 과거 계획 — 살아 있던 날짜 구간에만, 같은 모양을 옅게 (Q12 유령)
-    if (ghost) {
+    ghosts.forEach((ghost, i) => {
       const g = planMarks({
-        id: 'plan-ghost',
+        id: `plan-ghost-${i}`,
         entryPrice: ghost.entryPrice,
         stopPrice: ghost.stopPrice,
         raiseTo: ghost.raiseTo,
-        x0: at(ghost.from),
-        x1: ghost.to ? at(ghost.to) : last,
+        ...span(at(ghost.from), ghost.to ? at(ghost.to) : last),
         strength: GHOST,
-        priceLabels: false,
+        priceLabels: true,
         title: ghost.label,
       })
       if (g) chart.addAnnotation(g)
-    }
+    })
 
     /**
      * **계획 선을 축이 «항상» 품는다.** 봉만 보고 축을 잡으면 봉 위에 정상적으로
-     * 있는 선(상향 가격 등)이 영구히 안 보인다. `soft` 라서 봉이 더 넓으면 봉을 따른다.
+     * 있는 선(목표 가격 등)이 영구히 안 보인다. `soft` 라서 봉이 더 넓으면 봉을 따른다.
      * 0 은 「아직 없다」이지 가격이 아니라 «빼고» 잰다.
      */
+    // 고른 새 스톱 — 축의 plotLine 이라 차트를 다시 세우지 않고 갈아끼운다
+    axis.removePlotLine('pick-line')
+    if (pickLine)
+      axis.addPlotLine({
+        id: 'pick-line',
+        value: pickLine.price,
+        color: STOP,
+        width: 1.5,
+        dashStyle: 'ShortDot',
+        zIndex: 5,
+        label: {
+          text: `새 스톱 ${pickLine.price.toLocaleString('ko-KR')} · ${pickLine.label}`,
+          // 왼쪽에 — 오른쪽은 최근 봉과 계획 면이 차 있어 글자가 캔들을 덮는다
+          align: 'left',
+          x: 8,
+          y: -4,
+          style: { color: STOP, fontSize: '10px', fontWeight: '600' },
+        },
+      })
+
     const marks = [
       entryPrice,
       stopPrice,
       raiseTo ?? 0,
-      ghost?.entryPrice ?? 0,
-      ghost?.stopPrice ?? 0,
+      pickLine?.price ?? 0,
+      ...ghosts.flatMap((g) => [g.entryPrice, g.stopPrice]),
       ...candidates.map((c) => c.price),
     ].filter((v) => v > 0)
     axis.update(
@@ -709,10 +772,13 @@ export function PlanChart({
     stopPrice,
     raiseTo,
     marksFrom,
-    ghost,
+    ghosts,
+    drafting,
     candidates,
     rawCandles,
     layers,
+    pickLine,
+    built,
   ])
 
   useEffect(() => {

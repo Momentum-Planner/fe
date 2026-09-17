@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { PLAN_STATUS_LABEL, canClose } from '@/entities/plan'
+import { PLAN_STATUS_LABEL, canClose, pendingGoal } from '@/entities/plan'
 import type { PlanListItem } from '@/entities/plan'
 import { cn } from '@/shared/lib/cn'
 
@@ -8,7 +8,8 @@ import { cn } from '@/shared/lib/cn'
  *
  * ```text
  * [지난 계획 N ▾]  직전 → 실행 중 → ┬ 대기
- *                                  └ 대기   → [+ 새 계획]
+ *                                  ├ 대기   → [+ 새 계획]
+ *                                  └ [대기 +N ▾]
  * ```
  *
  * 💀 옛 사슬은 끌어서 보는 판 · 측정해서 그리는 곡선 · 확대 · 기간 필터 · 「실행 중」「대기」
@@ -16,9 +17,11 @@ import { cn } from '@/shared/lib/cn'
  * 좁히자(Q12) 전부 할 일이 없어졌고, 넓은 판 가운데 마디 넷이 흩어져 보였다.
  * 위젯에서 정한 대로 **왼쪽부터 붙은 한 줄**로 다시 세웠다.
  *
- * - 마디를 누르면 그 계획으로 간다 · 올리면 차트에 유령이 뜬다 (브러싱)
+ * - 마디를 누르면 그 계획으로 간다 · 새 계획을 쓰는 중이면 옮겨 가지 않고 그 계획을 고른다
+ * - 흰 테두리 하나 = 고른 계획
  * - 지난 계획(실행 완료 · 폐기)은 흐리게 · 세우는 중이면 전부 흐리게 — 올리면 원래 진하기
  * - 폐기 · 삭제는 마디에 올렸을 때 위에 뜬다. 문턱은 대기 + 체결 0건 (Q8)
+ * - 「목표 3R 도착」 = 사다리 목표에 도착해 스톱 자리를 고를 차례 (Q16)
  */
 export function PlanChain({
   plans,
@@ -27,21 +30,30 @@ export function PlanChain({
   creating,
   onClose,
   onRemove,
-  onHover,
   lead,
+  waitsMore,
   faded = false,
+  onPick,
 }: {
   plans: PlanListItem[]
-  currentId: number
+  /** 고른 계획 — 쓰는 중에 고른 마디를 풀면 null */
+  currentId: number | null
   /** 새 계획을 세운다 — 설 자리가 곧 「무엇을 이어받나」의 답이다 */
   onCreate?: () => void
   creating?: boolean
   onClose?: (planId: number) => void
   onRemove?: (planId: number) => void
-  onHover?: (planId: number | null) => void
   /** 줄 맨 앞 — 「지난 계획 N」 팝오버가 선다 */
   lead?: React.ReactNode
+  /** 대기 칸 맨 아래 — 넘친 대기를 접은 「대기 +N」 팝오버가 선다 */
+  waitsMore?: React.ReactNode
   faded?: boolean
+  /**
+   * 있으면 마디를 눌러도 **옮겨 가지 않고** 이것을 부른다 — 새 계획을 쓰는 동안
+   * 참조할 계획을 차트에 고정하는 데 쓴다. 쓰던 폼이 날아가지 않는다.
+   * `false` 를 돌려주면 막지 않고 링크대로 옮겨 간다.
+   */
+  onPick?: (planId: number) => boolean | void
 }) {
   const byDate = (a: PlanListItem, b: PlanListItem) =>
     a.writtenAt.localeCompare(b.writtenAt) || a.planId - b.planId
@@ -56,9 +68,9 @@ export function PlanChain({
       p={p}
       current={p.planId === currentId}
       faded={faded}
+      onPick={onPick}
       onClose={onClose}
       onRemove={onRemove}
-      onHover={onHover}
     />
   )
 
@@ -76,6 +88,7 @@ export function PlanChain({
           {stem.length > 0 && <Arrow />}
           <div className="flex shrink-0 flex-col gap-1.5">
             {waits.map(node)}
+            {waitsMore}
           </div>
         </>
       )}
@@ -121,16 +134,16 @@ function ChainNode({
   p,
   current,
   faded,
+  onPick,
   onClose,
   onRemove,
-  onHover,
 }: {
   p: PlanListItem
   current: boolean
   faded: boolean
+  onPick?: (planId: number) => boolean | void
   onClose?: (planId: number) => void
   onRemove?: (planId: number) => void
-  onHover?: (planId: number | null) => void
 }) {
   // 폐기와 삭제는 «같은 문턱»이다 — 대기 + 체결 0건 (Q8)
   const retirable = canClose(p) && (onClose ?? onRemove) != null
@@ -147,8 +160,6 @@ function ChainNode({
         'group/node relative shrink-0 transition-opacity hover:opacity-100',
         dim && 'opacity-45',
       )}
-      onMouseEnter={() => onHover?.(p.planId)}
-      onMouseLeave={() => onHover?.(null)}
     >
       {/* 버튼을 `Link` «밖»에 둔다 — 안에 넣으면 누를 때 계획이 열린다 */}
       {retirable && (
@@ -175,10 +186,15 @@ function ChainNode({
         to="/stocks/$ticker/plan/$planId"
         params={{ ticker: p.stockCode, planId: String(p.planId) }}
         draggable={false}
+        onClick={(e) => {
+          // false 를 돌려주면 원래대로 그 계획으로 간다
+          if (!onPick || onPick(p.planId) === false) return
+          e.preventDefault()
+        }}
         className={cn(
           'bg-bg-elevated block max-w-[200px] min-w-[150px] rounded-[10px] border px-2.5 py-1.5',
           current
-            ? 'border-white/40 ring-1 ring-white/25'
+            ? 'border-white/60 ring-1 ring-white/30'
             : 'border-border-default',
         )}
       >
@@ -186,6 +202,13 @@ function ChainNode({
           <span className={cn('h-1.5 w-1.5 rounded-full', DOT[p.status])} />
           <span className="font-number">{p.writtenAt.slice(5)}</span>
           <span>· {PLAN_STATUS_LABEL[p.status]}</span>
+          {/* 사다리 목표에 도착해 고를 차례 — 다른 계획을 보고 있어도 여기서 안다 (Q16 7).
+              💀 노란 점 하나였더니 무엇을 뜻하는지 안 읽혔다 — 글자로 쓴다 */}
+          {pendingGoal(p.goals) && (
+            <span className="text-warning bg-warning/15 ml-auto rounded px-1 font-bold">
+              목표 {pendingGoal(p.goals)?.goal.r}R 도착
+            </span>
+          )}
         </div>
         <div
           className={cn(

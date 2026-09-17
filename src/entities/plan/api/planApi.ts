@@ -8,6 +8,7 @@ import type {
   PlanListFilters,
   PlanListResponse,
   StockPositionView,
+  StopPickBody,
 } from '../model/types'
 
 const BASE = '/api/v1/plans'
@@ -45,6 +46,13 @@ export const planApi = {
    */
   update: (planId: number, patch: PlanPatch) =>
     api.patch<PlanDetail>(`${BASE}/${planId}`, patch),
+
+  /**
+   * 사다리에서 **닿은 단의 스톱 자리를 고른다** (Q16). 고르면 곧 계획의 손절가가 바뀐다 —
+   * 「증권사에서 고쳤나」 를 따로 묻지 않는다.
+   */
+  pickStop: (planId: number, body: StopPickBody) =>
+    api.post<PlanDetail>(`${BASE}/${planId}/stop-pick`, body),
 
   /**
    * 계획을 «폐기»한다 — 안 가기로 한 것이다 (Q8).

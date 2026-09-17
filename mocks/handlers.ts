@@ -1,5 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import { at } from '@/shared/lib/at'
+import type { PlanDetail, StopPickBody } from '@/entities/plan'
 import { makeScreening } from './data/screening'
 import {
   PLANS,
@@ -7,6 +8,7 @@ import {
   createPlan,
   deletePlan,
   patchPlan,
+  pickStop,
   planDefaults,
   toListItem,
 } from './data/plans'
@@ -35,6 +37,21 @@ const ok = <T>(data: T) =>
  * **코드를 나눠 붙인다** — 「못 지운다」와 「없다」가 같은 응답이면 화면이
  * 무엇을 말해야 할지 모른다 (디자인 4장 ⑤ — 없는 이유가 다르면 표식도 다르다).
  */
+/**
+ * 고를 차례 단의 표본 수를 채운다 (Q16). 계획 목이 거래 기록 목을 부르면 순환이라 여기서 붙인다.
+ * 매도 기록 하나가 한 건이다 (⑥) — plan-defaults 와 같은 셈이다.
+ */
+const withSamples = (p: PlanDetail): PlanDetail =>
+  p.pickBasis
+    ? {
+        ...p,
+        pickBasis: {
+          ...p.pickBasis,
+          sampleCount: TRADE_RECORDS.filter((r) => r.side === 'SELL').length,
+        },
+      }
+    : p
+
 const fail = (status: number, errorCode: string, message: string) =>
   HttpResponse.json(
     { meta: { result: 'FAIL', errorCode, message }, data: null },
@@ -336,7 +353,7 @@ export const handlers = [
     const last = at(makeCandles(code), -1).closePrice
     return ok({
       ...planDefaults(code, last),
-      // 매도 기록 하나가 한 건이다 (⑥). 5건 전에는 「백스톱 : 평균수익률」을 못 고른다
+      // 매도 기록 하나가 한 건이다 (⑥). 5건 전에는 「평균 수익률」 후보를 못 고른다
       sampleCount: TRADE_RECORDS.filter((r) => r.side === 'SELL').length,
     })
   }),
@@ -377,6 +394,15 @@ export const handlers = [
     const body = (await request.json()) as Parameters<typeof createPlan>[0]
     const made = createPlan(body)
     // 기록상 현금보다 큰 매수는 «막는다» — 화면만 막으면 우회된다 (④-1-3)
+    // 목표 · 진입 · 스톱은 같은 값일 수 없다
+    if (made === 'bad-goals')
+      return fail(400, 'BAD_GOALS', '스톱 사다리의 목표가 올바르지 않습니다')
+    if (made === 'same-price')
+      return fail(
+        400,
+        'SAME_PRICE',
+        '목표 · 진입 · 스톱은 같은 값일 수 없습니다',
+      )
     if (made === 'no-cash')
       return fail(
         409,
@@ -434,6 +460,15 @@ export const handlers = [
   http.patch('/api/v1/plans/:planId', async ({ params, request }) => {
     const body = (await request.json()) as Record<string, unknown>
     const next = patchPlan(Number(params.planId), body)
+    if (next === 'same-price')
+      return fail(
+        400,
+        'SAME_PRICE',
+        '목표 · 진입 · 스톱은 같은 값일 수 없습니다',
+      )
+    // 닿은 단을 바꾸려 했거나 목표가 오름차순이 아니다 (Q16 6)
+    if (next === 'bad-goals')
+      return fail(400, 'BAD_GOALS', '닿은 단은 바꿀 수 없습니다')
     if (!next)
       return HttpResponse.json(
         {
@@ -446,7 +481,22 @@ export const handlers = [
         },
         { status: 404 },
       )
-    return ok(next)
+    return ok(withSamples(next))
+  }),
+
+  /**
+   * 닿은 단에서 스톱 자리를 고른다 (Q16). 고를 차례인 단만 받고,
+   * 가격은 지금 스톱 초과 · 목표 미만이어야 한다 — 화면만 막으면 우회된다.
+   */
+  http.post('/api/v1/plans/:planId/stop-pick', async ({ params, request }) => {
+    const body = (await request.json()) as StopPickBody
+    const next = pickStop(Number(params.planId), body.goalIndex, body.pick)
+    if (next === 'not-found') return fail(404, 'NOT_FOUND', '계획이 없습니다')
+    if (next === 'conflict')
+      return fail(409, 'NOT_PICKABLE', '지금 고를 차례인 단이 아닙니다')
+    if (next === 'bad-price')
+      return fail(400, 'BAD_PRICE', '지금 스톱보다 높고 목표보다 낮아야 합니다')
+    return ok(withSamples(next))
   }),
 
   http.get('/api/v1/plans/:planId', ({ params }) => {
@@ -463,7 +513,7 @@ export const handlers = [
         },
         { status: 404 },
       )
-    return ok(plan)
+    return ok(withSamples(plan))
   }),
 
   // ─────────────── 검색 ───────────────

@@ -2,25 +2,27 @@ import { useEffect, useState } from 'react'
 import { cn } from '@/shared/lib/cn'
 import type { DailyScreening } from '@/shared/lib/snapshots'
 import {
-  AVG_STOP_MIN_SAMPLES,
   autoPlanTitle,
   clampExposure,
+  goalPrice,
+  goalsProblem,
   needCash,
   ownRisk,
-  stopRaiseLabel,
+  priceConflict,
   stopWidthPct,
 } from '@/entities/plan'
 import type { PlanDefaults } from '@/entities/plan'
 import { SnapshotCalendar } from './SnapshotCalendar'
-import { StopRaisePicker } from './StopRaisePicker'
+import { StopLadderEditor } from './StopLadder'
 import { LIT_PANEL } from './panel'
 import {
   Btn,
   CandidateList,
   MoneyField,
+  Foot,
+  Pair,
   Section,
   StopField,
-  Sw,
   won,
 } from './planParts'
 import type { useNewPlan } from './useNewPlan'
@@ -32,7 +34,7 @@ import type { useNewPlan } from './useNewPlan'
  * ① 근거     스냅샷 날짜 (달력)
  * ② 1R       진입 예상가 | 스톱가격 [원|%]  + 후보 선 · 상한 줄
  * ③ 규모     수량 | 위험노출 (t-stat)      + 필요 현금 · ÷ 계좌 총액
- * ④ 스톱 갱신 규칙   스톱 상향(필수) · 50일선 트레일링.  이어받은 값이 있으면 접힘
+ * ④ 스톱 갱신 규칙   스톱 사다리 — 목표 R 만 건다(필수).  빈 ① 단으로 시작 (Q16)
  * ⑤ 메모 (선택)  + 등록 → 계좌 총액 확인
  * ```
  *
@@ -69,8 +71,6 @@ export function NewPlanForm({
   const [stage, setStage] = useState<Stage>(1)
   /** 칸을 벗어날 때 «확정된» 값 — ✕ · ⚠ 는 이 값으로만 판정한다 (Q11 F) */
   const [seen, setSeen] = useState({ entry: 0, stop: 0, qty: 0 })
-  /** 스톱 갱신 규칙을 펼쳤나. 이어받은 값이 있으면 접힌 채 시작한다 (Q12) */
-  const [rulesOpen, setRulesOpen] = useState(d?.raise == null)
   const [confirming, setConfirming] = useState(false)
 
   // ⚠️ 폼을 «닫으면» 부모가 이 컴포넌트를 내린다 — 다시 열면 상태가 처음부터다
@@ -100,15 +100,28 @@ export function NewPlanForm({
   }
   const commitQty = () => {
     setSeen((v) => ({ ...v, qty: d.quantity }))
-    if (d.quantity > 0 && stage === 3) setStage(d.raise ? 5 : 4)
+    if (d.quantity > 0 && stage === 3) setStage(4)
   }
 
   // ── 확정된 값으로만 판정하는 메시지 ──
   const seenWidth = stopWidthPct(seen.entry, seen.stop)
   const stopBlock =
-    seen.entry > 0 && seen.stop > 0 && seen.stop >= seen.entry
+    priceConflict(seen.entry, seen.stop, null) ??
+    (seen.entry > 0 && seen.stop > 0 && seen.stop > seen.entry
       ? '✕ 진입가보다 낮아야 한다'
-      : undefined
+      : undefined)
+  /** 목표 — 사다리 ① 단의 가격. 진입 · 스톱과 같으면 막는다 (차트도 이 단 하나만 그린다) */
+  const first = d.goals[0] ?? null
+  const goal =
+    first != null ? goalPrice(d.entryPrice, d.stopPrice, first) : null
+  const ladderBlock = d.goals.some((r) => r != null)
+    ? goalsProblem(d.goals)
+    : null
+  const goalBlock =
+    goal != null &&
+    priceConflict(d.entryPrice, d.stopPrice, goal)?.includes('목표')
+      ? priceConflict(d.entryPrice, d.stopPrice, goal)
+      : null
   const stopWarn =
     !stopBlock && seen.stop > 0 && seenWidth > defaults.stopLimit
       ? `⚠ 상한 ${defaults.stopLimit}% 초과`
@@ -149,12 +162,12 @@ export function NewPlanForm({
     <section className={cn(LIT_PANEL, 'min-w-0 px-4 py-4')}>
       {/* 머리줄 — 이름이 «자동»이다. 버튼은 취소 하나 (등록은 맨 아래) */}
       <div className="flex items-center gap-2">
-        <span className="bg-brand-blue/15 text-brand-blue shrink-0 rounded-md px-2 py-0.5 text-[11px] font-bold">
+        <span className="bg-brand-blue/15 text-brand-blue shrink-0 rounded-md px-2 py-0.5 text-[12px] font-bold">
           새 계획
         </span>
         <span
           className={cn(
-            'truncate text-[14px] font-bold',
+            'truncate text-[15px] font-bold',
             title ? 'text-white' : 'text-white/25',
           )}
         >
@@ -167,7 +180,7 @@ export function NewPlanForm({
 
       {/* ① 근거 */}
       <Section title="① 근거" first>
-        <div className="mb-1 text-[10px] text-white/40">스냅샷 날짜</div>
+        <div className="mb-1 text-[11px] text-white/40">스냅샷 날짜</div>
         <SnapshotCalendar
           value={d.snapshotDate}
           enabled={rows.map((r) => r.date)}
@@ -181,42 +194,49 @@ export function NewPlanForm({
       {/* ② 1R */}
       {stage >= 2 && (
         <Section title="② 1R">
-          <div className="grid grid-cols-2 gap-2">
-            <MoneyField
-              label="진입 예상가"
-              value={d.entryPrice}
-              onChange={(n) => born.set('entryPrice', n)}
-              onBlur={commit1R}
-              picking={picking === 'entry'}
-              onPick={() => onPicking(picking === 'entry' ? null : 'entry')}
-            />
-            <StopField
-              entry={d.entryPrice}
-              value={d.stopPrice}
-              onChange={(n) => born.set('stopPrice', n)}
-              onBlur={commit1R}
-              picking={picking === 'stop'}
-              onPick={() => onPicking(picking === 'stop' ? null : 'stop')}
-              block={stopBlock}
-              warn={stopWarn}
-            />
-          </div>
-          <div className="mt-1 flex items-baseline justify-between text-[10px]">
-            <span className="font-number text-white/45">
-              {ok1R
-                ? `1R ${won(d.entryPrice - d.stopPrice)} · ${width.toFixed(2)}%`
-                : '1R —'}
-            </span>
-            {/* 손절폭 상한 — 고를 때 쓰는 선이다 (④-1-1-2) */}
-            <span className="text-right text-white/35">
-              상한 {defaults.stopLimit}%
-              <span className="ml-1 text-white/20">
-                {defaults.stopLimitBasis
-                  ? `평균수익 ${defaults.stopLimitBasis.avgWin}% ÷ 손익비 ${defaults.stopLimitBasis.targetRR}`
-                  : '통계 없음 — 10%'}
-              </span>
-            </span>
-          </div>
+          {/* 카드와 «같은 두 칸 격자» — 쓰는 모양이 곧 될 모양이다 (Q12 · PlanCard) */}
+          <Pair
+            left={
+              <>
+                <MoneyField
+                  label="진입 예상가"
+                  value={d.entryPrice}
+                  onChange={(n) => born.set('entryPrice', n)}
+                  onBlur={commit1R}
+                  picking={picking === 'entry'}
+                  onPick={() => onPicking(picking === 'entry' ? null : 'entry')}
+                />
+                <Foot>
+                  {ok1R
+                    ? `1R ${won(d.entryPrice - d.stopPrice)} · ${width.toFixed(2)}%`
+                    : '1R —'}
+                </Foot>
+              </>
+            }
+            right={
+              <>
+                <StopField
+                  entry={d.entryPrice}
+                  value={d.stopPrice}
+                  onChange={(n) => born.set('stopPrice', n)}
+                  onBlur={commit1R}
+                  picking={picking === 'stop'}
+                  onPick={() => onPicking(picking === 'stop' ? null : 'stop')}
+                  block={stopBlock}
+                  warn={stopWarn}
+                />
+                {/* 손절폭 상한 — 고를 때 쓰는 선이다 (④-1-1-2). 스톱가격 밑에 */}
+                <Foot>
+                  상한 {defaults.stopLimit}%
+                  <span className="font-text ml-1 text-white/25">
+                    {defaults.stopLimitBasis
+                      ? `평균수익 ${defaults.stopLimitBasis.avgWin}% ÷ 손익비 ${defaults.stopLimitBasis.targetRR}`
+                      : '통계 없음 — 10%'}
+                  </span>
+                </Foot>
+              </>
+            }
+          />
 
           {/* 후보 선 — 서비스가 하나를 정해 주지 않는다. 늘어놓고 고르게 한다 */}
           <CandidateList
@@ -234,95 +254,73 @@ export function NewPlanForm({
       {/* ③ 규모 — 수량은 진입가 아래, 위험노출은 스톱가격 아래 (Q12 같은 두 칸) */}
       {stage >= 3 && (
         <Section title="③ 규모">
-          <div className="grid grid-cols-2 items-end gap-2">
-            <div>
-              <MoneyField
-                label="수량"
-                unit="주"
-                value={d.quantity}
-                onChange={(n) => born.set('quantity', n)}
-                onBlur={commitQty}
-                block={cashBlock}
-              />
-            </div>
-            <div>
-              <div className="font-number text-[10px] text-white/40">
-                위험노출 {defaults.riskBefore.toFixed(2)}% →
-              </div>
-              {/* 결론이 입력칸들 사이에서 먼저 읽힌다 — 숫자만 키운다 (Q12) */}
-              <div
-                className={cn(
-                  't-stat font-number leading-tight',
-                  riskWarn ? 'text-warning' : 'text-white',
-                )}
-              >
-                {after.toFixed(2)}%
-              </div>
-            </div>
-          </div>
-          <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-2 text-[10px]">
-            <span
-              className={cn(
-                'font-number',
-                overCash ? 'text-brand-red' : 'text-white/45',
-              )}
-            >
-              필요 현금 {won(cash)}
-            </span>
-            <span className="font-number text-white/35">
-              ÷ 계좌 총액 {won(defaults.accountTotal)}
-              <span className="font-text ml-1 text-white/25">지금</span>
-            </span>
-          </div>
+          <Pair
+            left={
+              <>
+                <MoneyField
+                  label="수량"
+                  unit="주"
+                  value={d.quantity}
+                  onChange={(n) => born.set('quantity', n)}
+                  onBlur={commitQty}
+                  block={cashBlock}
+                />
+                <Foot className={overCash ? 'text-brand-red' : undefined}>
+                  필요 현금 {won(cash)}
+                </Foot>
+              </>
+            }
+            right={
+              <>
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <span className="font-number text-[11px] text-white/40">
+                    위험노출 {defaults.riskBefore.toFixed(2)}% →
+                  </span>
+                  {/* 결론이 입력칸들 사이에서 먼저 읽힌다 — 숫자만 키운다 (Q12) */}
+                  <span
+                    className={cn(
+                      't-stat font-number leading-tight',
+                      riskWarn ? 'text-warning' : 'text-white',
+                    )}
+                  >
+                    {after.toFixed(2)}%
+                  </span>
+                </div>
+                <Foot>
+                  ÷ 계좌 총액 {won(defaults.accountTotal)}
+                  <span className="font-text ml-1 text-white/25">지금</span>
+                </Foot>
+              </>
+            }
+          />
           {riskWarn && (
-            <div className="text-warning mt-0.5 text-[10px]">
+            <div className="text-warning mt-0.5 text-[11px]">
               ⚠ {RISK_WARN}% 초과 — 경고만 한다
             </div>
           )}
         </Section>
       )}
 
-      {/* ④ 스톱 갱신 규칙 — 스톱 상향은 필수 (Q12) */}
+      {/* ④ 스톱 갱신 규칙 — 스톱 사다리. 목표만 건다 · 옮길 자리는 닿은 날 고른다 (Q16) */}
       {stage >= 4 && (
-        <Section
-          title="④ 스톱 갱신 규칙"
-          tail={
-            d.raise && !rulesOpen ? (
-              <button
-                type="button"
-                onClick={() => setRulesOpen(true)}
-                className="text-[10px] text-white/40 hover:text-white/80"
-              >
-                고치기 ▸
-              </button>
-            ) : null
-          }
-        >
-          {d.raise && !rulesOpen ? (
-            <div className="text-[11px] text-white/60">
-              스톱 상향 {stopRaiseLabel(d.raise)} · 50일선 트레일링{' '}
-              {d.trail50 ? '켬' : '끔'}
-            </div>
-          ) : (
-            <div className="flex flex-col gap-1.5">
-              <StopRaisePicker
-                value={d.raise}
-                onChange={(v) => {
-                  born.set('raise', v)
-                  if (stage === 4) setStage(5)
-                }}
-                avgLocked={
-                  defaults.sampleCount < AVG_STOP_MIN_SAMPLES
-                    ? `통계 ${AVG_STOP_MIN_SAMPLES}건부터`
-                    : null
-                }
-              />
-              <Sw
-                on={d.trail50}
-                onClick={() => born.set('trail50', !d.trail50)}
-              >
-                50일선 트레일링
-              </Sw>
+        <Section title="④ 스톱 갱신 규칙">
+          <div className="mb-1 text-[11px] text-white/35">
+            목표에 닿으면 그날 스톱을 옮길 자리를 고른다
+          </div>
+          <StopLadderEditor
+            value={d.goals}
+            locked={[]}
+            onChange={(next) => {
+              born.set('goals', next)
+              if (stage === 4 && goalsProblem(next) == null) setStage(5)
+            }}
+            entryPrice={d.entryPrice}
+            stopPrice={d.stopPrice}
+            initialStopWidth={null}
+          />
+          {(goalBlock ?? ladderBlock) && (
+            <div className="text-brand-red mt-1 text-[11px]">
+              {goalBlock ?? ladderBlock}
             </div>
           )}
         </Section>
@@ -333,7 +331,7 @@ export function NewPlanForm({
         <Section
           title="⑤ 메모"
           tail={
-            <span className="text-[10px] font-normal text-white/30">선택</span>
+            <span className="text-[11px] font-normal text-white/30">선택</span>
           }
         >
           <textarea
@@ -341,13 +339,15 @@ export function NewPlanForm({
             onChange={(e) => born.set('memo', e.target.value)}
             rows={3}
             placeholder="왜 여기서 사려는가"
-            className="bg-bg-input w-full resize-y rounded-md px-2.5 py-2 text-[12px] leading-relaxed text-white outline-none placeholder:text-white/25 focus:ring-1 focus:ring-white/30"
+            className="bg-bg-input w-full resize-y rounded-md px-2.5 py-2 text-[13px] leading-relaxed text-white outline-none placeholder:text-white/25 focus:ring-1 focus:ring-white/30"
           />
           <div className="mt-2.5 flex justify-end">
             <Btn
               go
               onClick={() => setConfirming(true)}
-              disabled={!born.ready || overCash || born.pending}
+              disabled={
+                !born.ready || overCash || goalBlock != null || born.pending
+              }
             >
               {born.pending ? '등록 중…' : '등록'}
             </Btn>
@@ -404,17 +404,17 @@ function AccountConfirm({
         aria-label="계좌 총액 확인"
         className={cn(LIT_PANEL, 'w-[340px] px-5 py-4')}
       >
-        <div className="text-[14px] font-bold text-white">등록 전 확인</div>
-        <div className="mt-1 text-[12px] text-white/50">
+        <div className="text-[15px] font-bold text-white">등록 전 확인</div>
+        <div className="mt-1 text-[13px] text-white/50">
           「{title}」 — 기록상 계좌가 지금과 같은가
         </div>
-        <dl className="font-number mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[13px]">
+        <dl className="font-number mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[14px]">
           <dt className="font-text text-white/45">계좌 총액</dt>
           <dd className="text-right text-white">{won(total)}</dd>
           <dt className="font-text text-white/45">현금</dt>
           <dd className="text-right text-white/80">{won(cash)}</dd>
         </dl>
-        <div className="mt-1.5 text-[10px] text-white/30">
+        <div className="mt-1.5 text-[11px] text-white/30">
           다르면 계좌 기록부터 고친다 — 위험노출의 분모가 틀어진다
         </div>
         <div className="mt-4 flex justify-end gap-1.5">

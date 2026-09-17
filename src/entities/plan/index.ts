@@ -5,6 +5,7 @@ export {
   usePlanDetail,
   useStockPosition,
   usePlanDefaults,
+  usePickStop,
   useCreatePlan,
   useUpdatePlan,
   useClosePlan,
@@ -14,11 +15,14 @@ export {
   PLAN_STATUS_LABEL,
   ENTRY_STATE_LABEL,
   AVG_STOP_MIN_SAMPLES,
-  STOP_RAISE_PRESETS,
+  GOAL_R_PRESETS,
+  STOP_PICK_LABEL,
   canClose,
   canDelete,
-  sameStopRaise,
-  stopRaiseLabel,
+  goalState,
+  nextGoal,
+  pendingGoal,
+  stopPickLabel,
 } from './model/types'
 export {
   autoPlanTitle,
@@ -26,8 +30,14 @@ export {
   needCash,
   oneR,
   ownRisk,
-  raiseTriggerPrice,
+  goalPrice,
+  goalsProblem,
+  pickProblem,
+  priceConflict,
   riskAfter,
+  stopPickOptions,
   stopWidthPct,
+  toStopPick,
 } from './model/calc'
+export type { StopPickOption } from './model/calc'
 export type * from './model/types'

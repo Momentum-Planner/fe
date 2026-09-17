@@ -5,7 +5,13 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import { planApi } from '../api/planApi'
-import type { PlanClose, PlanCreate, PlanListFilters, PlanPatch } from './types'
+import type {
+  PlanClose,
+  PlanCreate,
+  PlanListFilters,
+  PlanPatch,
+  StopPickBody,
+} from './types'
 
 export const planKeys = {
   all: ['plan'] as const,
@@ -82,6 +88,23 @@ export function useUpdatePlan(planId: number) {
       qc.setQueryData(planKeys.detail(planId), next)
       void qc.invalidateQueries({ queryKey: [...planKeys.all, 'list'] })
       // 손절가가 바뀌면 종목의 «지금 손절가»도 바뀐다 — 실행 중 계획이 그 값을 든다
+      void qc.invalidateQueries({
+        queryKey: planKeys.position(next.stockCode),
+      })
+    },
+  })
+}
+
+/**
+ * 닿은 단에서 스톱 자리를 고른다 (Q16). 손절가가 바뀌므로 수정과 같은 것을 비운다.
+ */
+export function usePickStop(planId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: StopPickBody) => planApi.pickStop(planId, body),
+    onSuccess: (next) => {
+      qc.setQueryData(planKeys.detail(planId), next)
+      void qc.invalidateQueries({ queryKey: [...planKeys.all, 'list'] })
       void qc.invalidateQueries({
         queryKey: planKeys.position(next.stockCode),
       })

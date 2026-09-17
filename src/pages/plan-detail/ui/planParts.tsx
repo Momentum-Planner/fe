@@ -29,13 +29,60 @@ export function Section({
       )}
     >
       <div className="mb-1.5 flex items-baseline gap-2">
-        <span className="text-[12px] font-bold text-white/80">{title}</span>
+        <span className="text-[13px] font-bold text-white/80">{title}</span>
         {tail && <span className="ml-auto">{tail}</span>}
       </div>
       {children}
     </div>
   )
 }
+
+/**
+ * **두 칸 격자** — 계획 카드의 모든 줄이 이 가운데 선을 나눠 쓴다 (2026-09-17).
+ *
+ * ```text
+ * 진입 예상가   │ 스톱가격
+ * 수량          │ 위험노출
+ * ✓ 2R 1,200,000 │ 08-26 → 본전
+ * ```
+ *
+ * 💀 섹션마다 제 격자(`gap-2` · `16px_36px_76px_1fr` · `84px_28px_1fr_40px`)를 따로 썼더니
+ *    세로로 줄이 하나도 안 맞았다. 가운데 선 하나를 모든 섹션이 공유한다 — 선은 «살짝만».
+ */
+export function Pair({
+  left,
+  right,
+  className,
+}: {
+  left: React.ReactNode
+  right: React.ReactNode
+  className?: string
+}) {
+  return (
+    <div className={cn('grid grid-cols-2', className)}>
+      <div className="min-w-0 pr-3">{left}</div>
+      <div className="min-w-0 border-l border-white/[0.06] pl-3">{right}</div>
+    </div>
+  )
+}
+
+/** 값 밑의 한 줄 — 비어도 높이를 지켜 왼쪽 · 오른쪽 칸의 줄이 맞는다 */
+export const Foot = ({
+  className,
+  children,
+}: {
+  className?: string
+  children: React.ReactNode
+}) => (
+  <div
+    className={cn(
+      'font-number mt-0.5 min-h-[15px] text-[11px] leading-snug text-white/40',
+      className,
+    )}
+  >
+    {children}
+  </div>
+)
 
 /**
  * 숫자 칸 — **숫자와 쉼표만 받고, 치는 동안 쉼표를 찍는다** (Q11 D · F).
@@ -75,14 +122,14 @@ export function MoneyField({
           onBlur={onBlur}
           inputMode="numeric"
           className={cn(
-            'bg-bg-input font-number w-full rounded-md px-2 py-1 text-right text-[13px] text-white outline-none focus:ring-1 focus:ring-white/30',
+            'bg-bg-input font-number w-full rounded-md px-2 py-1 text-right text-[14px] text-white outline-none focus:ring-1 focus:ring-white/30',
             unit && 'pr-6',
             block && 'ring-brand-red/50 ring-1',
             picking && 'ring-brand-blue/60 ring-1',
           )}
         />
         {unit && (
-          <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-[11px] text-white/35">
+          <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-[12px] text-white/35">
             {unit}
           </span>
         )}
@@ -142,7 +189,7 @@ export function StopField({
           inputMode={unit === 'won' ? 'numeric' : 'decimal'}
           placeholder={unit === 'pct' ? '3.5' : undefined}
           className={cn(
-            'bg-bg-input font-number w-full min-w-0 rounded-md px-2 py-1 text-right text-[13px] text-white outline-none placeholder:text-white/20 focus:ring-1 focus:ring-white/30',
+            'bg-bg-input font-number w-full min-w-0 rounded-md px-2 py-1 text-right text-[14px] text-white outline-none placeholder:text-white/20 focus:ring-1 focus:ring-white/30',
             (block ?? pctBlock) && 'ring-brand-red/50 ring-1',
             picking && 'ring-brand-blue/60 ring-1',
           )}
@@ -158,7 +205,7 @@ export function StopField({
                 setPct('')
               }}
               className={cn(
-                'px-1.5 text-[10px]',
+                'px-1.5 text-[11px]',
                 unit === u ? 'bg-white/[0.14] text-white' : 'text-white/40',
               )}
             >
@@ -168,7 +215,7 @@ export function StopField({
         </div>
       </div>
       {unit === 'pct' && value > 0 && !pctBlock && (
-        <span className="font-number text-[10px] text-white/35">
+        <span className="font-number text-[11px] text-white/35">
           → {won(value)}
         </span>
       )}
@@ -187,7 +234,7 @@ export function FieldLabel({
   onPick?: () => void
 }) {
   return (
-    <span className="flex items-center gap-1.5 text-[10px] text-white/40">
+    <span className="flex items-center gap-1.5 text-[11px] text-white/40">
       {label}
       {/* ④-1-1-1 의 📦 자료가 「차트」다 — 그 «자리»를 짚는 것이 실제 동작이다 */}
       {onPick && (
@@ -211,9 +258,9 @@ export function FieldLabel({
 /** ✕ 는 막는 것, ⚠ 는 넘어도 가는 것 — 기호가 형태로 갈리므로 색이 무너져도 남는다 */
 export const Message = ({ block, warn }: { block?: string; warn?: string }) =>
   block ? (
-    <span className="text-brand-red text-[10px]">{block}</span>
+    <span className="text-brand-red text-[11px]">{block}</span>
   ) : warn ? (
-    <span className="text-warning text-[10px]">{warn}</span>
+    <span className="text-warning text-[11px]">{warn}</span>
   ) : null
 
 /** 켬/끔 하나. 세부 화면의 `Toggle` 과 같은 모양이다 */
@@ -232,7 +279,7 @@ export const Sw = ({
     aria-checked={on}
     onClick={onClick}
     className={cn(
-      'flex items-center gap-1.5 self-start rounded-md px-2 py-0.5 text-[11px] transition-colors',
+      'flex items-center gap-1.5 self-start rounded-md px-2 py-0.5 text-[12px] transition-colors',
       on
         ? 'bg-white/[0.12] text-white/85'
         : 'bg-white/[0.03] text-white/35 hover:text-white/60',
@@ -266,7 +313,7 @@ export const Btn = ({
     onClick={onClick}
     disabled={disabled}
     className={cn(
-      'rounded-full px-3 py-1 text-[12px] transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+      'rounded-full px-3 py-1 text-[13px] transition-colors disabled:cursor-not-allowed disabled:opacity-40',
       go
         ? 'bg-brand-red/85 hover:bg-brand-red text-white'
         : 'bg-white/[0.06] text-white/70 hover:bg-white/[0.12] hover:text-white',
@@ -292,6 +339,13 @@ export type Candidate = {
  *
  * 상한을 넘는 선은 지우지 않고 **색조 + ⚠** 로 말한다. 흐림은 이 앱에서 「못 누른다」라 안 쓴다.
  */
+/**
+ * 손절폭 글자. 스톱이 진입가 «위»면(본전 위로 올린 스톱) 폭이 음수로 온다 —
+ * 💀 `−{width}%` 로 붙였더니 「--0.27%」 가 떴다. 위쪽이면 + 로 쓴다
+ */
+export const stopWidthText = (width: number) =>
+  width < 0 ? `+${Math.abs(width)}%` : width === 0 ? '0%' : `−${width}%`
+
 export function CandidateList({
   items,
   chosen,
@@ -306,7 +360,7 @@ export function CandidateList({
       {items.map((c) => {
         const on = c.price === chosen
         const shape = cn(
-          'grid grid-cols-[1fr_76px_50px] items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[11px]',
+          'grid grid-cols-[1fr_76px_50px] items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[12px]',
           on && 'bg-white/[0.09]',
           c.limit && 'ring-warning/40 ring-1',
         )
@@ -329,7 +383,8 @@ export function CandidateList({
                 c.overLimit ? 'text-warning' : 'text-white/40',
               )}
             >
-              {c.overLimit && <span aria-hidden>⚠</span>}−{c.width}%
+              {c.overLimit && <span aria-hidden>⚠</span>}
+              {stopWidthText(c.width)}
             </span>
           </>
         )

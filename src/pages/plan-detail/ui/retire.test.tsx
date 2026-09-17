@@ -55,8 +55,7 @@ const BLANK: PlanCreate = {
   stopPrice: 1_150_000,
   quantity: 5,
   memo: '',
-  raise: { kind: 'R', r: 2 },
-  trail50: false,
+  goals: [2],
   previousPlanId: null,
 }
 
@@ -228,8 +227,7 @@ describe('이어서 세우기', () => {
     const plan = await planApi.create({
       ...BLANK,
       title: '뿌리 계획',
-      raise: { kind: 'R', r: 3 },
-      trail50: true,
+      goals: [3],
     })
     show(plan)
     const user = userEvent.setup()
@@ -320,7 +318,8 @@ describe('이어서 세우기', () => {
     expect(screen.getByText(`${after}%`)).toBeInTheDocument()
     await user.tab()
 
-    // 스톱 상향을 이어받았으므로 ④ 는 접힌 채 채워져 있고 ⑤ 와 등록이 선다
+    // ④ 사다리는 빈 ① 단으로 시작한다 — 목표를 골라야 ⑤ 와 등록이 선다 (Q16)
+    await user.click(screen.getByRole('button', { name: '2R' }))
     expect(screen.getByRole('button', { name: '등록' })).toBeEnabled()
     // 이름이 자동으로 붙는다 — 진입 상태 + 진입가
     expect(
@@ -335,62 +334,59 @@ describe('이어서 세우기', () => {
   })
 
   it(
-    '스톱 규칙은 «이어받아 오되 고칠 수 있다» (④-1-4)',
+    'Q16 스톱 사다리는 «빈 ① 단»으로 시작한다 — 이어받지 않고, 목표를 골라야 등록된다',
     { timeout: 20_000 },
     async () => {
       const plan = await planApi.create({
         ...BLANK,
-        title: '규칙 고치기',
-        raise: { kind: 'R', r: 3 },
-        trail50: true,
+        title: '사다리 뿌리',
+        goals: [3, 5],
       })
       show(plan)
       const user = userEvent.setup()
 
-      await screen.findAllByText('규칙 고치기')
+      await screen.findAllByText('사다리 뿌리')
       await user.click(
         await screen.findByRole('button', { name: '이어서 세우기' }),
       )
       await fillToQuantity(user)
 
-      // 값이 «채워져» 온다 — 진입가·수량과 반대다. 그쪽은 판단, 이쪽은 규칙.
-      // 이어받았으므로 접힌 채 요약 한 줄이다 (Q12)
+      // 이어받은 3R · 5R 이 «안» 채워져 있다 — 목표는 이번 진입의 1R 로 재는 값이다
+      expect(screen.getByText('④ 스톱 갱신 규칙')).toBeInTheDocument()
+      for (const r of ['2R', '3R', '4R', '5R'])
+        expect(screen.getByRole('button', { name: r })).toHaveAttribute(
+          'aria-pressed',
+          'false',
+        )
       expect(
-        screen.getByText('스톱 상향 3R · 50일선 트레일링 켬'),
-      ).toBeInTheDocument()
-      await user.click(screen.getByRole('button', { name: '고치기 ▸' }))
+        screen.queryByRole('button', { name: '등록' }),
+      ).not.toBeInTheDocument()
 
-      const trail = screen.getByRole('switch', { name: '50일선 트레일링' })
-      expect(trail).toBeChecked()
-      const three = screen.getByRole('button', { name: '3R' })
-      const two = screen.getByRole('button', { name: '2R' })
-      expect(three).toHaveAttribute('aria-pressed', 'true')
+      await user.click(screen.getByRole('button', { name: '3R' }))
+      expect(screen.getByRole('button', { name: '등록' })).toBeEnabled()
 
-      // 스톱 상향은 «끔»이 없다 — 다른 값으로 바꿀 수만 있다 (Q12)
-      await user.click(two)
-      expect(two).toHaveAttribute('aria-pressed', 'true')
-      expect(three).toHaveAttribute('aria-pressed', 'false')
+      // 단을 붙이면 앞 단 +1R 이 골라진 채 온다 · 앞 단 이하는 못 고른다
+      await user.click(screen.getByRole('button', { name: '+ 단 추가' }))
+      const fours = screen.getAllByRole('button', { name: '4R' })
+      expect(fours[1]).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.getAllByRole('button', { name: '3R' })[1]).toBeDisabled()
     },
   )
 
-  it('세우면 «승계»가 붙고 스톱 규칙이 따라온다', async () => {
+  it('세우면 «승계»가 붙는다 — 사다리는 폼이 보낸 대로다', async () => {
     const root = await planApi.create({
       ...BLANK,
       title: '승계 뿌리',
-      raise: { kind: 'AVG' },
-      trail50: true,
+      goals: [3, 5],
     })
-    // 훅이 하는 일을 API 층에서 그대로 확인한다 — 화면은 이 값을 넘길 뿐이다
     const next = await planApi.create({
       ...BLANK,
       title: '이어진 계획',
       previousPlanId: root.planId,
-      raise: root.plannedStop.raise,
-      trail50: root.plannedStop.trail50,
+      goals: [2],
     })
     expect(next.previousPlanId).toBe(root.planId)
-    expect(next.plannedStop.raise).toEqual({ kind: 'AVG' })
-    expect(next.plannedStop.trail50).toBe(true)
+    expect(next.plannedStop.goals.map((g) => g.r)).toEqual([2])
     // 세운 계획은 «대기»로 난다
     expect(next.status).toBe('PLANNED')
   })
@@ -521,11 +517,38 @@ describe('읽을 때와 고칠 때', () => {
 
     await screen.findAllByText('규칙 자리')
     // 「어디서 자를까」와 「수익이 나면 어디로 올릴까」는 같은 선의 두 시점이다.
-    // 꺼둔 50일선 트레일링도 «자리를 지킨다» (③-3-1) — 껐다는 사실을 잊지 않게
-    // 백스톱은 스톱 상향의 선택지로 들어갔다 (Q12)
+    // 사다리는 다음 목표가 어디쯤인지 늘 보인다 (Q16 · ③-3-1)
     expect(screen.getByText('④ 스톱 갱신 규칙')).toBeInTheDocument()
-    expect(screen.getByText('50일선 트레일링')).toBeInTheDocument()
-    expect(screen.getByText('스톱 상향 2R')).toBeInTheDocument()
+    expect(screen.getByText('2R')).toBeInTheDocument()
+    expect(screen.getByText('다음 목표')).toBeInTheDocument()
+  })
+
+  it('Q16 목표에 닿았으면 카드 맨 위에서 스톱 자리를 고른다 — 고르면 손절가가 바뀐다', async () => {
+    const plan = await planApi.getDetail(1)
+    show(plan)
+    const user = userEvent.setup()
+
+    const panel = await screen.findByRole('region', {
+      name: '스톱 옮길 자리 고르기',
+    })
+    expect(panel).toHaveTextContent('목표 3R 도착')
+    // 지금 스톱 이하(본전)는 못 고른다 — 까닭이 그 묶음 바로 밑에 선다 (10장 F)
+    expect(screen.getByRole('button', { name: /^본전/ })).toBeDisabled()
+    expect(panel).toHaveTextContent('본전 — 지금 스톱 이하')
+    // 옮기기는 칩을 고르기 전에는 꺼져 있다 — 확정은 하나다
+    expect(
+      screen.getByRole('button', { name: '이 자리로 옮기기' }),
+    ).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: /^\+1R 1,160,000/ }))
+    expect(panel).toHaveTextContent('1,120,000 →')
+    await user.click(screen.getByRole('button', { name: '이 자리로 옮기기' }))
+    // 고르면 고를 차례가 닫히고 사다리에 ✓ 로 남는다
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('region', { name: '스톱 옮길 자리 고르기' }),
+      ).not.toBeInTheDocument(),
+    )
+    expect(screen.getByText(/→ \+1R 1,160,000/)).toBeInTheDocument()
   })
 
   it('근거 블록이 «없다» — 계획 루프를 정한 뒤에 다시 세운다', async () => {

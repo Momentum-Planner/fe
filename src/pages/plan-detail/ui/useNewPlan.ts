@@ -1,12 +1,7 @@
 import { useCallback, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { useCreatePlan } from '@/entities/plan'
-import type {
-  PlanCreate,
-  PlanDetail,
-  PlanListItem,
-  StopRaise,
-} from '@/entities/plan'
+import { goalsProblem, useCreatePlan } from '@/entities/plan'
+import type { PlanCreate, PlanDetail, PlanListItem } from '@/entities/plan'
 import { attachPointId } from './spine'
 
 /**
@@ -20,7 +15,7 @@ import { attachPointId } from './spine'
  * ```text
  * 종목        여기서 정해져 있다.  안 묻는다
  * previousPlanId   지금 계획.  승계가 곧 사슬의 화살표다 (④-2)
- * 스톱 규칙 셋      «직전 값이 채워져 있다» — 안 고치면 그대로 간다 (④-1-4)
+ * 스톱 사다리      빈 ① 단 하나로 시작한다 — 물려받지 않는다 (Q16)
  * 진입가·스톱가·수량  **비워 둔다.**  서비스가 값을 대신 정하지 않는다 (④-1-1-1)
  * ```
  */
@@ -37,11 +32,10 @@ export type NewPlanDraft = {
   quantity: number
   memo: string
   /**
-   * 스톱 상향 (③-3 · ④-1-4). 직전 값이 채워져 오고, 고칠 수 있다.
-   * **필수다** (Q12) — 첫 계획은 비어 있고(null), 고르기 전에는 못 세운다.
+   * 스톱 사다리의 목표 R (Q16). **빈 ① 단 하나로 시작한다** — 이어받는 계획도 같다.
+   * 목표를 골라야 세울 수 있다 (필수 · Q12 에서 이어진다).
    */
-  raise: StopRaise | null
-  trail50: boolean
+  goals: (number | null)[]
 }
 
 /**
@@ -54,26 +48,23 @@ export type NewPlanDraft = {
  * 사용자가 지우지 않고 그냥 저장하기 때문이다. 판단은 매번 새로 한다.
  */
 /**
- * ⚠️ **스톱 규칙 셋은 «값을» 물려받는다.** ④-1-4 가 *「직전 값이 채워져 있다.
- *    안 고치면 그대로 유지된다」* 라, 비워 두면 매번 다시 정해야 한다.
- *    진입가·스톱가격·수량과 반대다 — 그쪽은 «판단»이라 매번 새로 하고,
- *    이쪽은 «규칙»이라 안 건드리면 이어진다.
+ * ⚠️ **스톱 사다리도 물려받지 않는다** (Q16). ④-1-4 는 *「직전 값이 채워져 있다」* 였지만
+ *    사다리는 빈 ① 단으로 시작하기로 했다 — 목표는 이번 진입의 1R 로 재는 값이라
+ *    진입이 바뀌면 같은 R 도 다른 가격이다.
  */
-const from = (p?: PlanDetail): NewPlanDraft => ({
+const from = (): NewPlanDraft => ({
   snapshotDate: null,
   entryPrice: 0,
   stopPrice: 0,
   quantity: 0,
   memo: '',
-  // 이어받을 계획이 «없으면» 규칙도 물려받을 것이 없다 — 스톱 상향은 비어서 시작한다
-  raise: p?.plannedStop.raise ?? null,
-  trail50: p?.plannedStop.trail50 ?? false,
+  goals: [null],
 })
 
 /**
  * @param stockCode  이 종목에 세운다. **계획이 하나도 없어도 된다**
  * @param siblings   같은 종목의 계획들 — 붙을 자리를 여기서 찾는다
- * @param parent     이어받을 계획. 없으면(첫 계획) 규칙도 물려받을 것이 없다
+ * @param parent     이어받을 계획. 승계 자리를 못 찾을 때 붙는다
  */
 export function useNewPlan(
   stockCode: string,
@@ -84,7 +75,7 @@ export function useNewPlan(
   const create = useCreatePlan()
   const [draft, setDraft] = useState<NewPlanDraft | null>(null)
 
-  const open = useCallback(() => setDraft(from(parent)), [parent])
+  const open = useCallback(() => setDraft(from()), [])
   const cancel = useCallback(() => setDraft(null), [])
   const set = useCallback(
     <TKey extends keyof NewPlanDraft>(key: TKey, value: NewPlanDraft[TKey]) =>
@@ -105,12 +96,12 @@ export function useNewPlan(
     draft.stopPrice > 0 &&
     draft.stopPrice < draft.entryPrice &&
     draft.quantity > 0 &&
-    draft.raise != null
+    goalsProblem(draft.goals) == null
 
   /** @param title 자동 이름 — 폼이 스냅샷의 진입 상태로 만든다 (`autoPlanTitle`) */
   const submit = useCallback(
     (title: string) => {
-      if (!draft || !ready || !draft.raise || !draft.snapshotDate) return
+      if (!draft || !ready || !draft.snapshotDate) return
       const body: PlanCreate = {
         stockCode,
         title,
@@ -119,9 +110,7 @@ export function useNewPlan(
         stopPrice: draft.stopPrice,
         quantity: draft.quantity,
         memo: draft.memo,
-        // 채워져 온 값을 «고칠 수 있다» (④-1-4)
-        raise: draft.raise,
-        trail50: draft.trail50,
+        goals: draft.goals.map((r) => r ?? 0),
         /**
          * 승계 — **줄기의 끝**에서 갈라진다 (④-2).
          *

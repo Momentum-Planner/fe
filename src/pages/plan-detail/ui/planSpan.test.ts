@@ -19,11 +19,12 @@ const item = (over: Partial<PlanListItem>): PlanListItem => ({
   entryState: 'BREAKOUT',
   fundamentalScore: 5,
   previousPlanId: null,
-  raise: { kind: 'R', r: 2 },
+  goals: [],
+  initialStopWidth: null,
   ...over,
 })
 
-describe('Q12 브러싱 — 과거 계획은 «살아 있던 구간»에만 그린다', () => {
+describe('Q12 고정한 과거 계획은 «살아 있던 구간»에만 그린다', () => {
   it('실행 완료는 이어받은 계획의 작성일에서 끝난다', () => {
     const done = item({ planId: 12, writtenAt: '2026-08-18' })
     const next = item({

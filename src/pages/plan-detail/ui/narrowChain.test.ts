@@ -24,7 +24,8 @@ const p = (
   entryState: 'BREAKOUT',
   fundamentalScore: 5,
   previousPlanId,
-  raise: { kind: 'R', r: 2 },
+  goals: [],
+  initialStopWidth: null,
 })
 
 const SK = [
@@ -59,5 +60,21 @@ describe('Q12 좁힌 사슬', () => {
 
   it('지금 보는 계획과 팝오버에서 꺼낸 계획은 늘 보인다', () => {
     expect(ids(narrowChain(SK, 8, [7]).shown)).toEqual([7, 8, 12, 1, 15, 9])
+  })
+
+  it('대기는 최근 둘만 펼친다 — 나머지는 「대기 +N」 안, 지금 보는 대기는 꺼낸다', () => {
+    const plans = [
+      ...SK,
+      p(16, 'PLANNED', '2026-09-10', 1),
+      p(17, 'PLANNED', '2026-09-12', 1),
+    ]
+    const a = narrowChain(plans, 1)
+    expect(ids(a.shown)).toEqual([12, 1, 16, 17])
+    expect(ids(a.waiting)).toEqual([9, 15])
+    expect(ids(a.hidden)).toEqual([11, 8, 7])
+
+    const b = narrowChain(plans, 15)
+    expect(ids(b.shown)).toEqual([12, 1, 15, 16, 17])
+    expect(ids(b.waiting)).toEqual([9])
   })
 })

@@ -3,10 +3,9 @@ import {
   needCash as calcNeedCash,
   oneR,
   riskAfter as calcRiskAfter,
-  sameStopRaise,
   stopWidthPct,
 } from '@/entities/plan'
-import type { PlanDetail, PlanPatch, StopRaise } from '@/entities/plan'
+import type { PlanDetail, PlanPatch } from '@/entities/plan'
 
 /**
  * 편집 중인 계획.
@@ -26,9 +25,11 @@ export type Draft = {
   stopPrice: number
   quantity: number
   memo: string
-  /** 스톱 상향 — 필수 (Q12) */
-  raise: StopRaise
-  trail50: boolean
+  /**
+   * 스톱 사다리의 «안 닿은» 단들의 목표 R (Q16). 닿은 단은 잠겨서 여기 없다 —
+   * 보낼 때 앞에 그대로 붙인다. 직접 입력을 비운 단은 null.
+   */
+  goals: (number | null)[]
 }
 
 const fromPlan = (p: PlanDetail): Draft => ({
@@ -37,9 +38,14 @@ const fromPlan = (p: PlanDetail): Draft => ({
   stopPrice: p.stopPrice,
   quantity: p.quantity,
   memo: p.memo,
-  raise: p.plannedStop.raise,
-  trail50: p.plannedStop.trail50,
+  goals: open(p).map((g) => g.r),
 })
+
+/** 닿은 단 — 앞에서부터. 편집기가 잠가서 보여 준다 */
+export const lockedGoals = (p: PlanDetail) =>
+  p.plannedStop.goals.filter((g) => g.hitAt != null)
+const open = (p: PlanDetail) =>
+  p.plannedStop.goals.filter((g) => g.hitAt == null)
 
 /** 안 바뀐 값은 안 보낸다 — PATCH 는 「고친 것」만 담는다 */
 function diff(p: PlanDetail, d: Draft): PlanPatch {
@@ -49,8 +55,16 @@ function diff(p: PlanDetail, d: Draft): PlanPatch {
   if (d.stopPrice !== p.stopPrice) out.stopPrice = d.stopPrice
   if (d.quantity !== p.quantity) out.quantity = d.quantity
   if (d.memo !== p.memo) out.memo = d.memo
-  if (!sameStopRaise(d.raise, p.plannedStop.raise)) out.raise = d.raise
-  if (d.trail50 !== p.plannedStop.trail50) out.trail50 = d.trail50
+  const before = open(p).map((g) => g.r)
+  if (
+    d.goals.length !== before.length ||
+    d.goals.some((r, i) => r !== before[i])
+  )
+    out.goals = [
+      ...lockedGoals(p).map((g) => g.r),
+      // 빈 단이 있으면 서버가 거절한다 — 저장 버튼이 먼저 막는다
+      ...d.goals.map((r) => r ?? 0),
+    ]
   return out
 }
 

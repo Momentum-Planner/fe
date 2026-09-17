@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { cn } from '@/shared/lib/cn'
 import { fromServerRegime } from '@/shared/lib/snapshots'
 import { RegimeBadge } from '@/shared/ui/RegimeBadge'
 import { useRegimeInsight, useScreening } from '@/entities/stock'
 import {
-  raiseTriggerPrice,
+  goalPrice,
+  nextGoal,
   usePlanDefaults,
   usePlanDetail,
   usePlanList,
@@ -28,6 +29,8 @@ import { NewPlanForm } from './NewPlanForm'
 import { useNewPlan } from './useNewPlan'
 import { usePlanClose, usePlanRemove } from './usePlanRetire'
 import { usePlanDraft } from './usePlanDraft'
+import { pickOptionsOf } from './StopPickPanel'
+import type { PickChoice } from './StopPickPanel'
 
 /**
  * 계획 싱글.
@@ -149,12 +152,11 @@ function FirstPlanView({ stockCode }: { stockCode: string }) {
             marksFrom={born.draft?.snapshotDate ?? today}
             drafting
             raiseTo={
-              born.draft?.raise
-                ? raiseTriggerPrice(
+              born.draft?.goals[0] != null
+                ? goalPrice(
                     born.draft.entryPrice,
                     born.draft.stopPrice,
-                    born.draft.raise,
-                    defaults?.stopLimitBasis?.avgWin ?? null,
+                    born.draft.goals[0],
                   )
                 : null
             }
@@ -247,11 +249,6 @@ function PlanDetailView({
    * 사슬을 «세로로» 넓힌다. 갈래가 늘면 마디가 세로로 쌓이는데 210px 안에서는
    * 위아래가 잘린다. 폭은 안 건드린다 — 가로는 이미 끌어서 본다
    */
-  /**
-   * 사슬 마디에 올린 계획 — 차트가 **유령**으로 띄운다 (Q12 브러싱).
-   * 지금 보는 계획 자신은 이미 진하게 그려져 있으므로 유령으로 또 안 띄운다.
-   */
-  const [hoverId, setHoverId] = useState<number | null>(null)
   /** 「지난 계획」 팝오버에서 꺼낸 계획들 — 좁힌 사슬에 더해진다 (Q12) */
   const [pulled, setPulled] = useState<number[]>([])
   const narrowed = narrowChain(siblings, plan.planId, pulled)
@@ -261,30 +258,87 @@ function PlanDetailView({
    */
   const [snapOpen, setSnapOpen] = useState<boolean | null>(null)
   const today = new Date().toISOString().slice(0, 10)
-  const avgWin = defaults?.stopLimitBasis?.avgWin ?? null
+  /** 고를 차례 단의 후보 (Q16 7) — 카드의 고르기와 차트의 후보 선이 같은 줄을 본다 */
+  const pick = useMemo(() => pickOptionsOf(plan), [plan])
+  /** 고른 칩 — 카드가 고르고 차트가 「새 스톱」 선으로 긋는다. 계획이 바뀌면 비운다 */
+  const [choice, setChoice] = useState<PickChoice | null>(null)
+  useEffect(() => setChoice(null), [plan.planId, pick?.index])
+
   const drafting = born.draft != null
   useEffect(() => setSnapOpen(null), [drafting])
   /** 이 종목의 스크리닝 행 — 새 계획의 달력이 고르고, 고른 날이 스냅샷이 된다 (Q11 A) */
   const { data: rows = [] } = useScreening(plan.stockCode)
   const picked = rows.find((r) => r.date === born.draft?.snapshotDate)
-  const hovered = siblings.find(
-    (p) => p.planId === hoverId && (drafting || p.planId !== plan.planId),
+  /**
+   * 새 계획을 쓰는 동안 **참조할 계획** — 사슬에서 누른 마디다 (2026-09-17).
+   *
+   * 💀 마디는 원래 그 계획으로 가는 링크라, 쓰는 중에 누르면 페이지가 옮겨 가 폼이 날아갔다.
+   * 옮겨 가지 않고 «고르기만» 한다. 고른 마디가 흰 테두리를 받고, 차트에 그 계획이 선다.
+   *
+   * 💀 한때 「고정」(파란 테두리)과 「보고 있는 계획」(흰 테두리)이 따로 있었다. 강조가 둘이라
+   * 무엇이 무엇인지 안 읽혔다 — **흰 테두리 하나 = 고른 계획**으로 합쳤다.
+   * 처음에는 보던 계획이 골라져 있다. **고른 마디를 다시 누르거나 사슬 빈 곳을 누르면
+   * 풀린다** — 차트에 새 계획만 남는다 (2026-09-17).
+   *
+   * ⚠️ 마우스를 올리면 뜨던 브러싱은 뺐다. 옅게 그린 선이 캔들 위에서 안 보였다.
+   */
+  const [refId, setRefId] = useState<number | null>(plan.planId)
+  useEffect(() => setRefId(plan.planId), [drafting, plan.planId])
+  /**
+   * **빈 곳**을 누르면 풀린다 — 사슬 카드의 빈 곳과 페이지 배경.
+   * 마디 · 버튼 · 입력 · 팝오버 · 대화상자는 빈 곳이 아니다. 차트 · 폼 카드 안도 아니다 —
+   * 거기서는 값을 집고 적는 중이라, 누를 때마다 참조가 사라지면 안 된다.
+   */
+  /**
+   * 볼 때도 같다 — 지금 계획 마디를 다시 누르거나 빈 곳을 누르면 흰 테두리와 차트의
+   * 계획 선이 빠진다. 캔들만 보고 싶을 때다. 다시 누르면 돌아온다 (2026-09-17).
+   * 고치는 중에는 풀지 않는다 — 차트에서 값을 집는 중이다.
+   */
+  const [lit, setLit] = useState(true)
+  useEffect(() => setLit(true), [drafting, plan.planId])
+  const hideNow = !drafting && !editing && !lit
+  /** 고르는 중 — 새 계획 · 수정이 아닐 때만. 차트의 목표 면이 «도착한» 단으로 선다 */
+  const choosing = pick != null && !drafting && !editing && !hideNow
+
+  useEffect(() => {
+    const held = drafting ? refId != null : !editing && lit
+    if (!held) return
+    const release = (e: MouseEvent) => {
+      const t = e.target as Element
+      if (
+        t.closest(
+          'a, button, input, textarea, select, [role="listbox"], [role="dialog"]',
+        )
+      )
+        return
+      // 카드 안(차트 · 폼 · 머리줄)은 빈 곳이 아니다. ⚠️ 차트 · 폼 카드는 `.card` 가 아니라
+      // LIT_PANEL 이라 클래스로 못 가른다 — 카드는 전부 `section` 이다
+      if (t.closest('section') && !t.closest('[data-chain]')) return
+      if (drafting) setRefId(null)
+      else setLit(false)
+    }
+    document.addEventListener('click', release)
+    return () => document.removeEventListener('click', release)
+  }, [drafting, refId, editing, lit])
+  const ref = drafting ? siblings.find((x) => x.planId === refId) : undefined
+  // 고른 마디가 바뀔 때만 다시 만든다 — 렌더마다 새 배열이면 차트가 도형을 매번 다시 단다
+  const ghosts = useMemo<GhostPlan[]>(
+    () =>
+      ref
+        ? [
+            {
+              entryPrice: ref.entryPrice,
+              stopPrice: ref.stopPrice,
+              // 다음 목표 하나 (Q16 8). 실행된 계획은 «처음 1R» 로 잰다 (③-2-1)
+              raiseTo: nextGoalPrice(ref),
+              // 살아 있는 계획도 «오늘»에서 끊는다 — 새 계획은 그 오른쪽에 선다
+              ...liveSpan(ref, siblings, today),
+              label: `${ref.writtenAt.slice(5)} ${ref.title}`,
+            },
+          ]
+        : [],
+    [ref, siblings, today],
   )
-  const ghost: GhostPlan | null = hovered
-    ? {
-        entryPrice: hovered.entryPrice,
-        stopPrice: hovered.stopPrice,
-        raiseTo: raiseTriggerPrice(
-          hovered.entryPrice,
-          hovered.stopPrice,
-          hovered.raise,
-          avgWin,
-        ),
-        // 새 계획을 쓰는 중이면 살아 있는 계획도 «그날»에서 끊는다 — 새 계획과 안 겹치게
-        ...liveSpan(hovered, siblings, drafting ? today : null),
-        label: `${hovered.writtenAt.slice(5)} ${hovered.title}`,
-      }
-    : null
   /**
    * 치우려는 마디의 «이름». 문이 사슬에 있으므로 **지금 보는 계획이 아닐 수
    * 있다** — 어느 마디를 닫는지 칸이 말해야 한다.
@@ -329,7 +383,7 @@ function PlanDetailView({
       {/* ── 계획 사슬 · 전폭 ───────────────────────────────────────────
           차트보다 «위»인 것은 높이가 고정이어서다. 차트는 지표를 켤 때마다 밑으로
           자라므로, 반대로 두면 지표 하나 켤 때마다 사슬이 밀려 내려간다. */}
-      <section className="card px-4 py-2">
+      <section data-chain className="card px-4 py-2">
         {/* 칸을 «가둔다» — 갈래가 늘어도 카드가 세로로 자라지 않고 안에서 움직인다.
             ⚠️ 찾아가는 줄(실행 중 · 기간 · 확대)이 위에 하나 얹히므로
                그만큼 더 준다. 카드 높이는 그대로다.
@@ -346,9 +400,17 @@ function PlanDetailView({
                 onPull={(id) => setPulled((v) => [...v, id])}
               />
             }
+            waitsMore={
+              <PastPlansPopover
+                label="대기"
+                hidden={narrowed.waiting}
+                onPull={(id) => setPulled((v) => [...v, id])}
+              />
+            }
             // 세우는 동안 사슬은 뒤로 물러난다 — 올린 마디만 진해진다 (Q12)
             faded={drafting}
-            currentId={plan.planId}
+            // 흰 테두리 하나 = 고른 계획. 쓰는 중이면 참조로 고른 마디다
+            currentId={drafting ? refId : lit ? plan.planId : null}
             // 쓰는 동안 그 자리가 **「쓰는 중」으로 켜진다.** 없애지 않는다 —
             // 세부 칸이 «어느 마디»를 만드는 중인지를 사슬이 말해야 한다
             // 만드는 중에 다시 누르면 «끝낸다» — 켠 자리에서 끈다
@@ -357,7 +419,14 @@ function PlanDetailView({
             // 사슬의 «어느 마디든» 치울 수 있다 — 문턱 판정은 마디가 스스로 한다
             onClose={close.openFor}
             onRemove={remove.askFor}
-            onHover={setHoverId}
+            // 쓰는 중에는 누르면 옮겨 가지 않고 «고르기만» 한다 — 폼이 안 날아간다
+            // 고른 마디를 다시 누르면 풀린다
+            // 볼 때는 지금 계획 마디만 켜고 끈다 — 다른 마디는 링크대로 옮겨 간다
+            onPick={(id) => {
+              if (drafting) return setRefId((v) => (v === id ? null : id))
+              if (id !== plan.planId) return false
+              if (!editing) setLit((v) => !v)
+            }}
           />
         </div>
       </section>
@@ -385,8 +454,16 @@ function PlanDetailView({
              * 0 이라 선이 안 그려지고, 대신 `origin` 이 이어받는 자리를 흐리게
              * 말한다. 다 쓰고 나면 두 벌이 같은 축 위에 선다.
              */
-            entryPrice={born.draft ? born.draft.entryPrice : shown.entryPrice}
-            stopPrice={born.draft ? born.draft.stopPrice : shown.stopPrice}
+            entryPrice={
+              born.draft
+                ? born.draft.entryPrice
+                : hideNow
+                  ? 0
+                  : shown.entryPrice
+            }
+            stopPrice={
+              born.draft ? born.draft.stopPrice : hideNow ? 0 : shown.stopPrice
+            }
             picking={born.draft ? picking : null}
             onPick={(price) => {
               if (picking === 'entry') born.set('entryPrice', price)
@@ -399,32 +476,36 @@ function PlanDetailView({
             writtenAt={born.draft ? today : plan.writtenAt}
             // 지금 계획은 스냅샷 날짜부터, 새 계획은 오늘부터 (Q12 기간만)
             marksFrom={
-              born.draft
-                ? (born.draft.snapshotDate ?? today)
-                : plan.snapshot.date
+              // 보기 — 작성일(차트의 회색 점선)부터. 스냅샷 날짜가 앞서도 선은 그날 세운 계획이다
+              born.draft ? (born.draft.snapshotDate ?? today) : plan.writtenAt
             }
             drafting={born.draft != null}
             raiseTo={
               born.draft
-                ? born.draft.raise
-                  ? raiseTriggerPrice(
+                ? born.draft.goals[0] != null
+                  ? goalPrice(
                       born.draft.entryPrice,
                       born.draft.stopPrice,
-                      born.draft.raise,
-                      avgWin,
+                      born.draft.goals[0],
                     )
                   : null
-                : raiseTriggerPrice(
-                    shown.entryPrice,
-                    shown.stopPrice,
-                    shown.raise,
-                    avgWin,
-                    plan.initialStopWidth,
-                  )
+                : choosing
+                  ? // 고르는 동안은 «도착한» 목표까지 — 다음 목표는 고른 뒤에 선다
+                    pick.goalPrice
+                  : hideNow || shown.goals[0] == null
+                    ? null
+                    : goalPrice(
+                        shown.entryPrice,
+                        shown.stopPrice,
+                        shown.goals[0],
+                        plan.initialStopWidth,
+                      )
             }
-            ghost={ghost}
+            ghosts={ghosts}
             // 후보 선은 «고를 때»만 뜬다 — 늘 떠 있으면 넷이 캔들을 가린다
             editing={editing}
+            // 고른 새 스톱 하나만 긋는다 (Q16 · 후보를 전부 긋지 않는다)
+            pickLine={choosing ? choice : null}
           />
           {/* ④-0 스냅샷 — 차트 «아래» 원값 표 (Q12).
               세우는 동안에는 «달력에서 고른 날»의 행이다. 아직 안 골랐으면 비어 있다 */}
@@ -458,7 +539,9 @@ function PlanDetailView({
         ) : (
           <PlanCard
             plan={plan}
-            defaults={defaults}
+            pick={pick}
+            choice={choice}
+            onChoice={setChoice}
             draft={draft}
             close={close}
             remove={remove}
@@ -499,3 +582,11 @@ const Stat = ({
     )}
   </span>
 )
+
+/** 사슬 마디의 다음 목표 가격 — 다음 단 하나만 그린다 (Q16 8) */
+const nextGoalPrice = (p: PlanListItem) => {
+  const g = nextGoal(p.goals)
+  return g
+    ? goalPrice(p.entryPrice, p.stopPrice, g.r, p.initialStopWidth)
+    : null
+}

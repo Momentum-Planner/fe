@@ -4,10 +4,19 @@ import type {
   PlanListItem,
   PlanSnapshot,
   StopCandidate,
-  StopRaise,
+  StopGoal,
+  StopPick,
+} from '@/entities/plan'
+import {
+  goalPrice,
+  goalsProblem,
+  nextGoal,
+  pendingGoal,
+  pickProblem,
+  priceConflict,
 } from '@/entities/plan'
 import { makeScreening, rawOn } from './screening'
-import { stockName } from './stocks'
+import { makeCandles, stockName } from './stocks'
 
 /**
  * 계획 목 데이터.
@@ -38,22 +47,25 @@ const ACCOUNT_CASH = 21_500_000
  */
 export const STOP_LIMIT_BASIS = { avgWin: 4.72, targetRR: 2 }
 
-const R2: StopRaise = { kind: 'R', r: 2 }
-const AVG: StopRaise = { kind: 'AVG' }
-
 /**
- * 손절 구간 한 벌을 만든다. v1 은 비중 100 · 순번 1 하나뿐이다.
+ * 손절 구간 한 벌 + 스톱 사다리를 만든다. v1 은 비중 100 · 순번 1 하나뿐이다.
  *
- * ⚠️ 스톱 상향이 **필수가 되기 전**(Q12) 세운 씨앗은 상향이 꺼져 있었다.
- *    지금은 «끔»이 없으므로 그런 씨앗은 가장 흔한 2R 로 채운다.
+ * 사다리 단은 `2` 처럼 R 만 주거나, 이미 고른 단이면 `[2, pick]` 으로 준다.
+ * **닿은 날은 박지 않는다** — `build` 가 캔들에서 찾는다. 손으로 박으면 차트와 어긋난다.
+ *
+ * ⚠️ 사다리가 생기기 전(Q16) 세운 씨앗은 스톱 상향 2R 하나였다. 그 자리를 2R 한 단으로 채운다.
  */
-const singleStop = (
+const ladder = (
   stopPrice: number,
-  opts: { raise?: StopRaise; trail50?: boolean } = {},
+  goals: (number | [number, StopPick])[] = [2],
 ) => ({
   bands: [{ order: 1, stopPrice, weight: 100 }],
-  raise: opts.raise ?? R2,
-  trail50: opts.trail50 ?? false,
+  goals: goals.map(
+    (g): StopGoal =>
+      Array.isArray(g)
+        ? { r: g[0], hitAt: null, picked: g[1], skipped: false }
+        : { r: g, hitAt: null, picked: null, skipped: false },
+  ),
 })
 
 /** 손으로 박는 스냅샷 — 원값(트렌드 · 펀더멘털)은 캔들에서 «만들어» 붙인다 */
@@ -195,8 +207,9 @@ type Seed = Omit<
   | 'riskBefore'
   // 후보 선은 진입가·손절가·상한에서 «만들어» 진다. 손으로 박지 않는다
   | 'stopCandidates'
-  // 목록용 스톱 상향은 plannedStop 에 이미 있다
-  | 'raise'
+  // 목록용 사다리는 plannedStop 에 이미 있다 · 고를 차례의 그날 값은 캔들에서 만든다
+  | 'goals'
+  | 'pickBasis'
   | 'snapshot'
 > & { filled: number; snapshot: SnapshotSeed }
 
@@ -212,7 +225,7 @@ const SEEDS: Seed[] = [
     entryPrice: 890_000,
     initialStopWidth: null,
     previousPlanId: null,
-    plannedStop: singleStop(842_000),
+    plannedStop: ladder(842_000),
     plannedPosition: { quantity: 20, riskBefore: 0, riskAfter: 0 },
     snapshot: SNAPSHOTS[87310],
     closeReason: '진입가에 안 왔다. 다음 베이스를 기다린다',
@@ -233,7 +246,7 @@ const SEEDS: Seed[] = [
     initialStopWidth: 41_000,
     // 사슬의 시작. 이어받은 것이 없다
     previousPlanId: null,
-    plannedStop: singleStop(962_000, { raise: R2 }),
+    plannedStop: ladder(962_000),
     plannedPosition: { quantity: 10, riskBefore: 0, riskAfter: 0 },
     snapshot: SNAPSHOTS[88790],
     closeReason: null,
@@ -259,12 +272,17 @@ const SEEDS: Seed[] = [
     status: 'RUNNING',
     writtenAt: '2026-08-24',
     entryPrice: 1_120_000,
-    // 실행될 때 1R 이 박혔다 — 1,120,000 − 1,036,000
-    initialStopWidth: 84_000,
+    // 실행될 때 1R 이 박혔다 — 1,120,000 − 1,080,000
+    initialStopWidth: 40_000,
     // 추가매수로 12번을 «이어받았다». 12번은 그때 실행 완료로 닫혔다
     previousPlanId: 12,
-    // 2R 에서 본전으로 올라갔다. 1R 은 «안» 따라 움직인다
-    plannedStop: singleStop(1_120_000, { raise: R2, trail50: true }),
+    // 2R(1,200,000) 에 닿은 날 본전을 골라 스톱이 매입가로 올라갔다. 1R 은 «안» 따라 움직인다.
+    // 3R(1,240,000) 은 오늘 종가로 닿았다 — «고를 차례»다 (Q16)
+    plannedStop: ladder(1_120_000, [
+      [2, { kind: 'BREAKEVEN', price: 1_120_000 }],
+      3,
+      4,
+    ]),
     plannedPosition: { quantity: 15, riskBefore: 0.9, riskAfter: 0 },
     snapshot: SNAPSHOTS[90124],
     closeReason: null,
@@ -300,7 +318,7 @@ const SEEDS: Seed[] = [
     entryPrice: 68_200,
     previousPlanId: null,
     initialStopWidth: null,
-    plannedStop: singleStop(64_100, { raise: R2 }),
+    plannedStop: ladder(64_100),
     plannedPosition: { quantity: 400, riskBefore: 1.6, riskAfter: 0 },
     snapshot: SNAPSHOTS[90455],
     closeReason: null,
@@ -320,7 +338,7 @@ const SEEDS: Seed[] = [
     entryPrice: 66_000,
     previousPlanId: null,
     initialStopWidth: null,
-    plannedStop: singleStop(62_300, { trail50: true }),
+    plannedStop: ladder(62_300, [2, 3]),
     plannedPosition: { quantity: 500, riskBefore: 1.6, riskAfter: 0 },
     snapshot: SNAPSHOTS[90455],
     closeReason: null,
@@ -340,7 +358,7 @@ const SEEDS: Seed[] = [
     entryPrice: 55_000,
     previousPlanId: null,
     initialStopWidth: 3_300,
-    plannedStop: singleStop(58_000, { raise: AVG }),
+    plannedStop: ladder(58_000, [3]),
     plannedPosition: { quantity: 300, riskBefore: 0.4, riskAfter: 0 },
     snapshot: SNAPSHOTS[88790],
     closeReason: null,
@@ -360,7 +378,7 @@ const SEEDS: Seed[] = [
     entryPrice: 92_000,
     previousPlanId: null,
     initialStopWidth: null,
-    plannedStop: singleStop(86_500),
+    plannedStop: ladder(86_500),
     plannedPosition: { quantity: 180, riskBefore: 2.2, riskAfter: 0 },
     snapshot: SNAPSHOTS[91030],
     closeReason: '진입 상한을 넘겨 버려서 안 들어갔다',
@@ -380,7 +398,7 @@ const SEEDS: Seed[] = [
     entryPrice: 1_010_000,
     initialStopWidth: 24_000,
     previousPlanId: 8,
-    plannedStop: singleStop(986_000, { raise: R2, trail50: true }),
+    plannedStop: ladder(986_000, [2, 4]),
     plannedPosition: { quantity: 8, riskBefore: 0.6, riskAfter: 0 },
     snapshot: SNAPSHOTS[88790],
     closeReason: null,
@@ -408,7 +426,7 @@ const SEEDS: Seed[] = [
     entryPrice: 1_048_000,
     initialStopWidth: 24_000,
     previousPlanId: 10,
-    plannedStop: singleStop(1_024_000, { raise: R2, trail50: true }),
+    plannedStop: ladder(1_024_000, [2, 4]),
     plannedPosition: { quantity: 6, riskBefore: 0.6, riskAfter: 0 },
     snapshot: SNAPSHOTS[88790],
     closeReason: null,
@@ -436,7 +454,7 @@ const SEEDS: Seed[] = [
     entryPrice: 1_082_000,
     initialStopWidth: 24_000,
     previousPlanId: 11,
-    plannedStop: singleStop(1_058_000, { raise: R2, trail50: true }),
+    plannedStop: ladder(1_058_000, [2, 4]),
     plannedPosition: { quantity: 5, riskBefore: 0.6, riskAfter: 0 },
     snapshot: SNAPSHOTS[88790],
     closeReason: null,
@@ -465,7 +483,7 @@ const SEEDS: Seed[] = [
     entryPrice: 1_070_000,
     initialStopWidth: null,
     previousPlanId: 11,
-    plannedStop: singleStop(1_024_000),
+    plannedStop: ladder(1_024_000),
     plannedPosition: { quantity: 10, riskBefore: 0.6, riskAfter: 0 },
     snapshot: SNAPSHOTS[91020],
     closeReason: '눌림이 안 와서 이 자리는 버렸다',
@@ -486,7 +504,7 @@ const SEEDS: Seed[] = [
     entryPrice: 1_210_000,
     initialStopWidth: null,
     previousPlanId: 1,
-    plannedStop: singleStop(1_180_000),
+    plannedStop: ladder(1_180_000),
     plannedPosition: { quantity: 15, riskBefore: 0.9, riskAfter: 0 },
     snapshot: SNAPSHOTS[91010],
     closeReason: '거래량이 안 실려서 이 돌파는 안 따라간다',
@@ -513,7 +531,7 @@ const SEEDS: Seed[] = [
     entryPrice: 1_180_000,
     initialStopWidth: null,
     previousPlanId: 1,
-    plannedStop: singleStop(1_120_000, { raise: R2, trail50: true }),
+    plannedStop: ladder(1_120_000, [2, 4]),
     plannedPosition: { quantity: 6, riskBefore: 0.9, riskAfter: 0 },
     snapshot: SNAPSHOTS[90455],
     closeReason: null,
@@ -534,7 +552,7 @@ const SEEDS: Seed[] = [
     // 같은 실행 중 계획에서 갈라진 «다른 시나리오» — 하나만 실현된다
     previousPlanId: 1,
     initialStopWidth: null,
-    plannedStop: singleStop(1_090_000, { trail50: true }),
+    plannedStop: ladder(1_090_000, [3]),
     /**
      * ⚠️ `riskBefore` 는 **지금 포지션의 값**이라 같은 시점의 갈래끼리 «같아야»
      *    한다. 1.6 으로 박혀 있던 것을 실행 중(계획 1)의 0.9 로 맞췄다 —
@@ -661,10 +679,63 @@ function riskAfter(s: Seed): number {
   return +Math.max(0, s.plannedPosition.riskBefore + ownRisk(s)).toFixed(2)
 }
 
+const sma = (closes: number[], i: number, n: number) => {
+  const win = closes.slice(Math.max(0, i - n + 1), i + 1)
+  return Math.round(win.reduce((a, b) => a + b, 0) / win.length)
+}
+
+/**
+ * 사다리의 **닿은 날을 캔들에서 찾는다** (Q16).
+ *
+ * 첫 매수 다음 날부터 종가가 목표 이상인 첫 날이 그 단의 날이다 — 장중 고가가 아니라
+ * 종가다(③-3). 닿은 단을 안 고른 채 다음 단도 닿았으면 앞 단은 「안 고름」으로 닫는다.
+ *
+ * ⚠️ 실행 중 계획만 잰다. 끝난 계획은 언제 끝났는지 모델에 없어(`planSpan` 주석) 씨앗 그대로 둔다.
+ */
+function withHits(s: Seed): StopGoal[] {
+  const buy = s.records.find((r) => r.side === 'BUY')
+  if (s.status !== 'RUNNING' || !buy || s.initialStopWidth == null)
+    return s.plannedStop.goals
+  const since = buy.filledAt.slice(0, 10)
+  const candles = makeCandles(s.stockCode).filter((c) => c.tradeDate > since)
+  let from = 0
+  const hit = s.plannedStop.goals.map((g) => {
+    const price = s.entryPrice + g.r * (s.initialStopWidth as number)
+    const i = candles.findIndex((c, k) => k >= from && c.closePrice >= price)
+    if (i < 0) return { ...g, hitAt: null, picked: null, skipped: false }
+    from = i
+    return { ...g, hitAt: candles[i]?.tradeDate ?? null }
+  })
+  return hit.map((g, i) => ({
+    ...g,
+    skipped: g.hitAt != null && !g.picked && hit[i + 1]?.hitAt != null,
+  }))
+}
+
+/** 고를 차례 단의 그날 값 — 종가 · 20일선 · 50일선 (Q16 5) */
+function pickBasisOf(s: Seed, goals: StopGoal[]): PlanDetail['pickBasis'] {
+  const pending = pendingGoal(goals)
+  if (!pending?.goal.hitAt) return null
+  const candles = makeCandles(s.stockCode)
+  const closes = candles.map((c) => c.closePrice)
+  const i = candles.findIndex((c) => c.tradeDate === pending.goal.hitAt)
+  if (i < 0) return null
+  return {
+    date: pending.goal.hitAt,
+    close: closes[i] ?? 0,
+    ma20: sma(closes, i, 20),
+    ma50: sma(closes, i, 50),
+    avgWinPct: STOP_LIMIT_BASIS.avgWin,
+    // 매도 기록 수는 거래 기록 목이 든다 — 서로 부르면 순환이라 핸들러가 채운다
+    sampleCount: 0,
+  }
+}
+
 /** 씨앗 하나 → 파생까지 채운 계획 하나. 수정이 들어와도 «같은 식»으로 다시 만든다 */
 function build(s: Seed): PlanDetail {
   const { filled, ...rest } = s
   const quantity = s.plannedPosition.quantity
+  const goals = withHits(s)
   return {
     ...rest,
     accountTotal: ACCOUNT_TOTAL,
@@ -677,7 +748,9 @@ function build(s: Seed): PlanDetail {
     entryState: s.snapshot.entryState,
     fundamentalScore: s.snapshot.fundamentalScore,
     riskBefore: s.plannedPosition.riskBefore,
-    raise: s.plannedStop.raise,
+    plannedStop: { ...s.plannedStop, goals },
+    goals,
+    pickBasis: pickBasisOf(s, goals),
     stopCandidates: stopCandidates(s),
     plannedPosition: { ...s.plannedPosition, riskAfter: riskAfter(s) },
     // 원값은 «그 종목 · 그 날짜»의 캔들에서 만든다 — 손으로 박으면 차트와 어긋난다
@@ -704,15 +777,35 @@ export function patchPlan(
     stopPrice?: number
     quantity?: number
     memo?: string
-    raise?: StopRaise
-    trail50?: boolean
+    goals?: number[]
   },
-): PlanDetail | null {
+): PlanDetail | null | 'same-price' | 'bad-goals' {
   // ⚠️ `findIndex` + `SEEDS[i]` 로 꺼내면 «인덱스가 유효한지»와 «값이 있는지»가
   //    따로 놀아 `noUncheckedIndexedAccess` 가 걸린다. 값을 먼저 찾는다
   const s = SEEDS.find((x) => x.planId === planId)
   if (!s) return null
   const i = SEEDS.indexOf(s)
+
+  /**
+   * **닿은 단은 못 바꾼다** (Q16 6). 앞에서부터 그대로 들어 있어야 한다 —
+   * 바꾸고 싶으면 새 단을 붙인다. 바꾼 흔적이 남아야 한다.
+   */
+  const now = build(s).goals
+  let goals = s.plannedStop.goals
+  if (patch.goals) {
+    const locked = now.filter((g) => g.hitAt != null)
+    if (
+      goalsProblem(patch.goals) ||
+      locked.some((g, k) => patch.goals?.[k] !== g.r)
+    )
+      return 'bad-goals'
+    goals = patch.goals.map((r, k) => {
+      const kept = s.plannedStop.goals[k]
+      return kept?.r === r
+        ? kept
+        : { r, hitAt: null, picked: null, skipped: false }
+    })
+  }
 
   const next: Seed = {
     ...s,
@@ -726,14 +819,22 @@ export function patchPlan(
         patch.stopPrice != null
           ? [{ order: 1, stopPrice: patch.stopPrice, weight: 100 }]
           : s.plannedStop.bands,
-      raise: patch.raise ?? s.plannedStop.raise,
-      trail50: patch.trail50 ?? s.plannedStop.trail50,
+      goals,
     },
     plannedPosition: {
       ...s.plannedPosition,
       quantity: patch.quantity ?? s.plannedPosition.quantity,
     },
   }
+  if (
+    conflicts(
+      next.entryPrice,
+      lowestStop(next),
+      build(next).goals,
+      next.initialStopWidth,
+    )
+  )
+    return 'same-price'
   SEEDS[i] = next
 
   const built = build(next)
@@ -752,7 +853,38 @@ export function patchPlan(
  * ⚠️ 목에는 스냅샷이 손으로 박은 네 개뿐이라 **날짜로 못 찾으면 종목의 아무 것을
  *    쓴다.** 실제로는 `DailyScreeningResult` 조회다.
  */
-export function createPlan(body: PlanCreate): PlanDetail | 'no-cash' {
+/** 목표 · 진입 · 스톱이 같은 값이면 서버도 막는다 — 화면만 막으면 우회된다 */
+const conflicts = (
+  entryPrice: number,
+  stopPrice: number,
+  goals: StopGoal[],
+  initialStopWidth: number | null,
+) => {
+  // 목표는 «다음 단»으로 본다 — 차트가 그리는 것도 그 하나다 (Q16 8)
+  const next = nextGoal(goals)
+  return (
+    priceConflict(
+      entryPrice,
+      stopPrice,
+      next ? goalPrice(entryPrice, stopPrice, next.r, initialStopWidth) : null,
+      initialStopWidth,
+    ) != null
+  )
+}
+
+export function createPlan(
+  body: PlanCreate,
+): PlanDetail | 'no-cash' | 'same-price' | 'bad-goals' {
+  if (goalsProblem(body.goals)) return 'bad-goals'
+  if (
+    conflicts(
+      body.entryPrice,
+      body.stopPrice,
+      ladder(body.stopPrice, body.goals).goals,
+      null,
+    )
+  )
+    return 'same-price'
   /**
    * **기록상 현금보다 큰 매수는 막는다** (④-1-3 · ⑥).
    *
@@ -797,10 +929,8 @@ export function createPlan(body: PlanCreate): PlanDetail | 'no-cash' {
     // 1R 은 «실행될 때» 박힌다. 대기면 아직 없다 (③-2-1)
     initialStopWidth: null,
     previousPlanId: body.previousPlanId,
-    plannedStop: singleStop(body.stopPrice, {
-      raise: body.raise,
-      trail50: body.trail50,
-    }),
+    // 사다리는 이어받지 않는다 — 폼이 빈 ① 단으로 시작한다 (Q16)
+    plannedStop: ladder(body.stopPrice, body.goals),
     plannedPosition: {
       quantity: body.quantity,
       // 실행 «전» 위험노출은 지금 포지션 것이다 — 같은 종목의 실행 중 계획이 든다
@@ -923,5 +1053,43 @@ export const toListItem = (p: PlanDetail): PlanListItem => ({
   previousPlanId: p.previousPlanId,
   entryState: p.snapshot.entryState,
   fundamentalScore: p.snapshot.fundamentalScore,
-  raise: p.plannedStop.raise,
+  goals: p.goals,
+  initialStopWidth: p.initialStopWidth,
 })
+
+/**
+ * 닿은 단에서 스톱 자리를 고른다 (Q16).
+ *
+ * **고를 차례인 단만** 받는다 — 안 닿았거나 이미 골랐거나 「안 고름」으로 닫힌 단은 409.
+ * 가격은 지금 스톱 초과 · 목표 미만이어야 한다. 화면만 막으면 우회된다.
+ * 고르면 곧 손절가가 바뀐다 — 「증권사에서 고쳤나」 를 따로 묻지 않는다.
+ */
+export function pickStop(
+  planId: number,
+  goalIndex: number,
+  pick: StopPick,
+): PlanDetail | 'not-found' | 'conflict' | 'bad-price' {
+  const s = SEEDS.find((x) => x.planId === planId)
+  if (!s) return 'not-found'
+  const now = build(s)
+  const pending = pendingGoal(now.goals)
+  if (!pending || pending.index !== goalIndex || s.initialStopWidth == null)
+    return 'conflict'
+  const goal = s.entryPrice + pending.goal.r * s.initialStopWidth
+  if (pickProblem(pick.price, now.stopPrice, goal)) return 'bad-price'
+
+  const next: Seed = {
+    ...s,
+    plannedStop: {
+      bands: [{ order: 1, stopPrice: pick.price, weight: 100 }],
+      goals: s.plannedStop.goals.map((g, i) =>
+        i === goalIndex ? { ...g, picked: pick } : g,
+      ),
+    },
+  }
+  SEEDS[SEEDS.indexOf(s)] = next
+  const built = build(next)
+  const j = PLANS.findIndex((p) => p.planId === planId)
+  if (j >= 0) PLANS[j] = built
+  return built
+}

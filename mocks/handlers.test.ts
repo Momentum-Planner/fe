@@ -373,8 +373,7 @@ describe('계획 폐기와 삭제', () => {
         stopPrice: 1_150_000,
         quantity: 5,
         memo: '',
-        raise: { kind: 'R', r: 2 },
-        trail50: false,
+        goals: [2],
         previousPlanId: null,
         ...over,
       })
@@ -403,7 +402,72 @@ describe('계획 폐기와 삭제', () => {
     expect(p.snapshot.fundamentals.quarters).toHaveLength(3)
   })
 
-  it('Q12 계획 기본값에 표본 수가 온다 — 백스톱을 고를 수 있는지가 여기서 갈린다', async () => {
+  it('Q16 실행 중 계획의 사다리 — 닿은 날은 캔들 종가에서 찾고, 고를 차례에는 그날 값이 붙는다', async () => {
+    const p = (await get('/api/v1/plans/1')).data as {
+      stopPrice: number
+      goals: { r: number; hitAt: string | null; picked: unknown }[]
+      pickBasis: { close: number; ma20: number; sampleCount: number } | null
+    }
+    expect(p.goals.map((g) => g.r)).toEqual([2, 3, 4])
+    // 2R 은 닿아서 본전을 골랐다 · 3R 은 닿았고 고를 차례 · 4R 은 아직
+    expect(p.goals[0]?.picked).not.toBeNull()
+    expect(p.goals[1]?.hitAt).not.toBeNull()
+    expect(p.goals[1]?.picked).toBeNull()
+    expect(p.goals[2]?.hitAt).toBeNull()
+    expect(p.pickBasis?.close).toBeGreaterThanOrEqual(1_240_000)
+    expect(p.pickBasis?.sampleCount).toBeGreaterThanOrEqual(0)
+  })
+
+  it('Q16 스톱 자리 고르기 — 지금 스톱 이하 · 목표 이상은 서버가 막고, 고르면 손절가가 바뀐다', async () => {
+    const low = await send('POST', '/api/v1/plans/1/stop-pick', {
+      goalIndex: 1,
+      pick: { kind: 'BREAKEVEN', price: 1_120_000 },
+    })
+    expect(low.status).toBe(400)
+    const wrong = await send('POST', '/api/v1/plans/1/stop-pick', {
+      goalIndex: 2,
+      pick: { kind: 'R', r: 1, price: 1_160_000 },
+    })
+    expect(wrong.status).toBe(409)
+    const r = await send('POST', '/api/v1/plans/1/stop-pick', {
+      goalIndex: 1,
+      pick: { kind: 'R', r: 1, price: 1_160_000 },
+    })
+    expect(r.status).toBe(200)
+    const p = r.data as { stopPrice: number; goals: { picked: unknown }[] }
+    expect(p.stopPrice).toBe(1_160_000)
+    expect(p.goals[1]?.picked).toEqual({ kind: 'R', r: 1, price: 1_160_000 })
+    // 같은 단을 두 번 못 고른다
+    const again = await send('POST', '/api/v1/plans/1/stop-pick', {
+      goalIndex: 1,
+      pick: { kind: 'R', r: 2, price: 1_200_000 },
+    })
+    expect(again.status).toBe(409)
+  })
+
+  it('Q16 닿은 단은 못 바꾼다 · 목표는 오름차순이어야 한다', async () => {
+    const locked = await send('PATCH', '/api/v1/plans/1', {
+      goals: [2.5, 3, 4],
+    })
+    expect(locked.status).toBe(400)
+    const down = await send('POST', '/api/v1/plans', {
+      stockCode: '000660',
+      title: '내림차순',
+      entryPrice: 1_200_000,
+      stopPrice: 1_150_000,
+      quantity: 1,
+      memo: '',
+      goals: [3, 2],
+      previousPlanId: null,
+    })
+    expect(down.status).toBe(400)
+    const added = await send('PATCH', '/api/v1/plans/1', {
+      goals: [2, 3, 4, 6],
+    })
+    expect(added.status).toBe(200)
+  })
+
+  it('Q12 계획 기본값에 표본 수가 온다 — 평균 수익률 후보를 고를 수 있는지가 여기서 갈린다', async () => {
     const d = (await get('/api/v1/stocks/000660/plan-defaults')).data as {
       sampleCount: number
     }
@@ -633,6 +697,29 @@ describe('④ 계획의 불변식', () => {
       expect(p.riskAfter - p.riskBefore).toBeLessThan(sumOfOwn)
   })
 
+  it('목표 · 진입 · 스톱은 같은 값일 수 없다 — 생성도 수정도 서버가 막는다', async () => {
+    const body = {
+      stockCode: '000660',
+      title: '같은 값',
+      entryPrice: 1_100_000,
+      stopPrice: 1_100_000,
+      quantity: 1,
+      memo: '',
+      goals: [2],
+      previousPlanId: null,
+    }
+    const made = await send('POST', '/api/v1/plans', body)
+    expect(made.status).toBe(400)
+
+    const ok = (
+      await send('POST', '/api/v1/plans', { ...body, stopPrice: 1_062_000 })
+    ).data as { planId: number }
+    const patched = await send('PATCH', `/api/v1/plans/${ok.planId}`, {
+      stopPrice: 1_100_000,
+    })
+    expect(patched.status).toBe(400)
+  })
+
   it('④-1-3 기록상 현금보다 큰 매수는 «막는다»', async () => {
     const cash = (await of(1)).accountCash
     const r = await send('POST', '/api/v1/plans', {
@@ -642,8 +729,7 @@ describe('④ 계획의 불변식', () => {
       stopPrice: Math.round(cash * 0.97),
       quantity: 2, // 현금의 두 배가 든다
       memo: '',
-      raise: { kind: 'R', r: 2 },
-      trail50: false,
+      goals: [2],
       previousPlanId: null,
     })
     /**

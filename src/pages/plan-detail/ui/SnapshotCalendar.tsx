@@ -50,7 +50,7 @@ export function SnapshotCalendar({
           setOpen((v) => !v)
         }}
         className={cn(
-          'bg-bg-input font-number flex w-full items-center justify-between rounded-md px-2 py-1 text-[13px] ring-1',
+          'bg-bg-input font-number flex w-full items-center justify-between rounded-md px-2 py-1 text-[14px] ring-1',
           open ? 'ring-brand-blue/60' : 'ring-transparent',
           value ? 'text-white' : 'text-white/30',
         )}
@@ -65,7 +65,7 @@ export function SnapshotCalendar({
           aria-label="스냅샷 날짜 달력"
           className="shadow-pop absolute top-full left-0 z-40 mt-1.5 w-[260px] rounded-lg border border-white/10 bg-[#141414] p-2.5"
         >
-          <div className="mb-1.5 flex items-center justify-between text-[12px] text-white/80">
+          <div className="mb-1.5 flex items-center justify-between text-[13px] text-white/80">
             <button
               type="button"
               aria-label="이전 달"
@@ -88,7 +88,7 @@ export function SnapshotCalendar({
               ›
             </button>
           </div>
-          <div className="grid grid-cols-7 gap-0.5 text-center text-[11px]">
+          <div className="grid grid-cols-7 gap-0.5 text-center text-[12px]">
             {['일', '월', '화', '수', '목', '금', '토'].map((d) => (
               <span key={d} className="py-0.5 text-white/30">
                 {d}

@@ -5,7 +5,10 @@ import {
   needCash,
   oneR,
   ownRisk,
-  raiseTriggerPrice,
+  goalPrice,
+  goalsProblem,
+  priceConflict,
+  stopPickOptions,
   riskAfter,
   stopWidthPct,
 } from './calc'
@@ -86,45 +89,98 @@ describe('④-3 필요 현금은 계획마다 «따로»다', () => {
   })
 })
 
-describe('Q12 스톱 상향이 발동하는 가격 — 차트 위쪽 면이 여기까지다', () => {
-  it('R 은 진입가 + r × 1R', () => {
+describe('Q16 사다리 목표 가격 — 차트 위쪽 면이 여기까지다', () => {
+  it('진입가 + r × 1R', () => {
     // 1R = 38,000
-    expect(
-      raiseTriggerPrice(1_100_000, 1_062_000, { kind: 'R', r: 2 }, null),
-    ).toBe(1_176_000)
-    expect(
-      raiseTriggerPrice(1_100_000, 1_062_000, { kind: 'R', r: 2.5 }, null),
-    ).toBe(1_195_000)
-  })
-
-  it('백스톱은 진입가 × (1 + 평균수익률)', () => {
-    expect(
-      raiseTriggerPrice(1_000_000, 950_000, { kind: 'AVG' }, 4.72),
-    ).toBeCloseTo(1_047_200, 0)
-  })
-
-  it('평균수익률이 없으면 백스톱 가격도 없다 — 통계 5건 전', () => {
-    expect(raiseTriggerPrice(1_000_000, 950_000, { kind: 'AVG' }, null)).toBe(
-      null,
-    )
+    expect(goalPrice(1_100_000, 1_062_000, 2)).toBe(1_176_000)
+    expect(goalPrice(1_100_000, 1_062_000, 2.5)).toBe(1_195_000)
   })
 
   it('실행된 계획은 «처음 1R» 로 잰다 — 본전으로 올려도 면이 안 사라진다 (③-2-1)', () => {
-    expect(
-      raiseTriggerPrice(
-        1_120_000,
-        1_120_000,
-        { kind: 'R', r: 2 },
-        null,
-        84_000,
-      ),
-    ).toBe(1_288_000)
+    expect(goalPrice(1_120_000, 1_120_000, 3, 40_000)).toBe(1_240_000)
   })
 
   it('1R 이 0 이하면 R 로는 못 잰다', () => {
-    expect(
-      raiseTriggerPrice(1_000_000, 1_000_000, { kind: 'R', r: 2 }, null),
-    ).toBe(null)
+    expect(goalPrice(1_000_000, 1_000_000, 2)).toBe(null)
+  })
+})
+
+describe('Q16 사다리 목표 — 한 단 이상 · 비지 않고 · 오름차순', () => {
+  it('막는다', () => {
+    expect(goalsProblem([])).toMatch(/하나 이상/)
+    expect(goalsProblem([null])).toMatch(/고른다/)
+    expect(goalsProblem([3, 2])).toMatch(/앞 단보다/)
+    expect(goalsProblem([2, 2])).toMatch(/앞 단보다/)
+  })
+  it('통과', () => {
+    expect(goalsProblem([2])).toBeNull()
+    expect(goalsProblem([2, 2.5, 4])).toBeNull()
+  })
+})
+
+describe('Q16 닿은 날 후보 — 전부 늘어놓고, 스톱 이하 · 목표 이상 · 통계 없음만 막는다', () => {
+  const base = {
+    entryPrice: 1_120_000,
+    initialStopWidth: 40_000,
+    goalR: 3,
+    currentStop: 1_120_000,
+    avgWinPct: 4.72,
+    sampleCount: 8,
+    ma20: 1_225_347,
+    ma50: 1_152_912,
+  }
+  const by = (o: ReturnType<typeof stopPickOptions>, label: string) =>
+    o.find((x) => x.label.startsWith(label))
+
+  it('본전 · 목표 아래 정수 R · 평균 수익률 · 20일선 · 50일선', () => {
+    const o = stopPickOptions(base)
+    expect(o.map((x) => x.label)).toEqual([
+      '본전',
+      '+1R',
+      '+2R',
+      '평균 수익률 4.7%',
+      '20일선',
+      '50일선',
+    ])
+    expect(by(o, '+2R')?.price).toBe(1_200_000)
+  })
+
+  it('지금 스톱 이하는 막힌다 — 스톱은 안 내려간다', () => {
+    const o = stopPickOptions(base)
+    expect(by(o, '본전')?.blocked).toMatch(/스톱 이하/)
+    expect(by(o, '+1R')?.blocked).toBeNull()
+  })
+
+  it('목표 이상은 막힌다', () => {
+    const o = stopPickOptions({ ...base, ma20: 1_250_000 })
+    expect(by(o, '20일선')?.blocked).toMatch(/목표 이상/)
+  })
+
+  it('표본 5건 전에는 평균 수익률을 못 고른다', () => {
+    const o = stopPickOptions({ ...base, sampleCount: 3 })
+    expect(by(o, '평균 수익률')?.blocked).toMatch(/5건/)
+    expect(by(o, '평균 수익률')?.price).toBeNull()
+  })
+})
+
+describe('목표 · 진입 · 스톱은 같은 값일 수 없다', () => {
+  it('진입 = 스톱이면 막는다 — 1R 이 0 이다', () => {
+    expect(priceConflict(1_120_000, 1_120_000, null)).toMatch(/진입과 스톱/)
+  })
+  it('Q16 1R 이 박힌 계획은 본전(진입 = 스톱)을 막지 않는다', () => {
+    expect(priceConflict(1_120_000, 1_120_000, null, 40_000)).toBeNull()
+  })
+  it('목표가 진입이나 스톱과 같으면 막는다', () => {
+    expect(priceConflict(1_100_000, 1_062_000, 1_100_000)).toMatch(
+      /목표와 진입/,
+    )
+    expect(priceConflict(1_100_000, 1_062_000, 1_062_000)).toMatch(
+      /목표와 스톱/,
+    )
+  })
+  it('셋이 다 다르면 통과 · 0 은 «아직 없다»라 안 본다', () => {
+    expect(priceConflict(1_100_000, 1_062_000, 1_176_000)).toBeNull()
+    expect(priceConflict(0, 0, null)).toBeNull()
   })
 })
 
