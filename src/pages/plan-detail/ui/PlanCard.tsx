@@ -135,12 +135,19 @@ export function PlanCard({
         shown.stopPrice,
         goal,
         plan.initialStopWidth,
-      ) ?? goalsProblem([...locked.map((g) => g.r), ...shown.goals]))
+      ) ??
+      goalsProblem([
+        ...locked.map((g) => g.r),
+        ...shown.goals.filter((r) => r != null),
+      ]))
     : null
   /** 칸에 띄우는 ✕ — 확정된 값으로. 사다리 칩은 누르는 순간이 곧 확정이라 바로 본다 */
   const shownConflict = editing
     ? (priceConflict(seen.entry, seen.stop, goal, plan.initialStopWidth) ??
-      goalsProblem([...locked.map((g) => g.r), ...shown.goals]))
+      goalsProblem([
+        ...locked.map((g) => g.r),
+        ...shown.goals.filter((r) => r != null),
+      ]))
     : null
   const seenWidth =
     seen.entry > 0 ? ((seen.entry - seen.stop) / seen.entry) * 100 : 0

@@ -334,13 +334,13 @@ describe('이어서 세우기', () => {
   })
 
   it(
-    'Q16 스톱 사다리는 «빈 ① 단»으로 시작한다 — 이어받지 않고, 목표를 골라야 등록된다',
+    'Q16 목표는 «빈 칸 하나»로 시작한다 — 이어받지 않고, 골라야 등록된다',
     { timeout: 20_000 },
     async () => {
       const plan = await planApi.create({
         ...BLANK,
         title: '사다리 뿌리',
-        goals: [3, 5],
+        goals: [3],
       })
       show(plan)
       const user = userEvent.setup()
@@ -351,7 +351,7 @@ describe('이어서 세우기', () => {
       )
       await fillToQuantity(user)
 
-      // 이어받은 3R · 5R 이 «안» 채워져 있다 — 목표는 이번 진입의 1R 로 재는 값이다
+      // 이어받은 3R 이 «안» 채워져 있다 — 목표는 이번 진입의 1R 로 재는 값이다
       expect(screen.getByText('④ 스톱 갱신 규칙')).toBeInTheDocument()
       for (const r of ['2R', '3R', '4R', '5R'])
         expect(screen.getByRole('button', { name: r })).toHaveAttribute(
@@ -372,11 +372,11 @@ describe('이어서 세우기', () => {
     },
   )
 
-  it('세우면 «승계»가 붙는다 — 사다리는 폼이 보낸 대로다', async () => {
+  it('세우면 «승계»가 붙는다 — 목표는 폼이 보낸 대로다', async () => {
     const root = await planApi.create({
       ...BLANK,
       title: '승계 뿌리',
-      goals: [3, 5],
+      goals: [3],
     })
     const next = await planApi.create({
       ...BLANK,
@@ -518,8 +518,9 @@ describe('읽을 때와 고칠 때', () => {
     // 「어디서 자를까」와 「수익이 나면 어디로 올릴까」는 같은 선의 두 시점이다.
     // 사다리는 다음 목표가 어디쯤인지 늘 보인다 (Q16 · ③-3-1)
     expect(screen.getByText('④ 스톱 갱신 규칙')).toBeInTheDocument()
-    expect(screen.getByText('2R')).toBeInTheDocument()
-    expect(screen.getByText('다음 목표')).toBeInTheDocument()
+    // 목표는 한 줄이다 (Q16 「목표 하나」)
+    expect(screen.getByText('목표 2R')).toBeInTheDocument()
+    expect(screen.getByText('아직 안 닿음')).toBeInTheDocument()
   })
 
   it('Q16 목표에 닿았으면 카드 맨 위에서 스톱 자리를 고른다 — 고르면 손절가가 바뀐다', async () => {

@@ -277,11 +277,11 @@ const SEEDS: Seed[] = [
     // 추가매수로 12번을 «이어받았다». 12번은 그때 실행 완료로 닫혔다
     previousPlanId: 12,
     // 2R(1,200,000) 에 닿은 날 본전을 골라 스톱이 매입가로 올라갔다. 1R 은 «안» 따라 움직인다.
-    // 3R(1,240,000) 은 오늘 종가로 닿았다 — «고를 차례»다 (Q16)
+    // 목표 3R(1,240,000) 은 오늘 종가로 닿았다 — «고를 차례»다 (Q16)
+    // 앞의 2R 은 이 계획이 전에 걸었다가 도착해 본전을 고른 이력이다 — 안 닿은 목표는 늘 하나다
     plannedStop: ladder(1_120_000, [
       [2, { kind: 'BREAKEVEN', price: 1_120_000 }],
       3,
-      4,
     ]),
     plannedPosition: { quantity: 15, riskBefore: 0.9, riskAfter: 0 },
     snapshot: SNAPSHOTS[90124],
@@ -338,7 +338,7 @@ const SEEDS: Seed[] = [
     entryPrice: 66_000,
     previousPlanId: null,
     initialStopWidth: null,
-    plannedStop: ladder(62_300, [2, 3]),
+    plannedStop: ladder(62_300, [3]),
     plannedPosition: { quantity: 500, riskBefore: 1.6, riskAfter: 0 },
     snapshot: SNAPSHOTS[90455],
     closeReason: null,
@@ -398,7 +398,7 @@ const SEEDS: Seed[] = [
     entryPrice: 1_010_000,
     initialStopWidth: 24_000,
     previousPlanId: 8,
-    plannedStop: ladder(986_000, [2, 4]),
+    plannedStop: ladder(986_000, [4]),
     plannedPosition: { quantity: 8, riskBefore: 0.6, riskAfter: 0 },
     snapshot: SNAPSHOTS[88790],
     closeReason: null,
@@ -426,7 +426,7 @@ const SEEDS: Seed[] = [
     entryPrice: 1_048_000,
     initialStopWidth: 24_000,
     previousPlanId: 10,
-    plannedStop: ladder(1_024_000, [2, 4]),
+    plannedStop: ladder(1_024_000, [4]),
     plannedPosition: { quantity: 6, riskBefore: 0.6, riskAfter: 0 },
     snapshot: SNAPSHOTS[88790],
     closeReason: null,
@@ -454,7 +454,7 @@ const SEEDS: Seed[] = [
     entryPrice: 1_082_000,
     initialStopWidth: 24_000,
     previousPlanId: 11,
-    plannedStop: ladder(1_058_000, [2, 4]),
+    plannedStop: ladder(1_058_000, [4]),
     plannedPosition: { quantity: 5, riskBefore: 0.6, riskAfter: 0 },
     snapshot: SNAPSHOTS[88790],
     closeReason: null,
@@ -531,7 +531,7 @@ const SEEDS: Seed[] = [
     entryPrice: 1_180_000,
     initialStopWidth: null,
     previousPlanId: 1,
-    plannedStop: ladder(1_120_000, [2, 4]),
+    plannedStop: ladder(1_120_000, [4]),
     plannedPosition: { quantity: 6, riskBefore: 0.9, riskAfter: 0 },
     snapshot: SNAPSHOTS[90455],
     closeReason: null,
@@ -794,9 +794,11 @@ export function patchPlan(
   let goals = s.plannedStop.goals
   if (patch.goals) {
     const locked = now.filter((g) => g.hitAt != null)
+    // 안 닿은 목표는 하나까지 — 도착하면 다음 목표를 새로 건다 (Q16 「목표 하나」)
     if (
       goalsProblem(patch.goals) ||
-      locked.some((g, k) => patch.goals?.[k] !== g.r)
+      locked.some((g, k) => patch.goals?.[k] !== g.r) ||
+      patch.goals.length - locked.length > 1
     )
       return 'bad-goals'
     goals = patch.goals.map((r, k) => {
@@ -875,7 +877,8 @@ const conflicts = (
 export function createPlan(
   body: PlanCreate,
 ): PlanDetail | 'no-cash' | 'price-order' | 'bad-goals' {
-  if (goalsProblem(body.goals)) return 'bad-goals'
+  // 새 계획의 목표는 하나다 (Q16 「목표 하나」)
+  if (goalsProblem(body.goals) || body.goals.length !== 1) return 'bad-goals'
   if (
     conflicts(
       body.entryPrice,

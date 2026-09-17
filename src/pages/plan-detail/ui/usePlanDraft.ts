@@ -56,15 +56,10 @@ function diff(p: PlanDetail, d: Draft): PlanPatch {
   if (d.quantity !== p.quantity) out.quantity = d.quantity
   if (d.memo !== p.memo) out.memo = d.memo
   const before = open(p).map((g) => g.r)
-  if (
-    d.goals.length !== before.length ||
-    d.goals.some((r, i) => r !== before[i])
-  )
-    out.goals = [
-      ...lockedGoals(p).map((g) => g.r),
-      // 빈 단이 있으면 서버가 거절한다 — 저장 버튼이 먼저 막는다
-      ...d.goals.map((r) => r ?? 0),
-    ]
+  // 빈 칸(null)은 «안 건다» — 도착 뒤 다음 목표를 안 걸었으면 바뀐 것이 없다
+  const after = d.goals.filter((r): r is number => r != null)
+  if (after.length !== before.length || after.some((r, i) => r !== before[i]))
+    out.goals = [...lockedGoals(p).map((g) => g.r), ...after]
   return out
 }
 

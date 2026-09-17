@@ -157,19 +157,38 @@ function planMarks(o: {
   const labels: object[] = []
   if (o.priceLabels) {
     // 진입 = 스톱(본전으로 올린 계획)이면 한 줄로 — 둘을 겹쳐 쓰면 둘 다 안 읽힌다
+    /**
+     * 스톱이 진입가 «이상»이면 목표에 도착해 **올린** 스톱이다 — 대기 계획은 그렇게 못 세운다
+     * (목표 > 진입 > 스톱). 이유를 라벨에 붙인다.
+     * 💀 「진입 = 스톱」 만 적었더니 규칙을 어긴 계획처럼 읽혔다.
+     */
     if (e > 0 && e === st)
-      labels.push(tag(e, `진입 = 스톱 ${e.toLocaleString('ko-KR')}`, ENTRY))
+      labels.push(
+        tag(
+          e,
+          `진입 = 스톱 ${e.toLocaleString('ko-KR')} (가격 상승으로 인한 스톱가격 상승)`,
+          ENTRY,
+        ),
+      )
     else if (e > 0)
       labels.push(tag(e, `진입 ${e.toLocaleString('ko-KR')}`, ENTRY))
     if (st > 0 && st !== e)
-      labels.push(tag(st, `스톱 ${st.toLocaleString('ko-KR')}`, STOP, true))
+      labels.push(
+        tag(
+          st,
+          `스톱 ${st.toLocaleString('ko-KR')}${e > 0 && st > e ? ' (가격 상승으로 인한 스톱가격 상승)' : ''}`,
+          STOP,
+          // 진입 위로 올린 스톱은 진입선과 목표 사이라 «위»에 적는다 — 아래면 진입 라벨과 겹친다
+          !(e > 0 && st > e),
+        ),
+      )
+    // 목표는 선 «위»에 — 아래는 최근 캔들이 차 있어 글자가 가려졌다
     if (e > 0 && raiseTo != null && raiseTo > e)
       labels.push(
         tag(
           raiseTo,
           `목표 ${Math.round(raiseTo).toLocaleString('ko-KR')}`,
           RAISE,
-          true,
         ),
       )
   }

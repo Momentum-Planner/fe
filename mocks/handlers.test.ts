@@ -408,12 +408,11 @@ describe('계획 폐기와 삭제', () => {
       goals: { r: number; hitAt: string | null; picked: unknown }[]
       pickBasis: { close: number; ma20: number; sampleCount: number } | null
     }
-    expect(p.goals.map((g) => g.r)).toEqual([2, 3, 4])
-    // 2R 은 닿아서 본전을 골랐다 · 3R 은 닿았고 고를 차례 · 4R 은 아직
+    expect(p.goals.map((g) => g.r)).toEqual([2, 3])
+    // 2R 은 전에 도착해 본전을 고른 이력 · 3R 이 지금 목표 — 도착했고 고를 차례
     expect(p.goals[0]?.picked).not.toBeNull()
     expect(p.goals[1]?.hitAt).not.toBeNull()
     expect(p.goals[1]?.picked).toBeNull()
-    expect(p.goals[2]?.hitAt).toBeNull()
     expect(p.pickBasis?.close).toBeGreaterThanOrEqual(1_240_000)
     expect(p.pickBasis?.sampleCount).toBeGreaterThanOrEqual(0)
   })
@@ -445,7 +444,7 @@ describe('계획 폐기와 삭제', () => {
     expect(again.status).toBe(409)
   })
 
-  it('Q16 닿은 단은 못 바꾼다 · 목표는 오름차순이어야 한다', async () => {
+  it('Q16 도착한 목표는 못 바꾼다 · 오름차순 · 안 닿은 목표는 하나까지', async () => {
     const locked = await send('PATCH', '/api/v1/plans/1', {
       goals: [2.5, 3, 4],
     })
@@ -461,10 +460,22 @@ describe('계획 폐기와 삭제', () => {
       previousPlanId: null,
     })
     expect(down.status).toBe(400)
-    const added = await send('PATCH', '/api/v1/plans/1', {
-      goals: [2, 3, 4, 6],
+    // 목표 둘을 한 번에 못 건다 — 새 계획도, 도착 뒤 다음 목표도 하나
+    const two = await send('PATCH', '/api/v1/plans/1', { goals: [2, 3, 4, 6] })
+    expect(two.status).toBe(400)
+    const twoNew = await send('POST', '/api/v1/plans', {
+      stockCode: '000660',
+      title: '목표 둘',
+      entryPrice: 1_200_000,
+      stopPrice: 1_150_000,
+      quantity: 1,
+      memo: '',
+      goals: [2, 3],
+      previousPlanId: null,
     })
-    expect(added.status).toBe(200)
+    expect(twoNew.status).toBe(400)
+    const next = await send('PATCH', '/api/v1/plans/1', { goals: [2, 3, 4] })
+    expect(next.status).toBe(200)
   })
 
   it('Q12 계획 기본값에 표본 수가 온다 — 평균 수익률 후보를 고를 수 있는지가 여기서 갈린다', async () => {
