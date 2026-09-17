@@ -37,7 +37,7 @@ import type { useNewPlan } from './useNewPlan'
  * 새 계획 폼 — **10장 A~F 를 순서대로 닫아 세웠다** (Q11 · Q12).
  *
  * ```text
- * ① 근거     스냅샷 날짜 (달력)
+ * ① 판정일   달력
  * ② 1R       진입 예상가 | 스톱가격 [원|%]  + 후보 선 · 상한 줄
  * ③ 규모     수량 | 위험노출 (t-stat)      + 필요 현금 · ÷ 계좌 총액
  * ④ 스톱 갱신 규칙   스톱 사다리 — 목표 R 만 건다(필수).  빈 ① 단으로 시작 (Q16)
@@ -157,7 +157,7 @@ export function NewPlanForm({
       : null
   const stopWarn =
     !stopBlock && seen.stop > 0 && seenWidth > defaults.stopLimit
-      ? `⚠ 상한 ${defaults.stopLimit}% 초과`
+      ? `⚠ 손절폭 상한 ${defaults.stopLimit}% 초과`
       : undefined
   const seenCash = needCash(d.entryPrice, seen.qty)
   const cashBlock =
@@ -181,7 +181,7 @@ export function NewPlanForm({
     ...(stopWarn && limitPrice > 0
       ? [
           {
-            label: `상한 ${defaults.stopLimit}%`,
+            label: `손절폭 상한 ${defaults.stopLimit}%`,
             price: limitPrice,
             width: defaults.stopLimit,
             overLimit: false,
@@ -215,9 +215,9 @@ export function NewPlanForm({
         </Btn>
       </div>
 
-      {/* ① 근거 */}
-      <Section title="① 근거" first>
-        <div className="mb-1 text-[11px] text-white/40">스냅샷 날짜</div>
+      {/* ① 판정 기준일 — 어느 날 스크리너 판정으로 세우나 (2026-09-17 사용자: 「근거」 · 「스냅샷」 을 버린다).
+          제목이 곧 칸 이름이라 작은 라벨을 따로 안 단다 */}
+      <Section title="① 판정 기준일" first>
         <SnapshotCalendar
           value={d.snapshotDate}
           enabled={rows.map((r) => r.date)}
@@ -278,7 +278,7 @@ export function NewPlanForm({
                 />
                 {/* 손절폭 상한 — 고를 때 쓰는 선이다 (④-1-1-2). 스톱가격 밑에 */}
                 <Foot>
-                  상한 {defaults.stopLimit}%
+                  손절폭 상한 {defaults.stopLimit}%
                   <span className="font-text ml-1 text-white/25">
                     {defaults.stopLimitBasis
                       ? `평균수익 ${defaults.stopLimitBasis.avgWin}% ÷ 손익비 ${defaults.stopLimitBasis.targetRR}`

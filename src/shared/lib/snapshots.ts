@@ -121,9 +121,9 @@ export const ENTRY_STATE_LABEL: Record<EntryState, string> = {
  * **진입 관문** — 레짐과 진입 상태를 «한 뱃지»로 섞은 것 (2026-09-16).
  *
  * ```text
- * 진입 가능 · 조기        진입 불가 · 돌파실패
- * 진입 가능 · 돌파        진입 불가 · 하방이탈
- * 진입 가능 · 눌림        진입 불가 · 방향미정
+ * 진입 가능:조기        진입 불가:돌파실패
+ * 진입 가능:돌파        진입 불가:하방이탈
+ * 진입 가능:눌림        진입 불가:방향미정
  * ```
  *
  * 💀 뱃지 둘을 나란히 뒀었다 — 「돌파성공」(레짐) 옆에 「돌파」(진입 상태).
@@ -141,8 +141,18 @@ export const ENTRY_STATE_LABEL: Record<EntryState, string> = {
  *    그대로 받는 자리가 된다.
  * ⚠️ 진입 가능일 때 **레짐이 화면에서 빠진다.** 못 살 때만 사유로 나온다.
  */
+/** 관문 여섯의 그림 이름 — 가능 셋은 진입 상태, 불가 셋은 레짐에서 온다 */
+export type GateGlyph =
+  | 'EARLY'
+  | 'BREAKOUT'
+  | 'PULLBACK'
+  | 'fail'
+  | 'drop'
+  | 'none'
+
 export interface EntryGate {
   ok: boolean
+  glyph: GateGlyph
   /** 「진입 가능」 · 「진입 불가」 */
   head: string
   /** 살 수 있으면 어떤 진입인지, 못 사면 왜 못 사는지 */
@@ -151,8 +161,19 @@ export interface EntryGate {
 
 export const entryGate = (entryState: EntryState, regime: Regime): EntryGate =>
   entryState === 'BLOCKED'
-    ? { ok: false, head: '진입 불가', detail: REGIME_LABEL[regime] }
-    : { ok: true, head: '진입 가능', detail: ENTRY_STATE_LABEL[entryState] }
+    ? {
+        ok: false,
+        // 불가인데 레짐이 돌파성공 · 준비면 이유가 레짐에 없다 — 방향미정으로 그린다
+        glyph: regime === 'fail' || regime === 'drop' ? regime : 'none',
+        head: '진입 불가',
+        detail: REGIME_LABEL[regime],
+      }
+    : {
+        ok: true,
+        glyph: entryState,
+        head: '진입 가능',
+        detail: ENTRY_STATE_LABEL[entryState],
+      }
 
 /** 관문 뱃지 색 — 가능은 이 앱의 «상승» 빨강, 불가는 죽인다 */
 export const GATE_COLOR = {

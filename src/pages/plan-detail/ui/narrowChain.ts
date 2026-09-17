@@ -48,7 +48,12 @@ export function narrowChain(
     .filter((p) => p.status === 'PLANNED')
     .sort((a, b) => byDate(b, a))
   for (const p of waits.slice(0, WAIT_LIMIT)) keep.add(p.planId)
-  if (currentId != null) keep.add(currentId)
+  if (currentId != null) {
+    keep.add(currentId)
+    // 지금 보는 계획의 «부모»도 — 없으면 뿌리로 떨어져 어디서 갈라졌는지 안 보였다 (폐기 · 지난 계획)
+    const cur = plans.find((p) => p.planId === currentId)
+    if (cur?.previousPlanId != null) keep.add(cur.previousPlanId)
+  }
   for (const id of pulled) keep.add(id)
 
   const folded = (p: PlanListItem) => !keep.has(p.planId)

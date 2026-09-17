@@ -383,8 +383,14 @@ export const handlers = [
 
     const mine = sells.filter((r) => r.stockCode === code)
     const lastSell = mine.at(-1)
+    // 회고를 따로 안 남긴다 — 계획의 메모로 통일한다 (2026-09-17). 끝난 계획 중 마지막 메모
     const lastNote =
-      [...mine].reverse().find((r) => r.reason.trim())?.reason ?? null
+      PLANS.filter(
+        (p) =>
+          p.stockCode === code &&
+          (p.status === 'DONE' || p.status === 'CLOSED') &&
+          p.memo.trim(),
+      ).sort((a, b) => b.writtenAt.localeCompare(a.writtenAt))[0]?.memo ?? null
     const run = running.find((p) => p.stockCode === code)
     const bought = run?.records.filter((r) => r.side === 'BUY') ?? []
 

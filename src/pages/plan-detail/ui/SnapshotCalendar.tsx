@@ -43,7 +43,7 @@ export function SnapshotCalendar({
     <div ref={boxRef} className="relative">
       <button
         type="button"
-        aria-label="스냅샷 날짜"
+        aria-label="판정 기준일"
         aria-expanded={open}
         onClick={() => {
           setYm(monthOf(value ?? latest))
@@ -62,7 +62,7 @@ export function SnapshotCalendar({
       {open && (
         <div
           role="dialog"
-          aria-label="스냅샷 날짜 달력"
+          aria-label="판정 기준일 달력"
           className="shadow-pop absolute top-full left-0 z-40 mt-1.5 w-[260px] rounded-lg border border-white/10 bg-[#141414] p-2.5"
         >
           <div className="mb-1.5 flex items-center justify-between text-[13px] text-white/80">

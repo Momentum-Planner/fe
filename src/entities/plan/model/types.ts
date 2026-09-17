@@ -488,7 +488,7 @@ export interface PlanBriefing {
       returnPct: number
     } | null
     holding: { quantity: number; stopPrice: number } | null
-    /** 마지막 매도의 판 뒤 한 줄 — 회고 자리가 생기기 전까지 이것이 회고다 */
+    /** 이 종목에서 끝난 계획(실행 완료 · 폐기) 중 마지막 메모 — 회고를 따로 두지 않고 계획의 메모로 통일한다 */
     lastNote: string | null
   }
   /** 진입 상태별 — 매도 기록의 스냅샷으로 가른다 */

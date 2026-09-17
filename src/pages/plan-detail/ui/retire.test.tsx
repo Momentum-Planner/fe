@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { server } from 'mocks/server'
@@ -186,7 +186,7 @@ describe('폐기와 삭제 — 화면', () => {
  * 테스트도 사용자가 가는 길 그대로 간다.
  */
 async function pickLatestDate(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole('button', { name: '스냅샷 날짜' }))
+  await user.click(screen.getByRole('button', { name: '판정 기준일' }))
   const days = await waitFor(() => {
     const open = screen
       .getAllByRole('button', { name: /^\d{4}-\d{2}-\d{2}$/ })
@@ -239,7 +239,7 @@ describe('이어서 세우기', () => {
 
     // 처음에는 ① 근거만 선다. 이름은 안 묻는다 — 자동이다 (Q11 A)
     expect(
-      screen.getByRole('button', { name: '스냅샷 날짜' }),
+      screen.getByRole('button', { name: '판정 기준일' }),
     ).toBeInTheDocument()
     expect(screen.queryByLabelText('진입 예상가')).not.toBeInTheDocument()
     expect(screen.queryByPlaceholderText('계획 이름')).not.toBeInTheDocument()
@@ -252,7 +252,7 @@ describe('이어서 세우기', () => {
     expect(
       screen.queryByRole('button', { name: '수정' }),
     ).not.toBeInTheDocument()
-    // 세우는 동안 사슬 자리는 «새 계획 전에 볼 것» 이 쓴다 (Q17 2) — 사슬은 「사슬 보기」 뒤에
+    // 세우는 동안 사슬 자리는 «새 계획 전에 볼 것» 이 쓴다 (Q17 2) — 사슬은 안 뜬다
     expect(await screen.findByText('새 계획 전에 볼 것')).toBeInTheDocument()
     expect(screen.getByText('최근 매매 성적')).toBeInTheDocument()
     // 끝내는 문은 폼의 「취소」 다
@@ -483,12 +483,12 @@ describe('읽을 때와 고칠 때', () => {
 
     await screen.findAllByText('스톱 폭 보기')
     // 읽을 때는 없다
-    expect(screen.queryByText(/^상한 /)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^손절폭 상한 /)).not.toBeInTheDocument()
     expect(screen.queryByText(/평균수익 .* ÷ 손익비/)).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '수정' }))
     // 고를 때 쓰는 선이라 «지금 정하는 사람»만 본다
-    expect(screen.getByText(/^상한 /)).toBeInTheDocument()
+    expect(screen.getByText(/^손절폭 상한 /)).toBeInTheDocument()
     expect(screen.getByText(/평균수익 .* ÷ 손익비/)).toBeInTheDocument()
   })
 
@@ -502,7 +502,8 @@ describe('읽을 때와 고칠 때', () => {
       await screen.findByRole('button', { name: '이어서 세우기' }),
     )
     await pickLatestDate(user)
-    expect(screen.getByText(/^상한 /)).toBeInTheDocument()
+    // 브리핑 카드의 「손절폭 상한」 줄도 같이 잡힌다 — 있기만 하면 된다
+    expect(screen.getAllByText(/^손절폭 상한 /).length).toBeGreaterThan(0)
     expect(screen.getByText(/평균수익 .* ÷ 손익비/)).toBeInTheDocument()
   })
 
@@ -603,20 +604,20 @@ describe('읽을 때와 고칠 때', () => {
  * 사슬 — **좁힌 사슬 한 줄** (Q12). 옛 찾아가기 칩 · 기간 · 확대는 걷어냈다.
  */
 describe('좁힌 사슬', () => {
-  it('지난 계획은 팝오버로 접히고, 고르면 사슬에 하나만 들어온다', async () => {
+  it('지난 계획은 좁힌 사슬에 없고, 「사슬 전체」 판에서 전부 본다', async () => {
     const plan = await planApi.getDetail(1)
     show(plan)
     const user = userEvent.setup()
 
     await screen.findAllByText(plan.title)
-    const pop = await screen.findByRole('button', { name: /지난 계획/ })
-    await user.click(pop)
-    const options = screen.getAllByRole('option')
-    expect(options.length).toBeGreaterThan(0)
-    const pick = options[0]!
-    const name = pick.querySelector('.truncate')?.textContent ?? ''
-    await user.click(pick)
-    expect(screen.getAllByText(name).length).toBeGreaterThan(0)
+    const all = (await planApi.getList({ stockCode: plan.stockCode })).plans
+    await user.click(
+      await screen.findByRole('button', { name: '사슬 전체 보기' }),
+    )
+    const dialog = screen.getByRole('dialog', { name: '사슬 전체' })
+    // 좁힌 사슬에서 빠진 지난 계획도 판 안에는 선다
+    for (const p of all)
+      expect(within(dialog).getAllByText(p.title).length).toBeGreaterThan(0)
   })
 })
 

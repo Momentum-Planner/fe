@@ -160,6 +160,12 @@ function DirectR({
     value != null && !preset ? String(value) : '',
   )
   const on = value != null && !preset
+  // 칩을 누르면 쓰던 글자를 비운다 — 렌더 중에 이전 값과 견줘 맞춘다
+  const [seenPreset, setSeenPreset] = useState(preset ? value : null)
+  if (preset && value !== seenPreset) {
+    setSeenPreset(value)
+    setText('')
+  }
   return (
     <label
       className={cn(
@@ -170,7 +176,8 @@ function DirectR({
       {/* 빈 칸 자체가 직접 입력이다 — 「직접」 글자를 뺐다 */}
       <input
         aria-label={label}
-        value={on ? text : preset ? '' : text}
+        // 💀 칩이 켜져 있으면 칸을 늘 ''로 박아 두어 쳐도 글자가 안 들어갔다 (2026-09-17)
+        value={text}
         onChange={(e) => setText(e.target.value.replace(/[^0-9.]/g, ''))}
         onBlur={() => {
           const r = Number(text)

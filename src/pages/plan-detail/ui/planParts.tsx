@@ -444,7 +444,8 @@ export function CandidateList({
       </div>
       {items.some((c) => c.overLimit) && (
         <div className="mt-1 px-1.5 text-[10px] text-white/35">
-          ⚠ 상한{limit != null ? ` ${limit}%` : ''}를 넘는다 — 고를 수는 있다
+          ⚠ 손절폭 상한{limit != null ? ` ${limit}%` : ''}를 넘는다 — 고를 수는
+          있다
         </div>
       )}
     </div>

@@ -155,13 +155,13 @@ export function PlanCard({
     seenWidth > HARD_LIMIT
       ? `⚠ 손절폭 ${HARD_LIMIT}% 초과 — 포기하는 자리다`
       : seenWidth > plan.stopLimit
-        ? `⚠ 상한 ${plan.stopLimit}% 초과`
+        ? `⚠ 손절폭 상한 ${plan.stopLimit}% 초과`
         : undefined
   const stopWarn =
     width > HARD_LIMIT
       ? `⚠ 손절폭 ${HARD_LIMIT}% 초과 — 포기하는 자리다`
       : width > plan.stopLimit
-        ? `⚠ 상한 ${plan.stopLimit}% 초과`
+        ? `⚠ 손절폭 상한 ${plan.stopLimit}% 초과`
         : undefined
 
   const chosenStop = plan.stopCandidates.find(
@@ -280,7 +280,7 @@ export function PlanCard({
           {/* 상한은 «고를 때» 쓰는 선이다 — 읽을 때는 안 띄운다 (④-1-1-2) */}
           {editing && (
             <span className="text-right text-white/35">
-              상한 {plan.stopLimit}%
+              손절폭 상한 {plan.stopLimit}%
               <span className="ml-1 text-white/20">
                 {plan.stopLimitBasis
                   ? `평균수익 ${plan.stopLimitBasis.avgWin}% ÷ 손익비 ${plan.stopLimitBasis.targetRR}`

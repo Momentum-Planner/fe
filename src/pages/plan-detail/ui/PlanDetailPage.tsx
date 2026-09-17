@@ -1,11 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '@/shared/lib/cn'
-import { fromServerRegime } from '@/shared/lib/snapshots'
-import { RegimeBadge } from '@/shared/ui/RegimeBadge'
-import { useRegimeInsight, useScreening } from '@/entities/stock'
+import { EntryGateBadge } from '@/shared/ui/EntryGateBadge'
+import { useScreening } from '@/entities/stock'
 import {
   goalPrice,
-  nextGoal,
   usePlanBriefing,
   usePlanDefaults,
   usePlanDetail,
@@ -21,10 +19,8 @@ import { PlanChain } from './PlanChain'
 import { PlanBriefing } from './PlanBriefing'
 import { PlanCard } from './PlanCard'
 import { PlanChart } from './PlanChart'
-import type { GhostPlan } from './PlanChart'
 import { liveSpan } from './planSpan'
-import { SnapshotTable } from './SnapshotTable'
-import { PastPlansPopover } from './PastPlansPopover'
+import { ChainOverview } from './ChainOverview'
 import { narrowChain } from './narrowChain'
 import { LIT_PANEL } from './panel'
 import { NewPlanForm } from './NewPlanForm'
@@ -181,10 +177,6 @@ function FirstPlanView({ stockCode }: { stockCode: string }) {
               setPicking(null)
             }}
           />
-          {/* 고른 날의 스냅샷 — 첫 계획은 이어받을 스냅샷이 없어 고르기 전에는 안 선다 */}
-          {picked && (
-            <SnapshotTable snap={picked} open onToggle={() => undefined} />
-          )}
         </section>
 
         {born.draft && defaults ? (
@@ -231,15 +223,6 @@ function PlanDetailView({
   siblings: PlanListItem[]
 }) {
   /**
-   * 레짐은 **«오늘» 판정**이다 — 계획을 눌러도 안 바뀐다.
-   *
-   * 머리줄은 「이 종목이 «지금» 어디에 서 있나」를 답하는 자리다. 보유 수량·평균
-   * 단가가 지금 값인데 레짐만 그날 값이면 한 줄 안에서 시점이 갈린다 — 어느 게 어느
-   * 시점인지 매번 물어야 한다 (디자인 4장 ⑤ · ⑧).
-   * 「그날 어땠나」는 2층 근거 블록이 스냅샷으로 답한다.
-   */
-  const { data: regime } = useRegimeInsight(plan.stockCode)
-  /**
    * 계좌 · 통계 · 종목에서 오는 값들. 계획이 아니라 «그 밖»에서 온다 —
    * 그래서 계획이 하나도 없는 종목에서도 첫 계획을 세울 수 있다
    */
@@ -254,23 +237,25 @@ function PlanDetailView({
   const remove = usePlanRemove(plan.planId)
   // 「이어서 세우기」 — 이 계획에서 갈라져 나오는 새 계획 (ⓐ-1)
   const born = useNewPlan(plan.stockCode, siblings, plan)
+  const drafting = born.draft != null
   /**
    * 차트에서 «집는 중»인 칸. 진입가와 스톱가격 둘 다 차트 위의 선이라
    * 숫자를 쓰는 것보다 그 자리를 짚는 것이 실제 동작이다 (④-1-1-1).
    */
   const [picking, setPicking] = useState<'entry' | 'stop' | null>(null)
-  /**
-   * 사슬을 «세로로» 넓힌다. 갈래가 늘면 마디가 세로로 쌓이는데 210px 안에서는
-   * 위아래가 잘린다. 폭은 안 건드린다 — 가로는 이미 끌어서 본다
-   */
-  /** 「지난 계획」 팝오버에서 꺼낸 계획들 — 좁힌 사슬에 더해진다 (Q12) */
-  const [pulled, setPulled] = useState<number[]>([])
-  const narrowed = narrowChain(siblings, plan.planId, pulled)
-  /**
-   * 스냅샷 표 — 볼 때는 접힌 채, 세울 때는 펼친 채 **시작한다** (Q12).
-   * 사용자가 여닫은 값은 그 상황 안에서만 기억한다 — 세우기를 켜고 끄면 초기값으로.
-   */
-  const [snapOpen, setSnapOpen] = useState<boolean | null>(null)
+  /** 좁힌 사슬 — 지난 계획 · 넘친 대기는 오른쪽 위 「⤢ 사슬 전체」 가 보여 준다 */
+  const narrowed = narrowChain(siblings, plan.planId)
+  /** 고정 칸 안에서 **보는 계획이 보이게** 스크롤한다 — 칸 밖에 있으면 고른 게 안 보였다 */
+  const chainBoxRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const box = chainBoxRef.current
+    const cur = box?.querySelector<HTMLElement>('[data-current]')
+    if (!box || !cur) return
+    const b = box.getBoundingClientRect()
+    const c = cur.getBoundingClientRect()
+    box.scrollTop += c.top - b.top - (b.height - c.height) / 2
+    box.scrollLeft += c.left - b.left - (b.width - c.width) / 2
+  }, [plan.planId, siblings.length])
   const today = new Date().toISOString().slice(0, 10)
   /** 고를 차례 단의 후보 (Q16 7) — 카드의 고르기와 차트의 후보 선이 같은 줄을 본다 */
   const pick = useMemo(() => pickOptionsOf(plan), [plan])
@@ -278,34 +263,37 @@ function PlanDetailView({
   const [choice, setChoice] = useState<PickChoice | null>(null)
   useEffect(() => setChoice(null), [plan.planId, pick?.index])
 
-  const drafting = born.draft != null
   /**
    * 새 계획 전에 볼 것 (Q17 2) — 세우는 동안 사슬 자리를 쓴다.
    * 💀 사슬은 «모양»이라 새 계획에 필요한 «결론»을 안 준다. 참조할 계획을 차트에 고를 때만
    *    「사슬 보기」 로 돌아간다.
    */
   const { data: briefing } = usePlanBriefing(plan.stockCode, drafting)
-  const [showChain, setShowChain] = useState(false)
-  useEffect(() => setShowChain(false), [drafting])
-  useEffect(() => setSnapOpen(null), [drafting])
   /** 이 종목의 스크리닝 행 — 새 계획의 달력이 고르고, 고른 날이 스냅샷이 된다 (Q11 A) */
   const { data: rows = [] } = useScreening(plan.stockCode)
   const picked = rows.find((r) => r.date === born.draft?.snapshotDate)
   /**
-   * 새 계획을 쓰는 동안 **참조할 계획** — 사슬에서 누른 마디다 (2026-09-17).
-   *
-   * 💀 마디는 원래 그 계획으로 가는 링크라, 쓰는 중에 누르면 페이지가 옮겨 가 폼이 날아갔다.
-   * 옮겨 가지 않고 «고르기만» 한다. 고른 마디가 흰 테두리를 받고, 차트에 그 계획이 선다.
-   *
-   * 💀 한때 「고정」(파란 테두리)과 「보고 있는 계획」(흰 테두리)이 따로 있었다. 강조가 둘이라
-   * 무엇이 무엇인지 안 읽혔다 — **흰 테두리 하나 = 고른 계획**으로 합쳤다.
-   * 처음에는 보던 계획이 골라져 있다. **고른 마디를 다시 누르거나 사슬 빈 곳을 누르면
-   * 풀린다** — 차트에 새 계획만 남는다 (2026-09-17).
-   *
-   * ⚠️ 마우스를 올리면 뜨던 브러싱은 뺐다. 옅게 그린 선이 캔들 위에서 안 보였다.
+   * 머리줄의 관문은 **«오늘» 판정**이다 — 계획을 눌러도 안 바뀐다. 보유 수량 · 평균 단가가 지금 값인데
+   * 관문만 그날 값이면 한 줄 안에서 시점이 갈린다 (디자인 4장). 「그날 어땠나」 는 스냅샷 표가 답한다.
    */
-  const [refId, setRefId] = useState<number | null>(plan.planId)
-  useEffect(() => setRefId(plan.planId), [drafting, plan.planId])
+  const latestGate = rows.at(-1)
+  /**
+   * 차트 오른쪽 끝에 설 날 — 살아 있는 계획(실행 중 · 대기)은 마지막 일봉(null),
+   * 끝난 계획(실행 완료 · 폐기)은 끝난 날. 끝난 날은 마지막 매도일, 없으면 살아 있던 구간의 끝.
+   */
+  const viewEnd =
+    plan.status === 'RUNNING' || plan.status === 'PLANNED'
+      ? null
+      : (plan.records
+          .filter((r) => r.side === 'SELL')
+          .map((r) => r.filledAt.slice(0, 10))
+          .sort()
+          .at(-1) ?? liveSpan(plan, siblings).to)
+  /**
+   * 💀 새 계획을 쓰는 동안 사슬 마디를 눌러 **참조할 계획**을 차트에 세웠었다 — 겹쳐 그리면 안 보이고,
+   *    번갈아 그리면 옆 폼과 어긋났다. 과거 계획을 하나씩 열어 보며 쓸 일이 없다 (2026-09-17 사용자
+   *    「최근에 그랬다 그 정도만 보면 되는 것 아님?」). 걸린 계획은 브리핑이 한 줄씩, 나머지는 통계가 말한다.
+   */
   /**
    * **빈 곳**을 누르면 풀린다 — 사슬 카드의 빈 곳과 페이지 배경.
    * 마디 · 버튼 · 입력 · 팝오버 · 대화상자는 빈 곳이 아니다. 차트 · 폼 카드 안도 아니다 —
@@ -323,7 +311,7 @@ function PlanDetailView({
   const choosing = pick != null && !drafting && !editing && !hideNow
 
   useEffect(() => {
-    const held = drafting ? refId != null : !editing && lit
+    const held = !drafting && !editing && lit
     if (!held) return
     const release = (e: MouseEvent) => {
       const t = e.target as Element
@@ -336,31 +324,11 @@ function PlanDetailView({
       // 카드 안(차트 · 폼 · 머리줄)은 빈 곳이 아니다. ⚠️ 차트 · 폼 카드는 `.card` 가 아니라
       // LIT_PANEL 이라 클래스로 못 가른다 — 카드는 전부 `section` 이다
       if (t.closest('section') && !t.closest('[data-chain]')) return
-      if (drafting) setRefId(null)
-      else setLit(false)
+      setLit(false)
     }
     document.addEventListener('click', release)
     return () => document.removeEventListener('click', release)
-  }, [drafting, refId, editing, lit])
-  const ref = drafting ? siblings.find((x) => x.planId === refId) : undefined
-  // 고른 마디가 바뀔 때만 다시 만든다 — 렌더마다 새 배열이면 차트가 도형을 매번 다시 단다
-  const ghosts = useMemo<GhostPlan[]>(
-    () =>
-      ref
-        ? [
-            {
-              entryPrice: ref.entryPrice,
-              stopPrice: ref.stopPrice,
-              // 다음 목표 하나 (Q16 8). 실행된 계획은 «처음 1R» 로 잰다 (③-2-1)
-              raiseTo: nextGoalPrice(ref),
-              // 살아 있는 계획도 «오늘»에서 끊는다 — 새 계획은 그 오른쪽에 선다
-              ...liveSpan(ref, siblings, today),
-              label: `${ref.writtenAt.slice(5)} ${ref.title}`,
-            },
-          ]
-        : [],
-    [ref, siblings, today],
-  )
+  }, [drafting, editing, lit])
   /**
    * 치우려는 마디의 «이름». 문이 사슬에 있으므로 **지금 보는 계획이 아닐 수
    * 있다** — 어느 마디를 닫는지 칸이 말해야 한다.
@@ -385,7 +353,14 @@ function PlanDetailView({
         </div>
 
         {/* 레짐 배지 — 스냅샷 카드가 쓰던 «그» 배지다. 색은 레짐마다 정해져 있다 */}
-        {regime && <RegimeBadge regime={fromServerRegime(regime.regime)} />}
+        {/* 레짐 뱃지 → 진입 관문 뱃지 (2026-09-17) — 레짐과 진입 상태를 하나로.
+            오늘의 스크리닝 판정이다. 판정이 없는 날(게이트에 걸림)은 마지막 판정 */}
+        {latestGate && (
+          <EntryGateBadge
+            entryState={latestGate.entryState}
+            regime={latestGate.regime}
+          />
+        )}
 
         {held > 0 ? (
           <>
@@ -412,70 +387,50 @@ function PlanDetailView({
             ⚠️ 「계획 사슬」 이름표를 뺐다 (2026-09-11) — 보면 사슬인 걸 안다 */}
         {/* 좁힌 사슬은 마디가 넷 안팎이라 210 → 170 (Q12 — 보조로 내리고 높이만 줄인다).
             대기 둘이 세로로 쌓이는 높이까지는 든다 */}
-        {drafting && briefing && !showChain ? (
-          <PlanBriefing
-            briefing={briefing}
-            snap={picked}
-            stopLimit={defaults?.stopLimit}
-            onShowChain={() => setShowChain(true)}
-          />
-        ) : (
-          <div>
-            {/* 브리핑의 「사슬 보기 ▸」 와 «같은 자리»에서 되돌린다 — 머리줄 오른쪽 */}
-            {drafting && briefing && (
-              <div className="flex items-baseline gap-2 pt-2">
-                <span className="text-[13px] font-bold text-white/85">
-                  사슬
-                </span>
-                <span className="text-[11px] text-white/35">
-                  참조할 계획을 차트에 고른다
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setShowChain(false)}
-                  className="ml-auto rounded px-1.5 text-[11px] text-white/40 hover:text-white/75"
-                >
-                  새 계획 전에 볼 것 ▸
-                </button>
-              </div>
-            )}
-            <PlanChain
-              // 좁힌 사슬 — 직전 → 실행 중 → 대기. 나머지는 「지난 계획」 안 (Q12)
-              plans={narrowed.shown}
-              lead={
-                <PastPlansPopover
-                  hidden={narrowed.hidden}
-                  onPull={(id) => setPulled((v) => [...v, id])}
-                />
-              }
-              waitsMore={
-                <PastPlansPopover
-                  label="대기"
-                  hidden={narrowed.waiting}
-                  onPull={(id) => setPulled((v) => [...v, id])}
-                />
-              }
-              // 세우는 동안 사슬은 뒤로 물러난다 — 올린 마디만 진해진다 (Q12)
-              faded={drafting}
-              // 흰 테두리 하나 = 고른 계획. 쓰는 중이면 참조로 고른 마디다
-              currentId={drafting ? refId : lit ? plan.planId : null}
-              // 쓰는 동안 그 자리가 **「쓰는 중」으로 켜진다.** 없애지 않는다 —
-              // 세부 칸이 «어느 마디»를 만드는 중인지를 사슬이 말해야 한다
-              // 만드는 중에 다시 누르면 «끝낸다» — 켠 자리에서 끈다
-              onCreate={born.draft ? born.cancel : born.open}
-              creating={born.draft != null}
-              // 사슬의 «어느 마디든» 치울 수 있다 — 문턱 판정은 마디가 스스로 한다
-              onClose={close.openFor}
-              onRemove={remove.askFor}
-              // 쓰는 중에는 누르면 옮겨 가지 않고 «고르기만» 한다 — 폼이 안 날아간다
-              // 고른 마디를 다시 누르면 풀린다
-              // 볼 때는 지금 계획 마디만 켜고 끈다 — 다른 마디는 링크대로 옮겨 간다
-              onPick={(id) => {
-                if (drafting) return setRefId((v) => (v === id ? null : id))
-                if (id !== plan.planId) return false
-                if (!editing) setLit((v) => !v)
-              }}
+        {/* 세우는 동안 **사슬은 아예 안 뜬다** — 브리핑이 자리를 쓴다 (2026-09-17 사용자).
+            💀 걸린 계획 표 → 브리핑 밑 사슬 → 걸린 계획만 남긴 사슬 을 거쳤다. 새 계획을 세우는 데
+               계획 이력은 필요 없었다 — 「최근에 그랬다」 는 브리핑 카드가 말한다 */}
+        {drafting ? (
+          briefing && (
+            <PlanBriefing
+              briefing={briefing}
+              snap={picked}
+              stopLimit={defaults?.stopLimit}
             />
+          )
+        ) : (
+          <div className="relative">
+            {/* 오른쪽 위 — 사슬 전체를 팝업으로 (2026-09-17 (C)). 지난 계획 · 대기 팝오버를 대신한다 */}
+            <div className="absolute top-1.5 right-0 z-10">
+              <ChainOverview
+                plans={siblings}
+                currentId={plan.planId}
+                onClose={close.openFor}
+                onRemove={remove.askFor}
+              />
+            </div>
+            {/* **고정 칸** — 지금 높이(대기 둘 + 「+ 새 계획」)에서 멈춘다. 넘치면 칸 안에서 스크롤 (2026-09-17 사용자
+                「계속 늘어나면 안 됨」). 151 = 카드 167 − 위아래 여백 16 */}
+            <div
+              ref={chainBoxRef}
+              className="h-[151px] overflow-auto pr-10 [scrollbar-color:rgba(255,255,255,0.15)_transparent] [scrollbar-width:thin]"
+            >
+              <PlanChain
+                // 좁힌 사슬 — 직전 → 실행 중 → 대기 둘 (Q12)
+                plans={narrowed.shown}
+                // 흰 테두리 하나 = 보는 계획
+                currentId={lit ? plan.planId : null}
+                onCreate={born.open}
+                // 사슬의 «어느 마디든» 치울 수 있다 — 문턱 판정은 마디가 스스로 한다
+                onClose={close.openFor}
+                onRemove={remove.askFor}
+                // 볼 때는 지금 계획 마디만 켜고 끈다 — 다른 마디는 링크대로 옮겨 간다
+                onPick={(id) => {
+                  if (id !== plan.planId) return false
+                  if (!editing) setLit((v) => !v)
+                }}
+              />
+            </div>
           </div>
         )}
       </section>
@@ -523,6 +478,7 @@ function PlanDetailView({
             candidates={plan.stopCandidates}
             // 새 계획을 쓰는 동안에는 «오늘»로 옮겨간다 — 오늘 세우는 계획이다
             writtenAt={born.draft ? today : plan.writtenAt}
+            viewEnd={viewEnd}
             // 지금 계획은 스냅샷 날짜부터, 새 계획은 오늘부터 (Q12 기간만)
             marksFrom={
               // 보기 — 작성일(차트의 회색 점선)부터. 스냅샷 날짜가 앞서도 선은 그날 세운 계획이다
@@ -550,25 +506,13 @@ function PlanDetailView({
                         plan.initialStopWidth,
                       )
             }
-            ghosts={ghosts}
             // 후보 선은 «고를 때»만 뜬다 — 늘 떠 있으면 넷이 캔들을 가린다
             editing={editing}
             // 고른 새 스톱 하나만 긋는다 (Q16 · 후보를 전부 긋지 않는다)
             pickLine={choosing ? choice : null}
           />
-          {/* ④-0 스냅샷 — 차트 «아래» 원값 표 (Q12).
-              세우는 동안에는 «달력에서 고른 날»의 행이다. 아직 안 골랐으면 비어 있다 */}
-          {drafting && !picked ? (
-            <div className="mt-2.5 border-t border-white/[0.06] px-1 pt-2.5 text-[11px] text-white/30">
-              스냅샷 — 날짜를 고르면 그날 판정이 뜬다
-            </div>
-          ) : (
-            <SnapshotTable
-              snap={drafting && picked ? picked : plan.snapshot}
-              open={snapOpen ?? drafting}
-              onToggle={() => setSnapOpen(!(snapOpen ?? drafting))}
-            />
-          )}
+          {/* ④-0 스냅샷 줄은 없다 (2026-09-17 사용자 「이 줄 자체를 주지 마라」) —
+              날짜는 ① 근거가, 진입 관문은 머리줄이, 트렌드 · 52주 · RS 는 브리핑이 말한다 */}
         </section>
 
         {/* ── 세부 — **한 자리에 하나만 선다** ────────────────────────────
@@ -632,11 +576,3 @@ const Stat = ({
     )}
   </span>
 )
-
-/** 사슬 마디의 다음 목표 가격 — 다음 단 하나만 그린다 (Q16 8) */
-const nextGoalPrice = (p: PlanListItem) => {
-  const g = nextGoal(p.goals)
-  return g
-    ? goalPrice(p.entryPrice, p.stopPrice, g.r, p.initialStopWidth)
-    : null
-}

@@ -1,17 +1,17 @@
 import { cn } from '@/shared/lib/cn'
 import type { DailyScreening } from '@/shared/lib/snapshots'
+import { TREND_CONDITIONS } from '@/shared/lib/snapshots'
 import { ENTRY_STATE_LABEL } from '@/entities/plan'
 import type { PlanBriefing as Briefing } from '@/entities/plan'
 import { won } from './planParts'
 
 /**
- * **새 계획 전에 볼 것** (Q17 2 · (나)) — 세우는 동안 사슬 자리에 세 칸.
+ * **새 계획 전에 볼 것** (Q17 2) — 세우는 동안 사슬 자리.
  *
  * ```text
- * 내 최근 매매              │ 이 종목                  │ 이 조건에서 나
- * ⚠ 연속 손실 3회           │ 4건 · 1승 3패            │ ⚠ 돌파 승률 25% (8건)
- * 최근 10건 승률 30% (전체 50) │ 마지막 −1.0R · 08-11     │ 승률 46% · 내 평균보다 낮다
- * ⚠ 계좌 위험노출 3.1%       │ 들고 있음 15주 · 스톱 …    │ 손절폭 상한 2.36%
+ * [최근 매매 성적]  [현재 종목 성적]  [눌림 진입 성적]        ← 결론 카드 셋 · 중심점
+ *  7승 3패          3승 4패          ⚠ 6승 7패
+ * 09-16 판정  정배열 ✓ · 200일선 13개월 상승 ✓ · 50일선 −10% · 52주 고점 −1.5% ✓ · …   ← 훑는 참고 한 줄
  * ```
  *
  * 💀 사슬은 계획의 «모양»이다. 새 계획에 필요한 것은 «결론» — 「이 종목에서 내가 어땠나」.
@@ -40,14 +40,11 @@ export function PlanBriefing({
   briefing: b,
   snap,
   stopLimit,
-  onShowChain,
 }: {
   briefing: Briefing
   /** 달력에서 고른 날의 판정 — 진입 상태 · 레짐으로 가른다. 아직 없으면 안내만 */
   snap: DailyScreening | undefined
   stopLimit?: number
-  /** 사슬로 돌아가기 — 참조할 계획을 차트에 고를 때 */
-  onShowChain?: () => void
 }) {
   const r = b.recent
   const s = b.stock
@@ -83,81 +80,82 @@ export function PlanBriefing({
           새 계획 전에 볼 것
         </span>
         <span className="text-[11px] text-white/35">노랑 = 걸리는 것</span>
-        {onShowChain && (
-          <button
-            type="button"
-            onClick={onShowChain}
-            className="ml-auto rounded px-1.5 text-[11px] text-white/40 hover:text-white/75"
-          >
-            사슬 보기 ▸
-          </button>
-        )}
       </div>
-      {/* 💀 세 칸을 전폭으로 벌렸더니 넓은 화면에서 서로 멀어지고 숫자에 무게가 없었다.
-          카드 셋을 묶어 왼쪽에 세우고, 카드마다 결론 하나를 크게 (4장 크기로 중요도) */}
-      <div className="grid max-w-[760px] grid-cols-3 gap-2">
-        <Card
-          title="최근 매매 성적"
-          big={recentBig}
-          warn={streakWarn || riskWarn}
-        >
-          <Sub>
-            최근 {r.recentN}건 · 전체 승률 {r.overallWinRate ?? '—'}%
-          </Sub>
-          <Sub warn={streakWarn}>
-            {r.lossStreak > 0
-              ? `연속 손실 ${r.lossStreak}회`
-              : '연속 손실 없음'}
-          </Sub>
-          <Sub warn={riskWarn}>계좌 위험노출 {r.accountRisk.toFixed(2)}%</Sub>
-        </Card>
+      {/* 좌우 두 기둥 — 「내 전적」 결론 카드 | 「스크리너 판정」 체크리스트 (2026-09-17 · 4장 (가)).
+          💀 판정을 아래 한 줄로 눕혔더니 카드가 왼쪽에 몰리고 오른쪽이 비었다. 같은 모양이면 같은 정보로
+             읽히므로(유사성) 오른쪽은 «카드가 아닌» 체크리스트로 두고, 가운데 세로선 하나로 가른다 */}
+      <div className="grid grid-cols-[minmax(0,1.25fr)_1px_minmax(0,1fr)] gap-4">
+        <div className="min-w-0">
+          <div className="mb-1 text-[11px] text-white/40">내 전적</div>
+          <div className="grid grid-cols-3 gap-2">
+            <Card
+              title="최근 매매 성적"
+              big={recentBig}
+              warn={streakWarn || riskWarn}
+            >
+              <Sub>
+                최근 {r.recentN}건 · 전체 승률 {r.overallWinRate ?? '—'}%
+              </Sub>
+              <Sub warn={streakWarn}>
+                {r.lossStreak > 0
+                  ? `연속 손실 ${r.lossStreak}회`
+                  : '연속 손실 없음'}
+              </Sub>
+              <Sub warn={riskWarn}>
+                계좌 위험노출 {r.accountRisk.toFixed(2)}%
+              </Sub>
+            </Card>
 
-        <Card
-          title="현재 종목 성적"
-          big={s.trades ? `${s.wins}승 ${s.losses}패` : '거래 없음'}
-        >
-          {s.last && (
-            <Sub>
-              마지막 {lastR} ({s.last.filledAt.slice(5)})
-            </Sub>
-          )}
-          {s.holding && (
-            <Sub>
-              보유 {s.holding.quantity}주 · 스톱 {won(s.holding.stopPrice)}
-            </Sub>
-          )}
-          {s.lastNote && <Sub>「{s.lastNote}」</Sub>}
-        </Card>
-
-        <Card
-          title={
-            snap
-              ? `${ENTRY_STATE_LABEL[snap.entryState]} 진입 성적`
-              : '진입 성적'
-          }
-          big={
-            snap
-              ? g
-                ? `${entry?.warn ? '⚠ ' : ''}${entryWins}승 ${g.n - entryWins}패`
-                : '기록 없음'
-              : '—'
-          }
-          warn={entry?.warn}
-        >
-          {snap ? (
-            <>
-              {g && (
-                <Sub warn={entry?.warn}>
-                  승률 {g.winRate}% · 내 평균 {r.overallWinRate ?? '—'}%
-                  {entry?.warn ? '보다 낮다' : ''}
+            <Card
+              title="현재 종목 성적"
+              big={s.trades ? `${s.wins}승 ${s.losses}패` : '거래 없음'}
+            >
+              {s.last && (
+                <Sub>
+                  마지막 {lastR} ({s.last.filledAt.slice(5)})
                 </Sub>
               )}
-            </>
-          ) : (
-            <Sub>스냅샷 날짜를 고르면 진입 상태로 가른다</Sub>
-          )}
-          {stopLimit != null && <Sub>손절폭 상한 {stopLimit}%</Sub>}
-        </Card>
+              {s.holding && (
+                <Sub>
+                  보유 {s.holding.quantity}주 · 스톱 {won(s.holding.stopPrice)}
+                </Sub>
+              )}
+              {s.lastNote && <Sub>「{s.lastNote}」</Sub>}
+            </Card>
+
+            <Card
+              title={
+                snap
+                  ? `${ENTRY_STATE_LABEL[snap.entryState]} 진입 성적`
+                  : '진입 성적'
+              }
+              big={
+                snap
+                  ? g
+                    ? `${entry?.warn ? '⚠ ' : ''}${entryWins}승 ${g.n - entryWins}패`
+                    : '기록 없음'
+                  : '—'
+              }
+              warn={entry?.warn}
+            >
+              {snap ? (
+                <>
+                  {g && (
+                    <Sub warn={entry?.warn}>
+                      승률 {g.winRate}% · 내 평균 {r.overallWinRate ?? '—'}%
+                      {entry?.warn ? '보다 낮다' : ''}
+                    </Sub>
+                  )}
+                </>
+              ) : (
+                <Sub>판정 기준일을 고르면 진입 상태로 가른다</Sub>
+              )}
+              {stopLimit != null && <Sub>손절폭 상한 {stopLimit}%</Sub>}
+            </Card>
+          </div>
+        </div>
+        <div className="bg-white/[0.08]" aria-hidden />
+        <ScreenerJudgment snap={snap} />
       </div>
     </div>
   )
@@ -209,3 +207,70 @@ const Sub = ({
     {children}
   </div>
 )
+
+/**
+ * **스크리너 판정** — 고른 날 스크리너가 저장해 둔 값 (2026-09-17 · 4장 (가)).
+ *
+ * ```text
+ * 09-02 스크리너 판정 · 트렌드 템플릿 8/8
+ * 150·200일선 위      ✓   │ 52주 저점 +25%      +95.2% ✓
+ * 150일선 > 200일선    ✓   │ 52주 고점 −25% 이내   −1.5% ✓
+ * 200일선 상승   13개월 ✓   │ RS 70 이상           97 ✓
+ * 50일선 > 150·200일선 ✓   │ 진입 가능 · 50일선 위     ✓
+ * 펀더멘털 5/7 · 훼손 0 · 진입 위치 +1.2%
+ * ```
+ * 통과 여부는 스크리너가 쌓은 `trendFailed` 그대로 — 화면이 다시 판정하지 않는다.
+ */
+function ScreenerJudgment({ snap }: { snap: DailyScreening | undefined }) {
+  if (!snap)
+    return (
+      <div className="min-w-0">
+        <div className="mb-1 text-[11px] text-white/40">스크리너 판정</div>
+        <div className="text-[12px] text-white/40">
+          판정 기준일을 고르면 그날 스크리너가 저장한 판정이 뜬다
+        </div>
+      </div>
+    )
+  const t = snap.trend
+  const pct = (n: number) =>
+    `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(1)}%`
+  const value: Partial<Record<(typeof TREND_CONDITIONS)[number], string>> = {
+    '200일선 상승': `${t.ma200RisingMonths}개월`,
+    '52주 저점 +25%': pct(t.fromLow52),
+    '52주 고점 −25% 이내': pct(t.fromHigh52),
+    'RS 70 이상': `${t.rs} · ${Math.abs(t.rsTrendWeeks)}주${t.rsTrendWeeks >= 0 ? '↑' : '↓'}`,
+  }
+  return (
+    <div className="min-w-0">
+      <div className="mb-1 text-[11px] text-white/40">
+        <span className="font-number text-white/70">{snap.date.slice(5)}</span>{' '}
+        스크리너 판정 · 트렌드 템플릿{' '}
+        <span className="font-number text-white/70">{snap.trendPassed}/8</span>
+      </div>
+      <div className="grid grid-flow-col grid-cols-2 grid-rows-4 gap-x-4">
+        {TREND_CONDITIONS.map((c) => {
+          const ok = !snap.trendFailed.includes(c)
+          return (
+            <div
+              key={c}
+              className="flex items-baseline gap-2 border-b border-white/[0.05] py-0.5 text-[12px]"
+            >
+              <span className="truncate text-white/60">{c}</span>
+              <span className="font-number ml-auto shrink-0 text-white/80 tabular-nums">
+                {value[c] ?? ''}
+              </span>
+              <span className={ok ? 'text-success' : 'text-brand-red'}>
+                {ok ? '✓' : '✕'}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+      <div className="font-number mt-1 flex gap-3 text-[12px] text-white/55">
+        <span>펀더멘털 {snap.fundamentalScore}/7</span>
+        <span>훼손 {snap.damageScore}</span>
+        <span>진입 위치 {pct(snap.entryPosition)}</span>
+      </div>
+    </div>
+  )
+}
