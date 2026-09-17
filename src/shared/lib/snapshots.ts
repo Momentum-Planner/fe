@@ -35,6 +35,51 @@ export interface DailyScreening {
   trendPassed: number
   /** 어긋난 조건의 «이름». 정상(8/8)이면 빈 배열이라 한 줄로 끝난다 */
   trendFailed: string[]
+  /**
+   * 트렌드 템플릿의 **원값** (Q12). 요약(`trendPassed`)은 볼 이유가 없었고,
+   * 볼 이유는 그 요약을 만든 값에 있다.
+   *
+   * ⚠️ 백엔드 `DailyScreeningResult` 가 이 값을 쌓는지 아직 모른다 —
+   *    안 쌓으면 그날 값은 사후에 못 되살린다 (F4).
+   */
+  trend: TrendRaw
+  /** 펀더멘털의 **원값** — 점수(0~7) 대신 세 분기 증가율 (Q12) */
+  fundamentals: FundamentalsRaw
+}
+
+/** 트렌드 템플릿 8조건이 재는 원값. 1·2·4 는 선의 순서, 3 은 기울기, 5·6·7 은 숫자다 */
+export interface TrendRaw {
+  close: number
+  ma50: number
+  ma150: number
+  ma200: number
+  /** 200일선이 몇 달째 오르고 있나 (조건 3) */
+  ma200RisingMonths: number
+  /** 52주 저점 대비 % (조건 5) */
+  fromLow52: number
+  /** 52주 고점 대비 % — 고점 아래면 음수 (조건 6) */
+  fromHigh52: number
+  /** RS 백분위 (조건 7) */
+  rs: number
+  /** RS 추세가 몇 주째 오르고 있나. 내리고 있으면 음수 */
+  rsTrendWeeks: number
+}
+
+/** 한 분기 — 전년 같은 분기 대비 증가율 % */
+export interface FundamentalQuarter {
+  /** 예: 26.1Q */
+  label: string
+  epsGrowth: number
+  revenueGrowth: number
+  /** 마진율 % */
+  margin: number
+}
+
+export interface FundamentalsRaw {
+  /** 이 값의 근거 공시일 (LocalDate). 잠정 실적은 안 쓴다 (④-0) */
+  disclosedAt: string
+  /** 오래된 것 → 최근. 세 분기 관측 창 (①-2) */
+  quarters: FundamentalQuarter[]
 }
 /**
  * 트렌드 템플릿 8조건 (①-1 게이트). **이름이 여기 있는 이유** — 스크리닝 목이

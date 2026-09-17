@@ -352,7 +352,11 @@ describe('계획 폐기와 삭제', () => {
     recordCount: number
     quantity: number
     stopPrice: number
-    snapshot: { date: string }
+    snapshot: {
+      date: string
+      trend: { close: number }
+      fundamentals: { quarters: unknown[] }
+    }
   }
   const list = async () =>
     ((await get('/api/v1/plans')).data as { plans: { planId: number }[] }).plans
@@ -369,9 +373,8 @@ describe('계획 폐기와 삭제', () => {
         stopPrice: 1_150_000,
         quantity: 5,
         memo: '',
-        raiseAtR: 2,
+        raise: { kind: 'R', r: 2 },
         trail50: false,
-        backstop: false,
         previousPlanId: null,
         ...over,
       })
@@ -386,9 +389,25 @@ describe('계획 폐기와 삭제', () => {
     expect((await list()).some((x) => x.planId === p.planId)).toBe(true)
   })
 
-  it('스냅샷은 «서버가» 붙인다 — 입력으로 받지 않는다 (F4)', async () => {
-    const p = await fresh({ snapshotDate: '2026-09-08' })
-    expect(p.snapshot.date).toBe('2026-09-08')
+  it('스냅샷은 «고른 날짜»의 행을 서버가 붙인다 — 값은 입력으로 받지 않는다 (F4 · Q11 A)', async () => {
+    const rows = (
+      (await get('/api/v1/stocks/000660/screening')).data as {
+        results: { date: string }[]
+      }
+    ).results
+    const day = rows.at(-3)!.date
+    const p = await fresh({ snapshotDate: day })
+    expect(p.snapshot.date).toBe(day)
+    // 원값이 같이 붙는다 (Q12)
+    expect(p.snapshot.trend.close).toBeGreaterThan(0)
+    expect(p.snapshot.fundamentals.quarters).toHaveLength(3)
+  })
+
+  it('Q12 계획 기본값에 표본 수가 온다 — 백스톱을 고를 수 있는지가 여기서 갈린다', async () => {
+    const d = (await get('/api/v1/stocks/000660/plan-defaults')).data as {
+      sampleCount: number
+    }
+    expect(d.sampleCount).toBeGreaterThanOrEqual(0)
   })
 
   it('폐기하면 «남는다» — 상태와 사유만 바뀐다', async () => {
@@ -537,6 +556,26 @@ describe('스크리닝 판정 목록', () => {
     expect(cut.every((r) => r.date >= mid)).toBe(true)
   })
 
+  it('Q12 원값을 같이 준다 — 트렌드는 캔들에서, 펀더멘털은 세 분기', async () => {
+    type Raw = Row & {
+      trend: { close: number; ma50: number; ma150: number; ma200: number }
+      fundamentals: { disclosedAt: string; quarters: { label: string }[] }
+    }
+    const rows = (await list()) as Raw[]
+    const last = rows.at(-1)!
+    const candles = (
+      (await get('/api/v1/stocks/000660/chart/daily')).data as {
+        candles: { tradeDate: string; closePrice: number }[]
+      }
+    ).candles
+    const bar = candles.find((c) => c.tradeDate === last.date)!
+    // 차트와 «같은 값»이어야 화면이 한 이야기를 한다
+    expect(last.trend.close).toBe(bar.closePrice)
+    expect(last.fundamentals.quarters).toHaveLength(3)
+    // 공시일은 그날보다 앞선다 — 잠정 실적은 안 쓴다 (④-0)
+    expect(last.fundamentals.disclosedAt <= last.date).toBe(true)
+  })
+
   it('같은 종목은 «매번 같은» 판정을 준다 (seed 고정)', async () => {
     const a = await list()
     const b = await list()
@@ -603,9 +642,8 @@ describe('④ 계획의 불변식', () => {
       stopPrice: Math.round(cash * 0.97),
       quantity: 2, // 현금의 두 배가 든다
       memo: '',
-      raiseAtR: null,
+      raise: { kind: 'R', r: 2 },
       trail50: false,
-      backstop: false,
       previousPlanId: null,
     })
     /**

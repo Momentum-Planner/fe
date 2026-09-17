@@ -23,9 +23,8 @@ const BLANK: PlanCreate = {
   stopPrice: 1_150_000,
   quantity: 5,
   memo: '',
-  raiseAtR: 2,
+  raise: { kind: 'R', r: 2 },
   trail50: false,
-  backstop: false,
   previousPlanId: null,
 }
 
@@ -35,7 +34,7 @@ describe('planApi — 본문이 실제로 나간다', () => {
     expect(p.entryPrice).toBe(1_200_000)
     expect(p.stopPrice).toBe(1_150_000)
     expect(p.quantity).toBe(5)
-    expect(p.plannedStop.raiseAtR).toBe(2)
+    expect(p.plannedStop.raise).toEqual({ kind: 'R', r: 2 })
   })
 
   it('update 가 «실제로 고친다»', async () => {

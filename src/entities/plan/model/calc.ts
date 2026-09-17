@@ -1,3 +1,6 @@
+import { ENTRY_STATE_LABEL } from './types'
+import type { EntryState, StopRaise } from './types'
+
 /**
  * 계획의 «산출값» — ④-1 의 ㉢ 을 계산한다.
  *
@@ -72,3 +75,36 @@ export const needCash = (entryPrice: number, quantity: number) =>
 /** 진입가 − 손절가. 실행될 때 박히고 그 뒤로 안 변한다 (③-2-1) */
 export const oneR = (entryPrice: number, stopPrice: number) =>
   entryPrice - stopPrice
+
+/**
+ * 스톱 상향이 «발동하는 가격» — 차트 위쪽 면(+R)이 여기까지 칠해진다 (Q12).
+ *
+ * ```text
+ * R    진입가 + r × 1R
+ * AVG  진입가 × (1 + 평균수익률)       평균수익률이 없으면 null
+ * ```
+ * 1R 이 0 이하(손절가가 진입가 위)면 R 로는 잴 수 없어 null 이다.
+ *
+ * ⚠️ **실행된 계획은 `initialStopWidth` 로 잰다.** 1R 은 실행될 때 박히고 손절가가
+ *    올라가도 안 변한다 (③-2-1). 본전으로 올린 계획은 진입가 = 손절가라
+ *    지금 값으로 재면 1R 이 0 이 되어 위쪽 면이 사라진다.
+ */
+export const raiseTriggerPrice = (
+  entryPrice: number,
+  stopPrice: number,
+  raise: StopRaise,
+  avgWinPct: number | null,
+  initialStopWidth: number | null = null,
+): number | null => {
+  if (raise.kind === 'AVG')
+    return avgWinPct == null ? null : entryPrice * (1 + avgWinPct / 100)
+  const r = initialStopWidth ?? oneR(entryPrice, stopPrice)
+  return r > 0 ? entryPrice + raise.r * r : null
+}
+
+/**
+ * 계획 이름 — **자동으로 붙인다** (Q11 A). 진입 상태 + 진입가.
+ * 같은 종목의 시나리오가 사슬에서 이 이름으로 갈린다: 「돌파 68,200」 · 「눌림 66,000」.
+ */
+export const autoPlanTitle = (entryState: EntryState, entryPrice: number) =>
+  `${ENTRY_STATE_LABEL[entryState]} ${entryPrice.toLocaleString('ko-KR')}`

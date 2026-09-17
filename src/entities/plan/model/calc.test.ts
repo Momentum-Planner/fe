@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  autoPlanTitle,
   clampExposure,
   needCash,
   oneR,
   ownRisk,
+  raiseTriggerPrice,
   riskAfter,
   stopWidthPct,
 } from './calc'
@@ -81,5 +83,54 @@ describe('③-2-1 1R 은 진입가 − 손절가다', () => {
 describe('④-3 필요 현금은 계획마다 «따로»다', () => {
   it('진입 예상가 × 수량', () => {
     expect(needCash(68_200, 100)).toBe(6_820_000)
+  })
+})
+
+describe('Q12 스톱 상향이 발동하는 가격 — 차트 위쪽 면이 여기까지다', () => {
+  it('R 은 진입가 + r × 1R', () => {
+    // 1R = 38,000
+    expect(
+      raiseTriggerPrice(1_100_000, 1_062_000, { kind: 'R', r: 2 }, null),
+    ).toBe(1_176_000)
+    expect(
+      raiseTriggerPrice(1_100_000, 1_062_000, { kind: 'R', r: 2.5 }, null),
+    ).toBe(1_195_000)
+  })
+
+  it('백스톱은 진입가 × (1 + 평균수익률)', () => {
+    expect(
+      raiseTriggerPrice(1_000_000, 950_000, { kind: 'AVG' }, 4.72),
+    ).toBeCloseTo(1_047_200, 0)
+  })
+
+  it('평균수익률이 없으면 백스톱 가격도 없다 — 통계 5건 전', () => {
+    expect(raiseTriggerPrice(1_000_000, 950_000, { kind: 'AVG' }, null)).toBe(
+      null,
+    )
+  })
+
+  it('실행된 계획은 «처음 1R» 로 잰다 — 본전으로 올려도 면이 안 사라진다 (③-2-1)', () => {
+    expect(
+      raiseTriggerPrice(
+        1_120_000,
+        1_120_000,
+        { kind: 'R', r: 2 },
+        null,
+        84_000,
+      ),
+    ).toBe(1_288_000)
+  })
+
+  it('1R 이 0 이하면 R 로는 못 잰다', () => {
+    expect(
+      raiseTriggerPrice(1_000_000, 1_000_000, { kind: 'R', r: 2 }, null),
+    ).toBe(null)
+  })
+})
+
+describe('Q11 A 계획 이름은 자동이다 — 진입 상태 + 진입가', () => {
+  it('「돌파 68,200」', () => {
+    expect(autoPlanTitle('BREAKOUT', 68_200)).toBe('돌파 68,200')
+    expect(autoPlanTitle('PULLBACK', 66_000)).toBe('눌림 66,000')
   })
 })

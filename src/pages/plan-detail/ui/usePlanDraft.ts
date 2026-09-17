@@ -3,9 +3,10 @@ import {
   needCash as calcNeedCash,
   oneR,
   riskAfter as calcRiskAfter,
+  sameStopRaise,
   stopWidthPct,
 } from '@/entities/plan'
-import type { PlanDetail, PlanPatch } from '@/entities/plan'
+import type { PlanDetail, PlanPatch, StopRaise } from '@/entities/plan'
 
 /**
  * 편집 중인 계획.
@@ -25,9 +26,9 @@ export type Draft = {
   stopPrice: number
   quantity: number
   memo: string
-  raiseAtR: number | null
+  /** 스톱 상향 — 필수 (Q12) */
+  raise: StopRaise
   trail50: boolean
-  backstop: boolean
 }
 
 const fromPlan = (p: PlanDetail): Draft => ({
@@ -36,9 +37,8 @@ const fromPlan = (p: PlanDetail): Draft => ({
   stopPrice: p.stopPrice,
   quantity: p.quantity,
   memo: p.memo,
-  raiseAtR: p.plannedStop.raiseAtR,
+  raise: p.plannedStop.raise,
   trail50: p.plannedStop.trail50,
-  backstop: p.plannedStop.backstop,
 })
 
 /** 안 바뀐 값은 안 보낸다 — PATCH 는 「고친 것」만 담는다 */
@@ -49,9 +49,8 @@ function diff(p: PlanDetail, d: Draft): PlanPatch {
   if (d.stopPrice !== p.stopPrice) out.stopPrice = d.stopPrice
   if (d.quantity !== p.quantity) out.quantity = d.quantity
   if (d.memo !== p.memo) out.memo = d.memo
-  if (d.raiseAtR !== p.plannedStop.raiseAtR) out.raiseAtR = d.raiseAtR
+  if (!sameStopRaise(d.raise, p.plannedStop.raise)) out.raise = d.raise
   if (d.trail50 !== p.plannedStop.trail50) out.trail50 = d.trail50
-  if (d.backstop !== p.plannedStop.backstop) out.backstop = d.backstop
   return out
 }
 

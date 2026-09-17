@@ -10,7 +10,7 @@ import {
   planDefaults,
   toListItem,
 } from './data/plans'
-import { filterRecords, makeStats } from './data/tradeRecords'
+import { TRADE_RECORDS, filterRecords, makeStats } from './data/tradeRecords'
 import {
   STOCKS,
   makeBases,
@@ -334,7 +334,11 @@ export const handlers = [
   http.get('/api/v1/stocks/:code/plan-defaults', ({ params }) => {
     const code = String(params.code)
     const last = at(makeCandles(code), -1).closePrice
-    return ok(planDefaults(code, last))
+    return ok({
+      ...planDefaults(code, last),
+      // 매도 기록 하나가 한 건이다 (⑥). 5건 전에는 「백스톱 : 평균수익률」을 못 고른다
+      sampleCount: TRADE_RECORDS.filter((r) => r.side === 'SELL').length,
+    })
   }),
 
   // 종목 포지션 (③). ④의 자료가 「스냅샷 + ③의 손절가·위험노출·보유 수량 + 계좌 총액」이라

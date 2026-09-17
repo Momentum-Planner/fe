@@ -4,7 +4,10 @@ import type {
   PlanListItem,
   PlanSnapshot,
   StopCandidate,
+  StopRaise,
 } from '@/entities/plan'
+import { makeScreening, rawOn } from './screening'
+import { stockName } from './stocks'
 
 /**
  * 계획 목 데이터.
@@ -35,20 +38,26 @@ const ACCOUNT_CASH = 21_500_000
  */
 export const STOP_LIMIT_BASIS = { avgWin: 4.72, targetRR: 2 }
 
-/** 손절 구간 한 벌을 만든다. v1 은 비중 100 · 순번 1 하나뿐이다. */
+const R2: StopRaise = { kind: 'R', r: 2 }
+const AVG: StopRaise = { kind: 'AVG' }
+
+/**
+ * 손절 구간 한 벌을 만든다. v1 은 비중 100 · 순번 1 하나뿐이다.
+ *
+ * ⚠️ 스톱 상향이 **필수가 되기 전**(Q12) 세운 씨앗은 상향이 꺼져 있었다.
+ *    지금은 «끔»이 없으므로 그런 씨앗은 가장 흔한 2R 로 채운다.
+ */
 const singleStop = (
   stopPrice: number,
-  opts: {
-    raiseAtR?: number | null
-    trail50?: boolean
-    backstop?: boolean
-  } = {},
+  opts: { raise?: StopRaise; trail50?: boolean } = {},
 ) => ({
   bands: [{ order: 1, stopPrice, weight: 100 }],
-  raiseAtR: opts.raiseAtR ?? null,
+  raise: opts.raise ?? R2,
   trail50: opts.trail50 ?? false,
-  backstop: opts.backstop ?? false,
 })
+
+/** 손으로 박는 스냅샷 — 원값(트렌드 · 펀더멘털)은 캔들에서 «만들어» 붙인다 */
+type SnapshotSeed = Omit<PlanSnapshot, 'trend' | 'fundamentals'>
 
 /**
  * 스크리닝 스냅샷 — **종목 × 일자로 쌓인 행 하나**다 (DailyScreeningResult).
@@ -167,7 +176,7 @@ const SNAPSHOTS = {
     trendPassed: 6,
     trendFailed: ['200일선 상승', 'RS 70 이상'],
   },
-} satisfies Record<number, PlanSnapshot>
+} satisfies Record<number, SnapshotSeed>
 
 type Seed = Omit<
   PlanDetail,
@@ -186,7 +195,10 @@ type Seed = Omit<
   | 'riskBefore'
   // 후보 선은 진입가·손절가·상한에서 «만들어» 진다. 손으로 박지 않는다
   | 'stopCandidates'
-> & { filled: number }
+  // 목록용 스톱 상향은 plannedStop 에 이미 있다
+  | 'raise'
+  | 'snapshot'
+> & { filled: number; snapshot: SnapshotSeed }
 
 const SEEDS: Seed[] = [
   // ── SK하이닉스 사슬 ──  7 ✕폐기   8 실행완료 ──→ 1 실행중 ──┬─→ 6 매도(대기)
@@ -221,7 +233,7 @@ const SEEDS: Seed[] = [
     initialStopWidth: 41_000,
     // 사슬의 시작. 이어받은 것이 없다
     previousPlanId: null,
-    plannedStop: singleStop(962_000, { raiseAtR: 2 }),
+    plannedStop: singleStop(962_000, { raise: R2 }),
     plannedPosition: { quantity: 10, riskBefore: 0, riskAfter: 0 },
     snapshot: SNAPSHOTS[88790],
     closeReason: null,
@@ -252,7 +264,7 @@ const SEEDS: Seed[] = [
     // 추가매수로 12번을 «이어받았다». 12번은 그때 실행 완료로 닫혔다
     previousPlanId: 12,
     // 2R 에서 본전으로 올라갔다. 1R 은 «안» 따라 움직인다
-    plannedStop: singleStop(1_120_000, { raiseAtR: 2, trail50: true }),
+    plannedStop: singleStop(1_120_000, { raise: R2, trail50: true }),
     plannedPosition: { quantity: 15, riskBefore: 0.9, riskAfter: 0 },
     snapshot: SNAPSHOTS[90124],
     closeReason: null,
@@ -288,7 +300,7 @@ const SEEDS: Seed[] = [
     entryPrice: 68_200,
     previousPlanId: null,
     initialStopWidth: null,
-    plannedStop: singleStop(64_100, { raiseAtR: 2 }),
+    plannedStop: singleStop(64_100, { raise: R2 }),
     plannedPosition: { quantity: 400, riskBefore: 1.6, riskAfter: 0 },
     snapshot: SNAPSHOTS[90455],
     closeReason: null,
@@ -328,7 +340,7 @@ const SEEDS: Seed[] = [
     entryPrice: 55_000,
     previousPlanId: null,
     initialStopWidth: 3_300,
-    plannedStop: singleStop(58_000, { raiseAtR: 2, backstop: true }),
+    plannedStop: singleStop(58_000, { raise: AVG }),
     plannedPosition: { quantity: 300, riskBefore: 0.4, riskAfter: 0 },
     snapshot: SNAPSHOTS[88790],
     closeReason: null,
@@ -368,7 +380,7 @@ const SEEDS: Seed[] = [
     entryPrice: 1_010_000,
     initialStopWidth: 24_000,
     previousPlanId: 8,
-    plannedStop: singleStop(986_000, { raiseAtR: 2, trail50: true }),
+    plannedStop: singleStop(986_000, { raise: R2, trail50: true }),
     plannedPosition: { quantity: 8, riskBefore: 0.6, riskAfter: 0 },
     snapshot: SNAPSHOTS[88790],
     closeReason: null,
@@ -396,7 +408,7 @@ const SEEDS: Seed[] = [
     entryPrice: 1_048_000,
     initialStopWidth: 24_000,
     previousPlanId: 10,
-    plannedStop: singleStop(1_024_000, { raiseAtR: 2, trail50: true }),
+    plannedStop: singleStop(1_024_000, { raise: R2, trail50: true }),
     plannedPosition: { quantity: 6, riskBefore: 0.6, riskAfter: 0 },
     snapshot: SNAPSHOTS[88790],
     closeReason: null,
@@ -424,7 +436,7 @@ const SEEDS: Seed[] = [
     entryPrice: 1_082_000,
     initialStopWidth: 24_000,
     previousPlanId: 11,
-    plannedStop: singleStop(1_058_000, { raiseAtR: 2, trail50: true }),
+    plannedStop: singleStop(1_058_000, { raise: R2, trail50: true }),
     plannedPosition: { quantity: 5, riskBefore: 0.6, riskAfter: 0 },
     snapshot: SNAPSHOTS[88790],
     closeReason: null,
@@ -501,7 +513,7 @@ const SEEDS: Seed[] = [
     entryPrice: 1_180_000,
     initialStopWidth: null,
     previousPlanId: 1,
-    plannedStop: singleStop(1_120_000, { raiseAtR: 2, trail50: true }),
+    plannedStop: singleStop(1_120_000, { raise: R2, trail50: true }),
     plannedPosition: { quantity: 6, riskBefore: 0.9, riskAfter: 0 },
     snapshot: SNAPSHOTS[90455],
     closeReason: null,
@@ -665,8 +677,11 @@ function build(s: Seed): PlanDetail {
     entryState: s.snapshot.entryState,
     fundamentalScore: s.snapshot.fundamentalScore,
     riskBefore: s.plannedPosition.riskBefore,
+    raise: s.plannedStop.raise,
     stopCandidates: stopCandidates(s),
     plannedPosition: { ...s.plannedPosition, riskAfter: riskAfter(s) },
+    // 원값은 «그 종목 · 그 날짜»의 캔들에서 만든다 — 손으로 박으면 차트와 어긋난다
+    snapshot: { ...s.snapshot, ...rawOn(s.stockCode, s.snapshot.date) },
   }
 }
 
@@ -689,9 +704,8 @@ export function patchPlan(
     stopPrice?: number
     quantity?: number
     memo?: string
-    raiseAtR?: number | null
+    raise?: StopRaise
     trail50?: boolean
-    backstop?: boolean
   },
 ): PlanDetail | null {
   // ⚠️ `findIndex` + `SEEDS[i]` 로 꺼내면 «인덱스가 유효한지»와 «값이 있는지»가
@@ -712,10 +726,8 @@ export function patchPlan(
         patch.stopPrice != null
           ? [{ order: 1, stopPrice: patch.stopPrice, weight: 100 }]
           : s.plannedStop.bands,
-      raiseAtR:
-        patch.raiseAtR !== undefined ? patch.raiseAtR : s.plannedStop.raiseAtR,
+      raise: patch.raise ?? s.plannedStop.raise,
       trail50: patch.trail50 ?? s.plannedStop.trail50,
-      backstop: patch.backstop ?? s.plannedStop.backstop,
     },
     plannedPosition: {
       ...s.plannedPosition,
@@ -756,24 +768,28 @@ export function createPlan(body: PlanCreate): PlanDetail | 'no-cash' {
   if (body.entryPrice * body.quantity > ACCOUNT_CASH) return 'no-cash'
 
   const siblings = SEEDS.filter((x) => x.stockCode === body.stockCode)
-  /**
-   * **스냅샷은 서버가 붙인다.** 계획은 근거 날짜를 안 받는다 — 계획은 자율적으로
-   * 세우고, 그 시점의 «최신 판정»이 따라 붙는다 (F4 — 사후에 못 만든다).
-   *
-   * ⚠️ 목의 `SNAPSHOTS` 는 종목을 안 들어서 같은 종목 계획에서 거꾸로 찾는다.
-   *    실제로는 `DailyScreeningResult` 를 «종목 × 최신 일자»로 한 행 읽는다.
-   */
   const latest = [...siblings].sort((a, b) =>
     b.snapshot.date.localeCompare(a.snapshot.date),
   )[0]
-  const snapshot = latest?.snapshot ?? SNAPSHOTS[90124]
+  /**
+   * **스냅샷은 사용자가 고른 날짜의 `DailyScreeningResult` 한 행이다** (Q11 A).
+   * 서버가 찾아 붙인다 — 사후에 못 만드는 값이라 입력으로 값을 받지 않는다 (F4).
+   *
+   * 날짜가 없거나 그날 행이 없으면(게이트에 걸린 날) 그 이전 가장 최근 행을 쓴다.
+   */
+  const rows = makeScreening(body.stockCode)
+  const want = body.snapshotDate ?? '9999-12-31'
+  const snapshot =
+    rows.filter((r) => r.date <= want).at(-1) ??
+    latest?.snapshot ??
+    SNAPSHOTS[90124]
 
   const seed: Seed = {
     planId: Math.max(0, ...SEEDS.map((x) => x.planId)) + 1,
     title: body.title,
     stockCode: body.stockCode,
-    // 종목명은 계획이 정하는 값이 아니다 — 같은 종목의 계획에서 받아 온다
-    stockName: latest?.stockName ?? body.stockCode,
+    // 종목명은 계획이 정하는 값이 아니다 — 종목 목록에서 받아 온다
+    stockName: latest?.stockName ?? stockName(body.stockCode),
     // 세운 계획은 «대기»로 난다. 실행 중으로 만드는 것은 체결이다 (⑥)
     status: 'PLANNED',
     writtenAt: new Date().toISOString().slice(0, 10),
@@ -782,9 +798,8 @@ export function createPlan(body: PlanCreate): PlanDetail | 'no-cash' {
     initialStopWidth: null,
     previousPlanId: body.previousPlanId,
     plannedStop: singleStop(body.stopPrice, {
-      raiseAtR: body.raiseAtR,
+      raise: body.raise,
       trail50: body.trail50,
-      backstop: body.backstop,
     }),
     plannedPosition: {
       quantity: body.quantity,
@@ -908,4 +923,5 @@ export const toListItem = (p: PlanDetail): PlanListItem => ({
   previousPlanId: p.previousPlanId,
   entryState: p.snapshot.entryState,
   fundamentalScore: p.snapshot.fundamentalScore,
+  raise: p.plannedStop.raise,
 })

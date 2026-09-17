@@ -5,7 +5,7 @@
  *    msw 목이 유일한 구현이다. 실제 DTO 가 생기면 여기부터 대조한다.
  */
 
-import type { Regime } from '@/shared/lib/snapshots'
+import type { DailyScreening } from '@/shared/lib/snapshots'
 
 /** 계획 상태 넷. 「얼마나 샀나」가 아니라 「아직 들고 있나」가 가른다. */
 export type PlanStatus = 'PLANNED' | 'RUNNING' | 'DONE' | 'CLOSED'
@@ -63,17 +63,50 @@ export interface PlannedStopBand {
 }
 
 /**
+ * 스톱 상향 — **필수다. 넷 중 하나를 고른다** (Q12 · ③-3-1).
+ *
+ * ```text
+ * R    2R · 3R · 직접 입력(R배수)   발동하면 스톱을 본전(매입가 + 수수료 + 세금)으로
+ * AVG  백스톱 : 평균수익률          발동하면 스톱을 평균수익률 자리로
+ * ```
+ *
+ * 💀 백스톱은 원래 따로 켜고 끄는 규칙이었다. 평균수익률을 스톱 상향의 발동 조건으로
+ * 넣자 **발동 조건이 같은 규칙이 둘** 생겼고 옮기는 자리만 달랐다. 그래서 한 계획에는
+ * 본전과 평균수익률 중 **한 방어선만** 건다.
+ *
+ * ⚠️ «끔»이 없다. 차트의 위쪽 면(+R)이 늘 이 값까지 칠해진다.
+ */
+export type StopRaise = { kind: 'R'; r: number } | { kind: 'AVG' }
+
+/** 고르기 쉬운 R 둘. 나머지는 직접 넣는다 */
+export const STOP_RAISE_PRESETS = [2, 3] as const
+
+/**
+ * 백스톱을 고를 수 있는 표본 수. 평균수익률이 표본 5건부터 나온다 (⑦ 표본 경계).
+ * ⚠️ 5 는 책에 근거가 없다 — CLAUDE.md 「검증 대상」.
+ */
+export const AVG_STOP_MIN_SAMPLES = 5
+
+export const stopRaiseLabel = (raise: StopRaise) =>
+  raise.kind === 'AVG' ? '백스톱 : 평균수익률' : `${raise.r}R`
+
+export const sameStopRaise = (a: StopRaise | null, b: StopRaise | null) =>
+  a === b ||
+  (a != null &&
+    b != null &&
+    a.kind === b.kind &&
+    (a.kind === 'AVG' || (b.kind === 'R' && a.r === b.r)))
+
+/**
  * 어디서 자르고 어떻게 올릴지. **한 값객체다** — 둘이 같은 판단이고 같이 바뀐다.
  * 이력이 아니라 「지금 걸린 한 벌」이라 규칙이 발동하면 덮어쓴다.
  */
 export interface PlannedStop {
   bands: PlannedStopBand[]
-  /** 스톱상향 임계 R. null 이면 끔 */
-  raiseAtR: number | null
+  /** 스톱 상향. 필수 */
+  raise: StopRaise
   /** 50일선 트레일링 */
   trail50: boolean
-  /** 백스톱 */
-  backstop: boolean
 }
 
 export interface PlannedPosition {
@@ -87,36 +120,11 @@ export interface PlannedPosition {
 /**
  * 계획 시점의 종목 상태. 계획이 복사하지 않고 `dailyScreeningResultId` 로 참조한다 —
  * 그 행이 종목 × 일자로 «쌓이는» 행이라 그날 값이 나중에 안 변한다 (F4).
+ *
+ * **`DailyScreeningResult` 한 행 그대로다.** 따로 정의하면 둘이 어긋난다 —
+ * 계획을 세울 때 날짜로 고른 행이 곧 이 값이 된다 (Q11 A).
  */
-export interface PlanSnapshot {
-  dailyScreeningResultId: number
-  /** 근거로 삼은 판정의 날짜 */
-  date: string
-  entryState: EntryState
-  /** 펀더멘털 점수 0~7 */
-  fundamentalScore: number
-  /**
-   * 훼손 점수 0~2.
-   * ⚠️ **이 값만 출처가 다르다** — ⑤-3 가 «장중 실시간»으로 찍는다 (④-0).
-   * 나머지 스냅샷 값은 전부 `date` 의 배치 한 행에서 온다.
-   */
-  damageScore: number
-  /** 그 훼손 점수를 찍은 시각. 날짜가 다른 값에만 날짜를 붙인다 */
-  damageAt: string
-  /** 진입 위치 % — 피봇 대비 */
-  entryPosition: number
-  /** 레짐 (④-0). 종목 상세가 뱃지로 띄우던 그 값이다 */
-  regime: Regime
-  /** 트렌드 템플릿 8조건 중 통과 개수 */
-  trendPassed: number
-  /**
-   * 어긋난 조건의 «이름». 8칸 도트를 안 쓰는 이유 —
-   * 도트는 「세 번째 칸이 왜 비었나」를 다시 묻게 만든다. ①-1 게이트가 8/8 을
-   * 요구하므로 계획이 선 종목은 대개 8/8 이고, **어긋난 것만 이름으로** 쓰면
-   * 정상일 때는 한 줄로 끝난다.
-   */
-  trendFailed: string[]
-}
+export type PlanSnapshot = DailyScreening
 
 /** 목록 한 줄. 싱글이 가진 것 중 «줄 세우는 데 필요한 것»만 남긴 것이다. */
 export interface PlanListItem {
@@ -157,6 +165,10 @@ export interface PlanListItem {
   fundamentalScore: number
   /** 사슬을 그리려면 목록에도 있어야 한다 */
   previousPlanId: number | null
+  /**
+   * 스톱 상향 — 사슬 마디에 올렸을 때 그 계획의 위쪽 면(+R)까지 그리려면 목록에도 있어야 한다 (Q12 브러싱).
+   */
+  raise: StopRaise
 }
 
 /**
@@ -243,10 +255,9 @@ export interface PlanPatch {
   stopPrice?: number
   quantity?: number
   memo?: string
-  /** 스톱 상향 임계 R. null 이면 끔 */
-  raiseAtR?: number | null
+  /** 스톱 상향. 필수라 «끄는» 값이 없다 — 바꿀 수만 있다 */
+  raise?: StopRaise
   trail50?: boolean
-  backstop?: boolean
 }
 
 /**
@@ -259,27 +270,23 @@ export interface PlanPatch {
  */
 export interface PlanCreate {
   stockCode: string
+  /** 화면이 «자동으로» 붙인다 — 진입 상태 + 진입가 (Q11 A · `autoPlanTitle`) */
   title: string
   /**
-   * ⚠️ **근거 날짜를 «안 받는다».** ④는 *「직전 영업일이 기본이고 사용자가 고를
-   *    수 있다」* 인데, 고르게 하려면 그날의 트렌드 8조건·펀더 세 축·VCP·RS를 다
-   *    보여줘야 한다 — 근거가 25개 값이라 계획을 «세우는» 칸이 그걸 못 진다.
+   * 스냅샷 날짜 (LocalDate). **사용자가 고른다** (Q11 A · ④ 「사용자가 고를 수 있는
+   * 스냅샷 날짜」). 서버는 이 날짜의 `DailyScreeningResult` 를 찾아 붙인다.
    *
-   *    **계획은 자율적으로 세운다.** 진입가·스톱가격·수량이면 계획이 성립한다
-   *    (④-1). 스냅샷은 서버가 «그 시점의 최신 판정»을 붙인다 — 사후에 못 만드는
-   *    값이라 붙이기는 해야 한다 (F4).
-   *
-   *    ⚠️ 고르는 길은 **계획 갱신**을 만들 때 다시 본다 — 「무엇을 보여줘야
-   *       개선이 되는가」가 그때의 질문이라 근거의 모양도 거기서 정해진다.
+   * ⚠️ 없으면 서버가 가장 최근 행을 붙인다 — 옛 폼이 날짜를 안 보내던 때의 길이다.
+   *    Q11 폼이 들어가면 늘 보낸다.
    */
+  snapshotDate?: string
   entryPrice: number
   /** v1 은 구간이 하나다 — 비중 100 · 순번 1 (④-1-2) */
   stopPrice: number
   quantity: number
   memo: string
-  raiseAtR: number | null
+  raise: StopRaise
   trail50: boolean
-  backstop: boolean
   /** 승계 — 추가매수로 이어 세우는 계획이면 이전 계획을 가리킨다 (④-2) */
   previousPlanId: number | null
 }
@@ -355,6 +362,11 @@ export interface PlanDefaults {
   /** 그 상한이 «어디서 나왔나». 통계가 없으면 null 이고 10% 가 상한이다 */
   stopLimitBasis: { avgWin: number; targetRR: number } | null
   stopCandidates: StopCandidate[]
+  /**
+   * 통계의 표본 수 — 매도 기록 하나가 한 건이다 (⑥).
+   * `AVG_STOP_MIN_SAMPLES` 보다 적으면 「백스톱 : 평균수익률」을 못 고른다.
+   */
+  sampleCount: number
 }
 
 export interface PlanListResponse {
