@@ -413,3 +413,17 @@ export interface TrendPoint {
  * 못 넘긴다 — *「나눠서 비교하면 표본을 또 가른다」* (⑦).
  */
 export type KpiTrends = Partial<Record<KpiKey, TrendPoint[]>>
+
+/** 새 체결 (⑥ · Q15) — 계좌 총액은 서버가 계획/직전 값에서 복사한다 */
+export interface NewTradeRecord {
+  stockCode: string
+  side: TradeSide
+  price: number
+  quantity: number
+  /** 체결일 `YYYY-MM-DD` */
+  filledAt: string
+  /** `null` 이 「계획에 없음」 */
+  planId: number | null
+  sellReasons: SellReason[]
+  reason: string
+}

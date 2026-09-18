@@ -46,20 +46,34 @@ import {
   inPeriod,
   isClosed,
   monthlyFlow,
-  recordRows,
   riskStat,
   summarize,
 } from '../model/aggregate'
 import type { Period } from '../model/aggregate'
 import { Overview } from './Overview'
-import { RecordList } from './RecordList'
+import type { PlanScope } from './Overview'
 
 export function StatsPage() {
   const { data: records, isError } = useTradeList()
   const [period, setPeriod] = useState<Period | null>(null)
 
   /** **세는 단위는 매도 기록 하나다** (⑥) */
-  const closed = useMemo(() => (records ?? []).filter(isClosed), [records])
+  /**
+   * 계획 있음 · 없음으로 요약 판 전체를 거른다 (Q22) — 계획 없는 매매는 거래 계획 페이지에
+   * 서지 않고 여기서 본다. 성과 넷 · 차트 · 위험 · 최대 둘이 함께 걸린다.
+   */
+  const [planScope, setPlanScope] = useState<PlanScope>('ALL')
+  const closed = useMemo(
+    () =>
+      (records ?? [])
+        .filter(isClosed)
+        .filter(
+          (r) =>
+            planScope === 'ALL' ||
+            (planScope === 'NONE') === (r.planId === null),
+        ),
+    [records, planScope],
+  )
   /** ① 이 보는 집합. ② ③ 은 위의 `closed` 를 그대로 본다 */
   const picked = useMemo(
     () => closed.filter((r) => inPeriod(r, period)),
@@ -67,7 +81,6 @@ export function StatsPage() {
   )
 
   const flow = useMemo(() => monthlyFlow(closed), [closed])
-  const rows = useMemo(() => recordRows(records ?? []), [records])
   const sum = useMemo(() => summarize(picked), [picked])
   const risk = useMemo(() => riskStat(picked), [picked])
 
@@ -105,6 +118,8 @@ export function StatsPage() {
        * (Q15). 기간을 고르는 손과 값이 바뀌는 자리가 한 판에 있다.
        */}
       <Overview
+        planScope={planScope}
+        onPlanScope={setPlanScope}
         flow={flow}
         period={period}
         onPeriod={setPeriod}
@@ -113,8 +128,6 @@ export function StatsPage() {
         sum={sum}
         risk={risk}
       />
-
-      <RecordList rows={rows} />
     </Shell>
   )
 }

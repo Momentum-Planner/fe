@@ -26,6 +26,8 @@ const p = (
   previousPlanId,
   goals: [],
   initialStopWidth: null,
+  realized: null,
+  realizedPct: null,
 })
 
 const SK = [

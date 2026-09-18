@@ -1,5 +1,7 @@
 import { api } from '@/shared/api'
 import type {
+  NewTradeRecord,
+  TradeRecord,
   TradeListFilters,
   TradeListResponse,
   TradeStats,
@@ -21,6 +23,27 @@ function toSearchParams(f: TradeListFilters) {
 }
 
 export const tradeRecordApi = {
+  /** 체결 하나를 적는다 (F2) — 체결마다 계획을 지정한다 (F3) */
+  create: (body: NewTradeRecord) => api.post<TradeRecord>(BASE, body),
+
+  /**
+   * 체결 하나에 계획을 붙이거나 뗀다 (⑥ · Q15 · Q21) — `planId: null` 이 「계획에 없음」이다.
+   *
+   * ⚠️ 도메인 노트 5-4 — `planId` 가 바뀌면 계좌 총액 복사와 R배수 · 위험노출%를
+   *    다시 계산해야 한다. **지금 목은 꼬리표만 바꾼다.**
+   */
+  assignPlan: (recordId: number, planId: number | null) =>
+    api.patch<TradeRecord>(`${BASE}/${recordId}`, { planId }),
+
+  /** 체결 하나를 고친다 — 가격 · 수량 · 체결일 (Q23 ⑤) */
+  update: (
+    recordId: number,
+    patch: { price?: number; quantity?: number; filledAt?: string },
+  ) => api.patch<TradeRecord | null>(`${BASE}/${recordId}`, patch),
+
+  /** 체결 하나를 지운다 — 소프트 삭제 (Q23 ⑤) */
+  remove: (recordId: number) => api.delete<null>(`${BASE}/${recordId}`),
+
   getList: (filters: TradeListFilters = {}) =>
     api.get<TradeListResponse>(BASE, { searchParams: toSearchParams(filters) }),
 

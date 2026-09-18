@@ -18,6 +18,8 @@ const item = (over: Partial<PlanListItem>): PlanListItem => ({
   recordCount: 1,
   entryState: 'BREAKOUT',
   fundamentalScore: 5,
+  realized: null,
+  realizedPct: null,
   previousPlanId: null,
   goals: [],
   initialStopWidth: null,

@@ -1,5 +1,13 @@
 export { tradeRecordApi } from './api/tradeRecordApi'
-export { tradeRecordKeys, useTradeList, useTradeStats } from './model/queries'
+export {
+  tradeRecordKeys,
+  useAssignPlan,
+  useCreateRecord,
+  useDeleteRecord,
+  useUpdateRecord,
+  useTradeList,
+  useTradeStats,
+} from './model/queries'
 export {
   RISK_BANDS,
   RISK_BAND_LABEL,

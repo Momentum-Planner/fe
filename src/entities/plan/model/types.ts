@@ -232,6 +232,13 @@ export interface PlanListItem {
    * 사슬에서 고른 계획의 위쪽 면(+R)을 그리려면 목록에도 있어야 한다 (③-2-1).
    */
   initialStopWidth: number | null
+  /**
+   * 실현 손익(원) — 이 계획에 붙은 매도들의 합. **매도가 없으면 null** (0 은 본전이다).
+   * 거래 계획 목록이 결과로 줄 세우는 값이다 (Q20).
+   */
+  realized: number | null
+  /** 실현 수익률 % — 실현 손익 ÷ (평단 × 매도 수량). 매도가 없으면 null */
+  realizedPct: number | null
 }
 
 /**

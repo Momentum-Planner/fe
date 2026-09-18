@@ -8,6 +8,7 @@ import {
   useUpdatePlan,
 } from '@/entities/plan'
 import type { PlanDetail } from '@/entities/plan'
+import { FillRow } from './FillRow'
 import { RLadder, RTerm } from './RHelp'
 import { StopLadderEditor, StopLadderView } from './StopLadder'
 import { StopPickPanel } from './StopPickPanel'
@@ -410,30 +411,31 @@ export function PlanCard({
           tail={
             <span className="font-number text-[11px] font-normal text-white/50">
               {plan.recordCount}건 · 체결률 {Math.round(plan.fillRate * 100)}%
+              {/* 「계획 보기」 로 들어오면 결과까지 닿는다 (Q20) */}
+              {plan.realized !== null && (
+                <span
+                  className={`ml-2 text-[12px] font-medium ${
+                    plan.realized > 0
+                      ? 'text-candle-up'
+                      : plan.realized < 0
+                        ? 'text-candle-down'
+                        : 'text-white/60'
+                  }`}
+                >
+                  실현 {plan.realized > 0 ? '+' : plan.realized < 0 ? '−' : ''}
+                  {won(Math.abs(plan.realized))}원
+                  {plan.realizedPct !== null &&
+                    ` · ${plan.realizedPct > 0 ? '+' : plan.realizedPct < 0 ? '−' : ''}${Math.abs(plan.realizedPct).toFixed(2)}%`}
+                </span>
+              )}
             </span>
           }
         >
           <ActualVsPlan plan={plan} />
           <div className="mt-1 flex flex-col">
             {plan.records.map((r) => (
-              <Pair
-                key={r.recordId}
-                className="font-number py-0.5 text-[12px]"
-                left={
-                  <div className="flex justify-between">
-                    <span className="text-white/40">{r.filledAt.slice(5)}</span>
-                    <span className="text-white/55">
-                      {r.side === 'BUY' ? '매수' : '매도'}
-                    </span>
-                  </div>
-                }
-                right={
-                  <div className="flex justify-between">
-                    <span className="text-white/85">{won(r.price)}</span>
-                    <span className="text-white/55">{r.quantity}주</span>
-                  </div>
-                }
-              />
+              // 고치기 · 지우기 (Q23 ⑤)
+              <FillRow key={r.recordId} r={r} />
             ))}
           </div>
           {/* 체결이 붙으면 폐기도 삭제도 «없다» — 없는 이유를 여기서 말한다 (4장 ⑤) */}

@@ -1,5 +1,5 @@
 import { AVG_STOP_MIN_SAMPLES, ENTRY_STATE_LABEL } from './types'
-import type { EntryState, StopPick, StopPickKind } from './types'
+import type { EntryState, PlanRecord, StopPick, StopPickKind } from './types'
 
 /**
  * 계획의 «산출값» — ④-1 의 ㉢ 을 계산한다.
@@ -244,3 +244,29 @@ export const priceConflict = (
  */
 export const autoPlanTitle = (entryState: EntryState, entryPrice: number) =>
   `${ENTRY_STATE_LABEL[entryState]} ${entryPrice.toLocaleString('ko-KR')}`
+
+/**
+ * 실현 손익 — **이 계획의 체결만으로** 낸다 (Q20).
+ *
+ * 평단은 이 계획의 매수들이다. 승계받은 계획처럼 매수가 없으면 `entryPrice` 로
+ * 잰다 — 물량은 종목이 들고 있고(④-2) 이 목은 이전 평단을 모른다.
+ * 매도가 없으면 둘 다 `null` — 0 으로 적으면 본전으로 읽힌다.
+ */
+export function realizedOf(
+  records: PlanRecord[],
+  entryPrice: number,
+): { realized: number | null; realizedPct: number | null } {
+  const buys = records.filter((r) => r.side === 'BUY')
+  const sells = records.filter((r) => r.side === 'SELL')
+  if (sells.length === 0) return { realized: null, realizedPct: null }
+  const qty = buys.reduce((a, r) => a + r.quantity, 0)
+  const avg = qty
+    ? buys.reduce((a, r) => a + r.price * r.quantity, 0) / qty
+    : entryPrice
+  const sold = sells.reduce((a, r) => a + r.quantity, 0)
+  const realized = sells.reduce((a, r) => a + (r.price - avg) * r.quantity, 0)
+  return {
+    realized: Math.round(realized),
+    realizedPct: avg > 0 && sold > 0 ? (realized / (avg * sold)) * 100 : null,
+  }
+}

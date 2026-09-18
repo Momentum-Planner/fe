@@ -31,7 +31,16 @@ import { PerfTiles, RiskList } from './Summary'
 import { PeriodPick, Waterfall } from './Waterfall'
 import { SampleNote } from './parts'
 
+export type PlanScope = 'ALL' | 'YES' | 'NONE'
+const PLAN_SCOPE_LABEL: Record<PlanScope, string> = {
+  ALL: '모두',
+  YES: '계획 있음',
+  NONE: '계획 없음',
+}
+
 export function Overview({
+  planScope,
+  onPlanScope,
   flow,
   period,
   onPeriod,
@@ -40,6 +49,8 @@ export function Overview({
   sum,
   risk,
 }: {
+  planScope: PlanScope
+  onPlanScope: (s: PlanScope) => void
   flow: MonthFlow[]
   period: Period | null
   onPeriod: (p: Period | null) => void
@@ -58,6 +69,24 @@ export function Overview({
       <header className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <h2 className="t-h3 m-0 text-white/90">요약</h2>
         <PeriodPick flow={flow} period={period} onPeriod={onPeriod} />
+        {/* 계획 있음 · 없음 (Q22) — 「계획 있는 매매로 성과 올리기」 의 대비가 여기서 선다 */}
+        <div className="flex items-center gap-0.5 rounded-md bg-white/4 p-0.5">
+          {(Object.keys(PLAN_SCOPE_LABEL) as PlanScope[]).map((k) => (
+            <button
+              key={k}
+              type="button"
+              aria-pressed={planScope === k}
+              onClick={() => onPlanScope(k)}
+              className={`rounded-sm px-2 py-1 text-[11px] transition ${
+                planScope === k
+                  ? 'bg-white/14 text-white/90'
+                  : 'text-white/45 hover:bg-white/6'
+              }`}
+            >
+              {PLAN_SCOPE_LABEL[k]}
+            </button>
+          ))}
+        </div>
         <span className="ml-auto">
           <SampleNote n={sum.n} short={Math.max(0, MIN.avg - sum.n)} />
         </span>

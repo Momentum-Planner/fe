@@ -1,209 +1,433 @@
+import { Link } from '@tanstack/react-router'
+import { ChevronRight } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { cn } from '@/shared/lib/cn'
 import { useAccount } from '@/entities/auth'
 import { PLAN_STATUS_LABEL, usePlanList } from '@/entities/plan'
-import type { PlanListItem, PlanStatus } from '@/entities/plan'
+import type { PlanListItem } from '@/entities/plan'
+import { useStockSearch } from '@/entities/search'
+import { cn } from '@/shared/lib/cn'
+import {
+  FillSheet,
+  NewFillForm,
+  closeFill,
+  openFill,
+  useFillPanel,
+} from '@/widgets/fill'
 
 /**
- * 거래 계획 — **계획 컬렉션**.
+ * 거래 계획 — **이 서비스의 집이다** (Q22).
  *
- * 목록의 «원소»는 계획이다. 종목은 갈래를 묶는 머리줄일 뿐이라
- * 필터도 정렬도 계획 기준으로 선다 (종목 컬렉션이 되면 루트 내비에 종목이 둘이 된다).
+ * ```text
+ * 거래 계획   [실행 중 | 대기 | 완료 · 폐기]                 [+ 새 계획] [+ 체결 기록]
  *
- * 스냅샷 목록(`/captures`)이 있던 자리다 — Q3 이 「승격 대상」으로 남겨둔 그 자리이고,
- * 스냅샷 → TradePlan 승격이 곧 이 화면이다.
+ * ┌ SK하이닉스 실행 중 · 돌파  20주  계획 › ┐ ┌ …  ┐    ← 계획 하나 = 카드 하나 · 균등한 그리드
+ * │ 목표 [223,000] 2R            +44만       │ │    │
+ * │ 진입 [201,000]                           │ │    │
+ * │ 손절 [190,000]               −22만       │ │    │
+ * │                              [+ 체결]    │ │    │
+ * └──────────────────────────────────────────┘ └────┘
+ * ╭ 삼성전자 ─────────────────────────────────────────╮  ← 같은 종목이 둘 이상이면 한 판 (4장 ④)
+ * │ ┌ 대기 · 돌파 … ┐ ┌ 대기 · 눌림 … ┐               │    이름은 판 머리에 한 번만
+ * ╰───────────────────────────────────────────────────╯
+ * ```
  *
- * ⚠️ TradePlan API 가 백엔드에 없다. msw 목이 유일한 구현이다.
+ * 💀 **목표에서 거꾸로 짰다.** 「계획 있는 매매로 성과 올리기」 — 세운다 · 체결을 붙인다 ·
+ * 결과로 고친다가 전부 계획 하나를 중심으로 돈다. 그래서 계획이 화면의 중심이다.
+ *
+ * 💀 **사슬은 목록에 두지 않는다** (Q23 · 4장 ③, Q22 의 「종목별 간단한 사슬」 을 뒤집는다).
+ * 실행 중 앞뒤에 이전 · 대기가 있을 수도 없을 수도 있어서 목록 안에서는 순서가 안 읽혔다 —
+ * 순서는 계획 화면의 사슬이 맡는다. 실행 중 · 대기도 한데 섞지 않고 **거르기로 가른다**.
+ *
+ * 💀 **체결은 오른쪽 옆 칸 하나** — 카드의 「+ 체결」(종목 · 계획이 골라진 채) 과 위
+ * 「+ 체결 기록」(빈 채) 이 같은 폼을 연다. 계획 없는 매매는 이 페이지에 서지 않는다(통계로).
  */
 
-/** 「지금 할 일」이 기본이다. 지난 것은 필터를 풀면 그대로 나온다 — 지우지 않는다 */
-const DEFAULT_STATUSES: PlanStatus[] = ['RUNNING', 'PLANNED']
-const ALL_STATUSES: PlanStatus[] = ['RUNNING', 'PLANNED', 'DONE', 'CLOSED']
-
-/** 실행 중이 맨 위. 돈이 걸린 것은 하나뿐이라 작성일 순으로 밀리면 안 된다 */
-const STATUS_RANK: Record<PlanStatus, number> = {
-  RUNNING: 0,
-  PLANNED: 1,
-  DONE: 2,
-  CLOSED: 3,
+type Scope = 'RUNNING' | 'PLANNED' | 'ENDED'
+const SCOPE_LABEL: Record<Scope, string> = {
+  RUNNING: '실행 중',
+  PLANNED: '대기',
+  ENDED: '완료 · 폐기',
 }
+const inScope = (p: PlanListItem, s: Scope) =>
+  s === 'ENDED' ? p.status === 'DONE' || p.status === 'CLOSED' : p.status === s
+
+const EMPTY: Record<Scope, string> = {
+  RUNNING: '실행 중인 계획이 없습니다.',
+  PLANNED: '대기 중인 계획이 없습니다.',
+  ENDED: '끝난 계획이 없습니다.',
+}
+
+const won = (n: number) => n.toLocaleString('ko-KR')
+const man = (v: number) => {
+  const a = Math.abs(v)
+  const s = v > 0 ? '+' : v < 0 ? '−' : ''
+  return a >= 10_000
+    ? `${s}${Math.round(a / 10_000).toLocaleString()}만`
+    : `${s}${a.toLocaleString()}`
+}
+/** 목표 — 아직 안 닿은 첫 단. 다 닿았으면 마지막 */
+const goalR = (p: PlanListItem) =>
+  (p.goals.find((g) => !g.hitAt) ?? p.goals.at(-1))?.r ?? null
 
 export function PlansPage() {
   const { data: account } = useAccount()
-  const [statuses, setStatuses] = useState<PlanStatus[]>(DEFAULT_STATUSES)
-  const [keyword, setKeyword] = useState('')
+  const [scope, setScope] = useState<Scope>('RUNNING')
+  const fill = useFillPanel()
+  const [newPlan, setNewPlan] = useState(false)
+  const panel = fill || newPlan
 
-  const { data: plans = [], isLoading, isError } = usePlanList({ statuses })
+  const { data: plans = [], isLoading, isError } = usePlanList({})
 
-  /** 종목으로 묶는다 — 갈래를 그리려면 뿌리가 있어야 한다 */
+  /**
+   * 같은 종목끼리 묶는다 — 둘 이상이면 한 판 위에 (Q23 · 4장 ④ 폐쇄성).
+   * 판의 순서는 그 안의 가장 최근 계획 순, 판 안은 쓴 날 최신 순.
+   */
   const groups = useMemo(() => {
-    const q = keyword.trim()
-    const rows = q
-      ? plans.filter((p) => p.stockName.includes(q) || p.stockCode.includes(q))
-      : plans
+    const by = new Map<string, PlanListItem[]>()
+    for (const p of plans
+      .filter((x) => inScope(x, scope))
+      .sort((a, b) => b.writtenAt.localeCompare(a.writtenAt)))
+      by.set(p.stockCode, [...(by.get(p.stockCode) ?? []), p])
+    return [...by.values()]
+  }, [plans, scope])
 
-    const byStock = new Map<string, PlanListItem[]>()
-    for (const p of rows) {
-      const list = byStock.get(p.stockCode) ?? []
-      list.push(p)
-      byStock.set(p.stockCode, list)
-    }
-
-    return [...byStock.values()]
-      .map((list) => {
-        const sorted = [...list].sort(
-          (a, b) =>
-            STATUS_RANK[a.status] - STATUS_RANK[b.status] ||
-            b.writtenAt.localeCompare(a.writtenAt),
-        )
-        return {
-          // 그룹은 «계획이 있어서» 만들어지므로 첫 줄이 늘 있다. 타입은 그것을
-          // 모르니 빈 그룹을 아래에서 걸러낸다
-          head: sorted.at(0),
-          plans: sorted,
-          // 대기이 둘 이상이면 갈래다 — 하나만 실현되고 나머지는 사용자가 닫는다
-          branch: sorted.filter((p) => p.status === 'PLANNED').length,
-        }
-      })
-      .filter((g): g is typeof g & { head: NonNullable<typeof g.head> } =>
-        Boolean(g.head),
-      )
-      .sort(
-        (a, b) =>
-          STATUS_RANK[a.head.status] - STATUS_RANK[b.head.status] ||
-          b.head.writtenAt.localeCompare(a.head.writtenAt),
-      )
-  }, [plans, keyword])
-
-  const toggle = (s: PlanStatus) =>
-    setStatuses((prev) =>
-      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s],
-    )
+  const onFill = (p: PlanListItem) => {
+    setNewPlan(false)
+    openFill({
+      stock: { code: p.stockCode, name: p.stockName },
+      planId: p.planId,
+      // 대기는 매수만 · 실행 중은 비워 둔다 — 추가 매수일 수도 있다 (10장 E)
+      side: p.status === 'PLANNED' ? 'BUY' : undefined,
+      price: p.status === 'PLANNED' ? p.entryPrice : 0,
+      quantity: p.status === 'PLANNED' ? p.quantity : 0,
+    })
+  }
 
   return (
-    <main className="flex flex-col gap-4 px-6 pt-6 pb-6">
-      <section className="card flex w-full min-w-0 flex-col px-5 pt-6 pb-4">
-        <div className="flex items-start justify-between">
-          <div className="min-w-0">
-            <h3 className="text-[18px] font-bold text-white">거래 계획</h3>
-            <div className="mt-1 text-[12px] text-white/45">
-              {groups.length}개 종목 · 계획 {plans.length}개
-            </div>
-          </div>
-        </div>
-
-        {/* 상태로 가른다 — 넷이 한 목록에 섞이면 「지금 할 일」이 안 보인다 */}
-        <div className="mt-4 flex flex-wrap items-center gap-1.5">
-          {ALL_STATUSES.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => toggle(s)}
-              className={cn(
-                'rounded-full px-3 py-1.5 text-[12px] transition-colors',
-                statuses.includes(s)
-                  ? 'bg-white/[0.14] font-semibold text-white'
-                  : 'bg-white/[0.04] text-white/45 hover:text-white/70',
-              )}
-            >
-              {PLAN_STATUS_LABEL[s]}
-            </button>
-          ))}
-          <input
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            placeholder="종목명"
-            className="ml-2 h-[30px] w-[140px] rounded-full bg-white/[0.04] px-3 text-[12px] text-white placeholder:text-white/30 focus:bg-white/[0.07] focus:outline-none"
-          />
-        </div>
-
-        {!account?.isLoggedIn && (
-          <p className="m-0 py-14 text-center text-[13px] text-white/40">
-            로그인 후 이용할 수 있습니다.
-          </p>
-        )}
-
-        {account?.isLoggedIn && isLoading && (
-          <p className="m-0 py-14 text-center text-[13px] text-white/40">
-            불러오는 중…
-          </p>
-        )}
-
-        {account?.isLoggedIn && isError && (
-          <p className="m-0 py-14 text-center text-[13px] text-white/40">
-            계획을 불러오지 못했습니다.
-          </p>
-        )}
-
-        {account?.isLoggedIn &&
-          !isLoading &&
-          !isError &&
-          groups.length === 0 && (
-            <p className="m-0 py-14 text-center text-[13px] text-white/40">
-              조건에 맞는 계획이 없습니다.
-            </p>
-          )}
-
-        {/* 임시 — 흐름 안 셋을 늘어놨다가 지웠다. 컬렉션은 「언제 보는 화면인가」가
-            정해져야 열이 나온다. 싱글을 먼저 정하고 돌아온다 */}
-        {account?.isLoggedIn && (
-          <div className="mt-4 flex flex-col gap-2.5">
-            {groups.map((g) => (
-              <div
-                key={g.head.stockCode}
-                className="rounded-[12px] bg-white/[0.03] px-4 py-3.5"
+    <main
+      className={cn(
+        'grid items-start gap-4 px-6 pt-6 pb-10',
+        panel && 'xl:grid-cols-[minmax(0,1fr)_440px]',
+      )}
+    >
+      <section className="card flex min-w-0 flex-col px-5 pt-5 pb-5">
+        <header className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <h3 className="m-0 text-[18px] font-bold text-white">거래 계획</h3>
+          <div className="flex items-center gap-0.5 rounded-md bg-white/[0.04] p-0.5">
+            {(Object.keys(SCOPE_LABEL) as Scope[]).map((s) => (
+              <button
+                key={s}
+                type="button"
+                aria-pressed={scope === s}
+                onClick={() => setScope(s)}
+                className={cn(
+                  'rounded-sm px-2.5 py-1 text-[12px] transition-colors',
+                  scope === s
+                    ? 'bg-white/[0.14] text-white'
+                    : 'text-white/50 hover:text-white/75',
+                )}
               >
-                <div className="flex items-center gap-2">
-                  <span className="text-[15px] font-bold text-white">
-                    {g.head.stockName}
-                  </span>
-                  <span className="font-number text-[11px] text-white/35">
-                    {g.head.stockCode}
-                  </span>
-                  <span className="font-number ml-auto text-[12px] text-white/45">
-                    지금 {g.head.riskBefore.toFixed(2)}%
-                  </span>
-                </div>
-                <div className="mt-2 flex flex-col">
-                  {g.plans.map((p) => (
-                    <div
-                      key={p.planId}
-                      // 매수·매도 칸을 뺐다 — **계획에 그런 구분이 없다.**
-                      // 파는 일은 계획 «안»(스톱가격·갱신 규칙)에 있다
-                      className="grid grid-cols-[56px_minmax(0,1fr)_74px_120px] items-center gap-2 py-1.5 text-[13px]"
-                    >
-                      <span className="rounded-md bg-white/[0.07] px-1.5 py-0.5 text-center text-[11px] text-white/70">
-                        {PLAN_STATUS_LABEL[p.status]}
-                      </span>
-                      <span className="font-number text-white/85">
-                        {p.entryPrice.toLocaleString('ko-KR')}
-                        <span className="text-white/25"> → </span>
-                        {p.stopPrice.toLocaleString('ko-KR')}
-                      </span>
-                      <span className="font-number text-right text-white/55">
-                        {p.quantity}주
-                      </span>
-                      <span className="font-number text-right">
-                        <span className="text-white/35">
-                          {p.riskBefore.toFixed(2)}%
-                        </span>
-                        <span className="text-white/25"> → </span>
-                        <span
-                          className={
-                            p.riskAfter > 2.5 ? 'text-brand-red' : 'text-white'
-                          }
-                        >
-                          {p.riskAfter.toFixed(2)}%
-                        </span>
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+                {SCOPE_LABEL[s]}
+              </button>
             ))}
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                closeFill()
+                setNewPlan(true)
+              }}
+              className="rounded-pill px-3 py-1.5 text-[12px] text-white/85 ring-1 ring-white/20 hover:bg-white/[0.06]"
+            >
+              + 새 계획
+            </button>
+            {/**
+             * **가장 밝은 버튼은 체결 기록이다** (Q23 · 8장 ① 관습 · 패턴 56) — F2 거래 기록이
+             * 유일한 필수 행동이다. 상단 바로 올렸다가 **이 페이지에만 두는 것으로 되돌렸다** (4장 ⑦).
+             */}
+            <button
+              type="button"
+              onClick={() => {
+                setNewPlan(false)
+                openFill()
+              }}
+              className="rounded-pill text-fg-inverse bg-white px-3 py-1.5 text-[12px] font-bold hover:bg-white/90"
+            >
+              + 체결 기록
+            </button>
+          </div>
+        </header>
+
+        {!account?.isLoggedIn ? (
+          <Empty>로그인 후 이용할 수 있습니다.</Empty>
+        ) : isLoading ? (
+          <Empty>불러오는 중…</Empty>
+        ) : isError ? (
+          <Empty>계획을 불러오지 못했습니다.</Empty>
+        ) : groups.length === 0 ? (
+          <Empty>{EMPTY[scope]}</Empty>
+        ) : (
+          /* 계획 하나 = 카드 하나 · 균등한 그리드 (Q23 · 4장 ③ · 패턴 28) */
+          <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-2.5">
+            {groups.map((g) =>
+              g.length === 1 ? (
+                <PlanTile key={g[0]!.planId} p={g[0]!} onFill={onFill} />
+              ) : (
+                <section
+                  key={g[0]!.stockCode}
+                  aria-label={g[0]!.stockName}
+                  className="col-span-full rounded-xl px-2.5 pt-2 pb-2.5 ring-1 ring-white/15"
+                >
+                  <h4 className="t-h3 m-0 px-1.5 pb-2 text-white">
+                    {g[0]!.stockName}
+                  </h4>
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-2.5">
+                    {g.map((p) => (
+                      <PlanTile key={p.planId} p={p} onFill={onFill} hideName />
+                    ))}
+                  </div>
+                </section>
+              ),
+            )}
           </div>
         )}
       </section>
+
+      {/**
+       * 체결 · 새 계획 칸 — **넓으면 오른쪽 칸, 좁으면 서랍** (Q23 · 4장 ⑥).
+       * 💀 1280px 미만에서 칸이 목록 밑에 붙어, 카드의 「+ 체결」 을 눌러도 폼이 화면 밖이었다.
+       */}
+      {fill ? (
+        <FillSheet dock onClose={closeFill}>
+          <NewFillForm
+            // 다른 카드를 누르면 폼이 그 계획으로 새로 선다
+            key={fill.start?.planId ?? 'blank'}
+            start={fill.start}
+            onClose={closeFill}
+          />
+        </FillSheet>
+      ) : newPlan ? (
+        <FillSheet dock onClose={() => setNewPlan(false)}>
+          <NewPlanStart onClose={() => setNewPlan(false)} />
+        </FillSheet>
+      ) : null}
     </main>
+  )
+}
+
+const Empty = ({ children }: { children: React.ReactNode }) => (
+  <p className="m-0 py-14 text-center text-[13px] text-white/40">{children}</p>
+)
+
+/**
+ * 계획 카드 — 머리(종목 · 상태 · 계획 이름 · 수량 · 「계획 ›」) + 가격 세 줄 + 「+ 체결」.
+ *
+ * 가격은 **차트처럼 가격 높은 순 한 줄씩** — 태그 색도 차트 축 태그와 같다 (Q23 · 4장 ②).
+ * 태그는 **속을 비운 윤곽** (4장 ⑤) — 채운 태그는 카드 셋이면 색 덩어리 아홉이라 중심점이 흩어졌다.
+ * 셋 다 중요하니 크기로 가르지 않고, 닿으면 얼마인지(원)를 오른쪽에 붙인다.
+ * 끝난 계획은 가격 대신 결과(실현 손익)를 싣는다.
+ */
+function PlanTile({
+  p,
+  onFill,
+  hideName,
+}: {
+  p: PlanListItem
+  onFill: (p: PlanListItem) => void
+  /** 같은 종목 판 안이면 이름은 판 머리에 한 번만 */
+  hideName?: boolean
+}) {
+  const running = p.status === 'RUNNING'
+  const waiting = p.status === 'PLANNED'
+  const act = running || waiting
+  const goal = goalR(p)
+  const { entryPrice: entry, stopPrice: stop, quantity: qty } = p
+  // 1R 은 실행 때 박힌 최초 손절폭 — 손절가를 올려도 목표가는 안 변한다. 대기면 계획 손절폭
+  const oneR = p.initialStopWidth ?? entry - stop
+  const goalPrice = goal !== null && oneR > 0 ? entry + goal * oneR : null
+
+  return (
+    <article
+      className={cn(
+        'flex flex-col rounded-lg px-4 pt-3 pb-3',
+        act ? 'bg-bg-elevated' : 'bg-white/[0.03]',
+      )}
+    >
+      <header className="flex items-baseline gap-2">
+        {!hideName && (
+          <span className="t-h3 truncate text-white">{p.stockName}</span>
+        )}
+        <span
+          className={cn(
+            'shrink-0 text-[11px]',
+            running ? 'text-candle-up' : 'text-white/55',
+          )}
+        >
+          {PLAN_STATUS_LABEL[p.status]}
+        </span>
+        <span className="truncate text-[11px] text-white/45">{p.title}</span>
+        <Link
+          to="/stocks/$ticker/plan/$planId"
+          params={{ ticker: p.stockCode, planId: String(p.planId) }}
+          aria-label={`${p.title} 계획 보기`}
+          className="ml-auto flex shrink-0 items-center text-[11px] text-white/55 hover:text-white"
+        >
+          계획
+          <ChevronRight size={13} aria-hidden />
+        </Link>
+      </header>
+
+      {act ? (
+        <>
+          <dl className="m-0 mt-2.5 flex flex-col gap-1.5">
+            {goalPrice !== null && (
+              <PriceLine
+                label="목표"
+                price={goalPrice}
+                tag="text-candle-up ring-candle-up/60"
+                note={`${goal}R`}
+                amount={(goalPrice - entry) * qty}
+              />
+            )}
+            <PriceLine
+              label="진입"
+              price={entry}
+              tag="text-white ring-white/40"
+            />
+            <PriceLine
+              label="손절"
+              price={stop}
+              tag="text-candle-down ring-candle-down/60"
+              amount={(stop - entry) * qty}
+            />
+          </dl>
+          <div className="mt-3 flex items-center">
+            <span className="t-num text-[11px] text-white/45">{qty}주</span>
+            <button
+              type="button"
+              onClick={() => onFill(p)}
+              className="rounded-pill ml-auto px-2.5 py-1 text-[11px] text-white/85 ring-1 ring-white/25 hover:bg-white/[0.08] hover:text-white"
+            >
+              + 체결
+            </button>
+          </div>
+        </>
+      ) : (
+        <div className="mt-2 flex items-baseline gap-2">
+          <span className="t-num text-[11px] text-white/40">
+            {p.writtenAt.slice(0, 10)}
+          </span>
+          {p.realized !== null && (
+            <span
+              className={cn(
+                't-num ml-auto text-[13px]',
+                p.realized > 0
+                  ? 'text-candle-up'
+                  : p.realized < 0
+                    ? 'text-candle-down'
+                    : 'text-white/55',
+              )}
+            >
+              {p.realized === 0 ? '본전' : man(p.realized)}
+            </span>
+          )}
+        </div>
+      )}
+    </article>
+  )
+}
+
+function PriceLine({
+  label,
+  price,
+  tag,
+  note,
+  amount,
+}: {
+  label: string
+  price: number
+  tag: string
+  note?: string
+  amount?: number
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <dt className="w-7 text-[11px] text-white/45">{label}</dt>
+      <dd className="m-0 flex flex-1 items-center gap-1.5">
+        <span
+          className={cn(
+            'font-number rounded-[3px] px-1.5 text-[13px] leading-[20px] tabular-nums ring-1 ring-inset',
+            tag,
+          )}
+        >
+          {won(Math.round(price))}
+        </span>
+        {note && <span className="text-[11px] text-white/45">{note}</span>}
+        {amount !== undefined && (
+          <span
+            className={cn(
+              't-num ml-auto text-[12px]',
+              amount > 0
+                ? 'text-candle-up'
+                : amount < 0
+                  ? 'text-candle-down'
+                  : 'text-white/55',
+            )}
+          >
+            {amount === 0 ? '본전' : man(Math.round(amount))}
+          </span>
+        )}
+      </dd>
+    </div>
+  )
+}
+
+/**
+ * 새 계획 — 종목을 고르면 그 종목의 계획 화면으로 간다. 계획 폼은 거기 산다 (Q11 · Q12).
+ */
+function NewPlanStart({ onClose }: { onClose: () => void }) {
+  const [q, setQ] = useState('')
+  const { data: found = [] } = useStockSearch(q.trim().length >= 1 ? q : '')
+  return (
+    <section className="bg-bg-surface ring-border-default flex flex-col gap-3 rounded-lg px-5 py-4 ring-1">
+      <header className="flex items-center gap-2">
+        <span className="text-[14px] font-bold text-white">새 계획</span>
+        <span className="text-[11px] text-white/40">
+          종목을 고르면 그 종목의 계획 화면에서 세운다
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="ml-auto text-[11px] text-white/35 hover:text-white/70"
+        >
+          닫기
+        </button>
+      </header>
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="이름이나 코드"
+        aria-label="새 계획 종목"
+        className="bg-bg-input rounded-md px-2 py-1.5 text-[13px] text-white outline-none placeholder:text-white/20 focus:ring-1 focus:ring-white/30"
+      />
+      {found.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {found.slice(0, 10).map((s) => (
+            <Link
+              key={s.stockCode}
+              to="/stocks/$ticker"
+              params={{ ticker: s.stockCode }}
+              className="rounded-md bg-white/[0.06] px-2 py-1 text-[12px] text-white/80 hover:bg-white/[0.12]"
+            >
+              {s.stockName}{' '}
+              <span className="font-number text-[10px] text-white/40">
+                {s.stockCode}
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
+    </section>
   )
 }

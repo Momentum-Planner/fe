@@ -14,9 +14,11 @@ import {
   pendingGoal,
   pickProblem,
   priceConflict,
+  realizedOf,
 } from '@/entities/plan'
 import { makeScreening, rawOn } from './screening'
 import { makeCandles, stockName } from './stocks'
+import { STOP_LIMIT_BASIS } from './basis'
 
 /**
  * 계획 목 데이터.
@@ -33,19 +35,9 @@ import { makeCandles, stockName } from './stocks'
 const ACCOUNT_TOTAL = 80_000_000
 /** 그중 «현금». 나머지는 평가액이다 — 살 수 있는지는 이 값이 정한다 (④-1-3) */
 const ACCOUNT_CASH = 21_500_000
-/**
- * 손절폭 상한의 근거 — min(평균수익 4.72% ÷ 손익비 목표 2, 10%) = 2.36%.
- * ⑦이 내놓는 값이라 사용자마다 다르고, 표본이 모자라면 null 이 되어 10% 가 상한이다.
- *
- * 💀 **⑦ 이 이 값을 읽어 판정한다** (2026-09-12). 여기 박혀 있는 4.72% 는
- * *「사용자가 승인한 값」* 이고, ⑦ 이 지금 내는 평균 수익은 그와 다르다 —
- * **그 어긋남이 ⑧ 이 diff 를 낼 자리**다. 그래서 export 한다.
- *
- * ⚠️ Q9 남은 미결 *「평균 수익이 두 목에서 다르다 … 한쪽이 다른 쪽을 읽어야
- *    맞다」* 는 **아직 그대로다.** ⑧ 을 만들 때 이 상수가 거래 기록에서
- *    계산되도록 바꾼다. 지금은 «어긋나 있는 것이 화면에 보이는» 쪽이 낫다.
- */
-export const STOP_LIMIT_BASIS = { avgWin: 4.72, targetRR: 2 }
+
+/** 손절폭 상한의 근거 — `basis.ts` 로 옮겼다 (Q20 · 순환 참조). 부르던 곳을 위해 다시 내보낸다 */
+export { STOP_LIMIT_BASIS }
 
 /**
  * 손절 구간 한 벌 + 스톱 사다리를 만든다. v1 은 비중 100 · 순번 1 하나뿐이다.
@@ -196,6 +188,9 @@ type Seed = Omit<
   | 'quantity'
   | 'riskAfter'
   | 'fillRate'
+  // 실현 손익은 체결에서 낸다 (Q20)
+  | 'realized'
+  | 'realizedPct'
   | 'accountTotal'
   // 계좌 값과 상한 근거는 사용자에 하나다 — 계획마다 박으면 어긋난다
   | 'accountCash'
@@ -365,7 +360,31 @@ const SEEDS: Seed[] = [
     memo: '전량 청산. 스톱이 58,000 에서 걸렸다.',
     recordCount: 3,
     stopLimit: 2.36,
-    records: [],
+    // recordCount 3 인데 체결이 비어 있었다 — 실현 손익(Q20)을 내려면 체결이 있어야 한다.
+    // 메모대로: 300주 진입 → 절반 익절 → 나머지는 스톱 58,000 에서
+    records: [
+      {
+        recordId: 41,
+        filledAt: '2026-07-15 09:05',
+        side: 'BUY',
+        price: 55_100,
+        quantity: 300,
+      },
+      {
+        recordId: 42,
+        filledAt: '2026-08-04 10:12',
+        side: 'SELL',
+        price: 61_400,
+        quantity: 150,
+      },
+      {
+        recordId: 43,
+        filledAt: '2026-08-19 14:40',
+        side: 'SELL',
+        price: 58_000,
+        quantity: 150,
+      },
+    ],
     filled: 300,
   },
   {
@@ -745,6 +764,8 @@ function build(s: Seed): PlanDetail {
     quantity,
     riskAfter: riskAfter(s),
     fillRate: quantity === 0 ? 0 : +(filled / quantity).toFixed(2),
+    // 실현 손익은 «체결에서» 낸다 — 손으로 박으면 체결과 어긋난다 (Q20)
+    ...realizedOf(s.records, s.entryPrice),
     entryState: s.snapshot.entryState,
     fundamentalScore: s.snapshot.fundamentalScore,
     riskBefore: s.plannedPosition.riskBefore,
@@ -1058,6 +1079,8 @@ export const toListItem = (p: PlanDetail): PlanListItem => ({
   fundamentalScore: p.snapshot.fundamentalScore,
   goals: p.goals,
   initialStopWidth: p.initialStopWidth,
+  realized: p.realized,
+  realizedPct: p.realizedPct,
 })
 
 /**
@@ -1095,4 +1118,159 @@ export function pickStop(
   const j = PLANS.findIndex((p) => p.planId === planId)
   if (j >= 0) PLANS[j] = built
   return built
+}
+
+/**
+ * 체결 하나를 계획에 붙인다 (F2 · Q22) — 계획 상태가 체결을 따라 움직인다.
+ *
+ * ```text
+ * 대기 + 매수       → 그 계획이 실행 중.  같은 종목의 원래 실행 중은 실행 완료로 닫힌다
+ *                     (다른 베이스에서 한 번 더 사는 추가 매수 — 새 판단이 손절을 가져간다)
+ * 실행 중 + 매수    → 체결 수량만 는다 (수량만 더 — 넘으면 화면이 계획 수정을 권한다)
+ * 실행 중 + 매도    → 이 계획이 산 만큼 다 팔면 실행 완료
+ * ```
+ */
+export function attachFill(
+  planId: number,
+  f: {
+    side: 'BUY' | 'SELL'
+    price: number
+    quantity: number
+    filledAt: string
+  },
+  /** 거래 기록 목과 같은 id — 고치기 · 지우기가 두 목을 같이 찾는다 (Q23 ⑤) */
+  recordId?: number,
+): void {
+  const i = SEEDS.findIndex((x) => x.planId === planId)
+  if (i < 0) return
+  const s = SEEDS[i]!
+  const id =
+    recordId ??
+    Math.max(0, ...SEEDS.flatMap((x) => x.records.map((r) => r.recordId))) + 1
+  const records = [
+    ...s.records,
+    {
+      recordId: id,
+      filledAt: `${f.filledAt} 09:00`,
+      side: f.side,
+      price: f.price,
+      quantity: f.quantity,
+    },
+  ]
+  let status = s.status
+  let initialStopWidth = s.initialStopWidth
+  if (f.side === 'BUY' && s.status === 'PLANNED') {
+    status = 'RUNNING'
+    // 1R 은 실행될 때 박힌다 (③-2-1)
+    initialStopWidth = s.entryPrice - lowestStop(s)
+    SEEDS.forEach((x, k) => {
+      if (k !== i && x.stockCode === s.stockCode && x.status === 'RUNNING') {
+        SEEDS[k] = { ...x, status: 'DONE' }
+        const j = PLANS.findIndex((p) => p.planId === x.planId)
+        if (j >= 0) PLANS[j] = build(SEEDS[k])
+      }
+    })
+  }
+  if (f.side === 'SELL') {
+    const bought = records
+      .filter((r) => r.side === 'BUY')
+      .reduce((a, r) => a + r.quantity, 0)
+    const sold = records
+      .filter((r) => r.side === 'SELL')
+      .reduce((a, r) => a + r.quantity, 0)
+    if (bought > 0 && sold >= bought) status = 'DONE'
+  }
+  SEEDS[i] = {
+    ...s,
+    status,
+    initialStopWidth,
+    records,
+    recordCount: s.recordCount + 1,
+    filled: f.side === 'BUY' ? s.filled + f.quantity : s.filled,
+  }
+  const j = PLANS.findIndex((p) => p.planId === planId)
+  if (j >= 0) PLANS[j] = build(SEEDS[i])
+}
+
+/**
+ * 체결을 고치거나 지운 뒤 **그 계획의 상태를 체결에서 다시 낸다** (Q23 ⑤).
+ *
+ * ```text
+ * 매수가 하나도 없다                 → 대기 (1R 도 비운다)
+ * 새 계획이 이어받아 닫힌 실행 완료     → 그대로 (같은 종목에 실행 중인 다른 계획이 있을 때)
+ * 산 만큼 다 팔았다                  → 실행 완료
+ * 그 밖                             → 실행 중
+ * ```
+ *
+ * ⚠️ 새 계획의 매수를 지워도 **그때 닫힌 원래 계획은 되살리지 않는다** — 누가 닫았는지 기록이 없다.
+ */
+function settle(k: number): void {
+  const s = SEEDS[k]!
+  if (s.status === 'CLOSED') return
+  const bought = s.records
+    .filter((r) => r.side === 'BUY')
+    .reduce((a, r) => a + r.quantity, 0)
+  const sold = s.records
+    .filter((r) => r.side === 'SELL')
+    .reduce((a, r) => a + r.quantity, 0)
+  const status: typeof s.status =
+    bought === 0
+      ? 'PLANNED'
+      : // 같은 종목에 지금 실행 중인 다른 계획이 있으면 그 계획이 이어받아 닫은 것이다
+        s.status === 'DONE' &&
+          sold < bought &&
+          SEEDS.some(
+            (x, i) =>
+              i !== k && x.stockCode === s.stockCode && x.status === 'RUNNING',
+          )
+        ? 'DONE'
+        : sold >= bought
+          ? 'DONE'
+          : 'RUNNING'
+  SEEDS[k] = {
+    ...s,
+    status,
+    filled: bought,
+    recordCount: s.records.length,
+    initialStopWidth: bought === 0 ? null : s.initialStopWidth,
+  }
+  const j = PLANS.findIndex((p) => p.planId === s.planId)
+  if (j >= 0) PLANS[j] = build(SEEDS[k])
+}
+
+/** 체결 하나를 고친다 — 가격 · 수량 · 체결일 (Q23 ⑤) */
+export function editFill(
+  recordId: number,
+  patch: { price?: number; quantity?: number; filledAt?: string },
+): void {
+  const k = SEEDS.findIndex((x) =>
+    x.records.some((r) => r.recordId === recordId),
+  )
+  if (k < 0) return
+  const s = SEEDS[k]!
+  SEEDS[k] = {
+    ...s,
+    records: s.records.map((r) =>
+      r.recordId === recordId
+        ? {
+            ...r,
+            price: patch.price ?? r.price,
+            quantity: patch.quantity ?? r.quantity,
+            filledAt: patch.filledAt ? `${patch.filledAt} 09:00` : r.filledAt,
+          }
+        : r,
+    ),
+  }
+  settle(k)
+}
+
+/** 체결 하나를 계획에서 뗀다 — 소프트 삭제는 거래 기록 목이 든다 (Q23 ⑤) */
+export function removeFill(recordId: number): void {
+  const k = SEEDS.findIndex((x) =>
+    x.records.some((r) => r.recordId === recordId),
+  )
+  if (k < 0) return
+  const s = SEEDS[k]!
+  SEEDS[k] = { ...s, records: s.records.filter((r) => r.recordId !== recordId) }
+  settle(k)
 }

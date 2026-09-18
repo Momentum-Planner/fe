@@ -23,7 +23,7 @@ import type {
   TradeStats,
   TrendPoint,
 } from '@/entities/tradeRecord'
-import { STOP_LIMIT_BASIS } from './plans'
+import { STOP_LIMIT_BASIS } from './basis'
 import { STOCKS, rand } from './stocks'
 
 /**
@@ -202,6 +202,24 @@ const roundPrice = (p: number) => Math.round(p / 10) * 10
 
 let nextId = 4_100
 
+/**
+ * 계획 있는 거래의 «계획 쪽» 원값 — 계획 목이 이것으로 실행 완료 계획을 세운다 (Q20).
+ * 두 목이 따로 놀아 거래 기록의 계획 링크가 없는 계획으로 갔다.
+ */
+export interface PlannedMeta {
+  planId: number
+  stockCode: string
+  stockName: string
+  title: string
+  entryPrice: number
+  stopPrice: number
+  quantity: number
+  /** 매수일 `YYYY-MM-DD` */
+  entryDay: string
+  snapshot: TradeSnapshot
+}
+export const PLANNED_META: PlannedMeta[] = []
+
 function buildPlanned(): TradeRecord[] {
   const out: TradeRecord[] = []
 
@@ -234,6 +252,17 @@ function buildPlanned(): TradeRecord[] {
     const snapshot = snapshotOf(i, sumR, true, entryAt)
     const planId = 9_100 + i
     const planTitle = `${snapshot.entryState === 'PULLBACK' ? '눌림' : '돌파'} ${entryPrice.toLocaleString()}`
+    PLANNED_META.push({
+      planId,
+      stockCode: stock.stockCode,
+      stockName: stock.stockName,
+      title: planTitle,
+      entryPrice,
+      stopPrice,
+      quantity: qty,
+      entryDay: ymd(entryAt),
+      snapshot,
+    })
 
     out.push({
       recordId: nextId++,
@@ -388,6 +417,12 @@ function buildUnplanned(): TradeRecord[] {
 
   return out
 }
+
+/**
+ * 지운 체결 — **소프트 삭제** (Q23 ⑤ · Q3). 목록 · 통계에서는 빠지지만 여기 남는다.
+ * 「불리한 사실을 숨기지 않는다」 — 잘못 적은 것을 고치는 것이지 기록을 없애는 게 아니다.
+ */
+export const TRASHED_RECORDS: TradeRecord[] = []
 
 /** 체결 전부. 체결일 내림차순 — 목록의 기본 정렬이다 */
 export const TRADE_RECORDS: TradeRecord[] = [

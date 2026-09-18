@@ -2,9 +2,13 @@ import { http, HttpResponse } from 'msw'
 import { at } from '@/shared/lib/at'
 import { toServerRegime } from '@/shared/lib/snapshots'
 import type { PlanDetail, StopPickBody } from '@/entities/plan'
+import type { TradeRecord } from '@/entities/tradeRecord'
 import { makeScreening } from './data/screening'
 import {
   PLANS,
+  attachFill,
+  editFill,
+  removeFill,
   closePlan,
   createPlan,
   deletePlan,
@@ -13,7 +17,12 @@ import {
   planDefaults,
   toListItem,
 } from './data/plans'
-import { TRADE_RECORDS, filterRecords, makeStats } from './data/tradeRecords'
+import {
+  TRADE_RECORDS,
+  TRASHED_RECORDS,
+  filterRecords,
+  makeStats,
+} from './data/tradeRecords'
 import {
   STOCKS,
   makeBases,
@@ -469,6 +478,134 @@ export const handlers = [
       stopPrice: running.stopPrice,
       riskExposure: running.riskAfter,
     })
+  }),
+
+  /**
+   * 체결을 «적는다» (F2 · Q15) — 거래 기록 API 가 백엔드에 없어 이 목이 유일한 구현이다.
+   *
+   * 계획 상태는 `attachFill` 이 옮긴다 (Q22). ⚠️ 현금 반영 · `TradeRecordDerived` 재계산
+   *    (도메인 노트 5)은 아직 안 한다 — 행 하나를 앞에 꽂고 매도면 R배수만 낸다.
+   */
+  http.post('/api/v1/trade-records', async ({ request }) => {
+    const b = (await request.json()) as {
+      stockCode: string
+      side: 'BUY' | 'SELL'
+      price: number
+      quantity: number
+      filledAt: string
+      planId: number | null
+      sellReasons: string[]
+      reason: string
+    }
+    const plan =
+      b.planId == null ? null : PLANS.find((p) => p.planId === b.planId)
+    if (b.planId != null && !plan)
+      return fail(404, 'PLAN_NOT_FOUND', '계획이 없습니다')
+
+    const sameStock = TRADE_RECORDS.filter((r) => r.stockCode === b.stockCode)
+    const first = sameStock.find((r) => r.side === 'BUY')
+    const entryPrice = plan?.entryPrice ?? first?.price ?? b.price
+    const oneR = plan ? plan.entryPrice - plan.stopPrice : null
+    const made = {
+      recordId: Math.max(0, ...TRADE_RECORDS.map((r) => r.recordId)) + 1,
+      stockCode: b.stockCode,
+      stockName:
+        sameStock.at(0)?.stockName ??
+        PLANS.find((p) => p.stockCode === b.stockCode)?.stockName ??
+        b.stockCode,
+      side: b.side,
+      price: b.price,
+      quantity: b.quantity,
+      filledAt: b.filledAt,
+      sellReasons: b.sellReasons as TradeRecord['sellReasons'],
+      reason: b.reason,
+      planId: plan?.planId ?? null,
+      planTitle: plan?.title ?? null,
+      accountTotal: sameStock.at(0)?.accountTotal ?? 80_000_000,
+      estimated: false,
+      derived:
+        b.side === 'SELL'
+          ? {
+              entryPrice,
+              returnPct: +(((b.price - entryPrice) / entryPrice) * 100).toFixed(
+                2,
+              ),
+              profit: Math.round((b.price - entryPrice) * b.quantity),
+              holdingDays: 0,
+              rMultiple:
+                oneR && oneR > 0
+                  ? +((b.price - entryPrice) / oneR).toFixed(2)
+                  : null,
+              riskPct: null,
+              riskBand: null,
+            }
+          : null,
+      snapshot: null,
+    } satisfies TradeRecord
+    TRADE_RECORDS.unshift(made)
+    // 계획 상태가 체결을 따라 움직인다 (Q22) — 대기 → 실행 중 · 전량 매도 → 실행 완료
+    if (plan) attachFill(plan.planId, b, made.recordId)
+    return ok(made)
+  }),
+
+  /**
+   * 체결에 계획을 붙이거나 뗀다 (Q21) — 「거래」 페이지의 계획 칸이 부른다.
+   *
+   * ⚠️ **꼬리표만 바꾼다.** 도메인 노트 5-4 는 `planId` 가 바뀌면 계좌 총액 복사와
+   *    R배수 · 위험노출% 를 다시 계산하라고 한다. 계획 상태 전이(대기 → 실행 중 ·
+   *    승계)도 여기서 같이 일어나야 한다 — 백엔드가 생길 때 맞춘다.
+   */
+  /**
+   * 체결 하나를 고친다 (Q23 ⑤ · ⑥) — 계획 붙이기(`planId`) · 가격 · 수량 · 체결일.
+   * 계획 목의 체결도 같은 id 로 고치고 그 계획의 상태를 다시 낸다.
+   */
+  http.patch('/api/v1/trade-records/:recordId', async ({ params, request }) => {
+    const id = Number(params.recordId)
+    const body = (await request.json()) as {
+      planId?: number | null
+      price?: number
+      quantity?: number
+      filledAt?: string
+    }
+    const rec = TRADE_RECORDS.find((r) => r.recordId === id)
+    const inPlans = PLANS.some((p) => p.records.some((r) => r.recordId === id))
+    if (!rec && !inPlans) return fail(404, 'NOT_FOUND', '거래 기록이 없습니다')
+    if (body.planId !== undefined && rec) {
+      const plan =
+        body.planId === null
+          ? null
+          : PLANS.find((p) => p.planId === body.planId)
+      if (body.planId !== null && !plan)
+        return fail(404, 'PLAN_NOT_FOUND', '계획이 없습니다')
+      rec.planId = plan?.planId ?? null
+      rec.planTitle = plan?.title ?? null
+    }
+    if (rec) {
+      if (body.price !== undefined) rec.price = body.price
+      if (body.quantity !== undefined) rec.quantity = body.quantity
+      if (body.filledAt !== undefined) rec.filledAt = body.filledAt
+      if (rec.derived) {
+        const e = rec.derived.entryPrice
+        rec.derived.returnPct = +(((rec.price - e) / e) * 100).toFixed(2)
+        rec.derived.profit = Math.round((rec.price - e) * rec.quantity)
+      }
+    }
+    editFill(id, body)
+    return ok(rec ?? null)
+  }),
+
+  /**
+   * 체결 하나를 지운다 (Q23 ⑤) — **소프트 삭제**다 (Q3 「삭제(소프트 · 연쇄)」).
+   * 목록 · 통계에서는 빠지고 `TRASHED_RECORDS` 에 남는다. 계획 상태는 체결에서 다시 낸다.
+   */
+  http.delete('/api/v1/trade-records/:recordId', ({ params }) => {
+    const id = Number(params.recordId)
+    const i = TRADE_RECORDS.findIndex((r) => r.recordId === id)
+    const inPlans = PLANS.some((p) => p.records.some((r) => r.recordId === id))
+    if (i < 0 && !inPlans) return fail(404, 'NOT_FOUND', '거래 기록이 없습니다')
+    if (i >= 0) TRASHED_RECORDS.push(...TRADE_RECORDS.splice(i, 1))
+    removeFill(id)
+    return ok(null)
   }),
 
   // 계획 «생성» (④ · Q8). 세운 계획은 「대기」로 난다 — 실행 중으로 만드는 것은 체결이다

@@ -34,11 +34,12 @@ type NavEntry = {
  * 여전히 메뉴가 아닌 것들:
  *   보유 중·관심  상단 바 드롭다운
  *   계획 작성     사슬의 «빈 자리»에서 시작 (Q8)
- *   거래 기록     계획 카드에서 시작
+ *   거래 기록     거래 계획의 「+ 체결」 · 「+ 체결 기록」 (Q22) — 따로 탭이 없다
  *   계획 잇기     사슬에서 들어감
  */
 const navItems: NavEntry[] = [
   { to: '/trends', label: '오늘의 후보', icon: TrendingUp },
+  // 이 서비스의 집이다 (Q22) — 종목별 사슬 · 체결도 여기서 붙인다
   { to: '/plans', label: '거래 계획', icon: ClipboardList },
   { to: '/stats', label: '거래 통계', icon: BarChart3 },
 ]

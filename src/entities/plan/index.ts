@@ -26,6 +26,7 @@ export {
   stopPickLabel,
 } from './model/types'
 export {
+  realizedOf,
   autoPlanTitle,
   clampExposure,
   needCash,
