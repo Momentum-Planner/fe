@@ -779,6 +779,185 @@ function build(s: Seed): PlanDetail {
   }
 }
 
+/**
+ * **화면이 넘칠 만큼 채운 계획들** (2026-09-18 사용자 「데이터 좀 화면이 넘어갈 정도로」).
+ * 손으로 쓴 위 계획들과 달리 규칙으로 만든다 — 실행 중 · 대기 · 완료(이익 · 손실) · 폐기가 고루.
+ * 사슬은 잇지 않는다(previousPlanId null). planId 100~ · recordId 9800~.
+ * ⚠️ 현대차(005380) · NAVER(035420) 는 «계획이 없는 종목» 으로 테스트가 쓴다 — 넣지 않는다.
+ */
+type Fill = [
+  code: string,
+  name: string,
+  status: 'RUNNING' | 'PLANNED' | 'DONE' | 'CLOSED',
+  title: string,
+  entry: number,
+  /** 손절폭 % (진입 대비) · 실행 중에서 0 이면 손절을 본전으로 올린 것 */
+  stopPct: number,
+  qty: number,
+  goalR: number,
+  /** 완료의 청산가 (진입 대비 %) */
+  exitPct?: number,
+]
+const FILLS: Fill[] = [
+  ['042700', '한미반도체', 'RUNNING', '눌림 진입 — 20일선', 98_400, 4.5, 40, 2],
+  [
+    '373220',
+    'LG에너지솔루션',
+    'RUNNING',
+    '돌파 진입 — 컵핸들',
+    380_000,
+    4.2,
+    12,
+    2,
+  ],
+  ['196170', '알테오젠', 'RUNNING', '3주 베이스 돌파', 412_000, 0, 6, 3],
+  ['267260', 'HD현대일렉트릭', 'RUNNING', 'VCP 피봇 돌파', 386_500, 6.8, 10, 2],
+  [
+    '012450',
+    '한화에어로스페이스',
+    'RUNNING',
+    '추가매수 — 2차 베이스',
+    702_000,
+    0,
+    4,
+    4,
+  ],
+  ['105560', 'KB금융', 'RUNNING', '저점 높이기 눌림', 101_200, 3.9, 60, 2],
+  ['000270', '기아', 'PLANNED', '돌파 대기 — 124,000', 124_000, 5.2, 50, 2],
+  ['068270', '셀트리온', 'PLANNED', '눌림 대기 — 50일선', 176_000, 6.1, 30, 3],
+  [
+    '010140',
+    '삼성중공업',
+    'PLANNED',
+    '조기 진입 — 핸들 안',
+    14_350,
+    4.8,
+    700,
+    2,
+  ],
+  ['006400', '삼성SDI', 'PLANNED', '돌파 대기 — 신고가', 312_000, 5.5, 15, 2],
+  ['051910', 'LG화학', 'PLANNED', '베이스 하단 눌림', 288_500, 4.4, 18, 3],
+  [
+    '207940',
+    '삼성바이오로직스',
+    'PLANNED',
+    '돌파 대기 — 1,050,000',
+    1_050_000,
+    5,
+    4,
+    2,
+  ],
+  ['042700', '한미반도체', 'DONE', '1차 베이스 돌파', 82_300, 5.1, 50, 2, 21.4],
+  ['373220', 'LG에너지솔루션', 'DONE', '눌림 진입', 352_000, 4.8, 14, 2, -4.9],
+  ['196170', '알테오젠', 'DONE', 'VCP 돌파', 301_000, 6.2, 8, 3, 34.2],
+  [
+    '267260',
+    'HD현대일렉트릭',
+    'DONE',
+    '신고가 돌파',
+    310_000,
+    5.9,
+    12,
+    2,
+    -6.1,
+  ],
+  ['105560', 'KB금융', 'DONE', '눌림 — 20일선', 92_400, 4.1, 70, 2, 3.2],
+  ['000270', '기아', 'DONE', '베이스 돌파', 111_000, 5.3, 55, 2, -5.2],
+  ['068270', '셀트리온', 'DONE', '돌파 진입', 181_500, 5, 30, 2, 8.7],
+  ['010140', '삼성중공업', 'DONE', '조기 진입', 12_900, 5.4, 800, 3, 17.9],
+  ['006400', '삼성SDI', 'DONE', '눌림 진입', 296_000, 4.9, 14, 2, -3.1],
+  ['051910', 'LG화학', 'DONE', '돌파 진입', 268_000, 5.6, 15, 2, -7.4],
+  [
+    '012450',
+    '한화에어로스페이스',
+    'DONE',
+    '1차 베이스 돌파',
+    512_000,
+    6,
+    6,
+    3,
+    28.9,
+  ],
+  [
+    '207940',
+    '삼성바이오로직스',
+    'CLOSED',
+    '돌파 대기 — 980,000',
+    980_000,
+    5,
+    5,
+    2,
+  ],
+  ['000270', '기아', 'CLOSED', '조기 진입 시도', 104_500, 5, 60, 2],
+  ['105560', 'KB금융', 'CLOSED', '갭 상승 추격', 97_800, 4, 60, 2],
+  ['068270', '셀트리온', 'CLOSED', '핸들 이탈 — 취소', 170_000, 5, 30, 2],
+]
+const day = (i: number) => {
+  const d = new Date(Date.UTC(2026, 8, 16) - i * 4 * 86_400_000)
+  return d.toISOString().slice(0, 10)
+}
+/** 호가 단위로 자른다 — 목 가격이 1원 단위로 나오지 않게 */
+const tick = (v: number) => {
+  const u = v >= 500_000 ? 1_000 : v >= 200_000 ? 500 : v >= 50_000 ? 100 : 10
+  return Math.round(v / u) * u
+}
+FILLS.forEach(
+  ([code, name, status, title, , stopPct, qty, goalR, exitPct], i) => {
+    // 진입가는 «그날 캔들» 에서 — 손으로 박으면 차트와 자릿수가 어긋난다 (chartLines.test)
+    const writtenOn = day(i)
+    const candles = makeCandles(code)
+    const near =
+      candles.find((c) => c.tradeDate.slice(0, 10) >= writtenOn) ??
+      candles.at(-1)!
+    const entry = tick(near.closePrice * 1.01)
+    const width = Math.round((entry * (stopPct || 5)) / 100)
+    const stop = status === 'RUNNING' && stopPct === 0 ? entry : entry - width
+    const writtenAt = writtenOn
+    const bought = status === 'RUNNING' || status === 'DONE'
+    const buy = {
+      recordId: 9800 + i * 2,
+      filledAt: `${day(i - 1 < 0 ? 0 : i - 1)} 09:0${i % 10}`,
+      side: 'BUY' as const,
+      price: Math.round(entry * 1.002),
+      quantity: qty,
+    }
+    const sell =
+      status === 'DONE' && exitPct !== undefined
+        ? {
+            recordId: 9801 + i * 2,
+            filledAt: `${day(Math.max(0, i - 3))} 14:2${i % 10}`,
+            side: 'SELL' as const,
+            price: Math.round(entry * (1 + exitPct / 100)),
+            quantity: qty,
+          }
+        : null
+    const records = bought ? (sell ? [buy, sell] : [buy]) : []
+    SEEDS.push({
+      planId: 100 + i,
+      title,
+      stockCode: code,
+      stockName: name,
+      status,
+      writtenAt,
+      entryPrice: entry,
+      previousPlanId: null,
+      initialStopWidth: bought ? width : null,
+      plannedStop:
+        status === 'RUNNING' && stopPct === 0
+          ? ladder(stop, [[2, { kind: 'BREAKEVEN', price: entry }], goalR])
+          : ladder(stop, [goalR]),
+      plannedPosition: { quantity: qty, riskBefore: 1.2, riskAfter: 0 },
+      snapshot: SNAPSHOTS[90455],
+      closeReason: status === 'CLOSED' ? '조건이 깨져 들어가지 않았다' : null,
+      memo: '',
+      recordCount: records.length,
+      stopLimit: 2.36,
+      records,
+      filled: bought ? qty : 0,
+    })
+  },
+)
+
 export const PLANS: PlanDetail[] = SEEDS.map(build)
 
 /**

@@ -9,7 +9,7 @@ import {
 import { useStockSearch } from '@/entities/search'
 import { useCreateRecord } from '@/entities/tradeRecord'
 import type { TradeSide } from '@/entities/tradeRecord'
-import { PlanChainPick } from './PlanPicker'
+import { PlanPickList } from './PlanPicker'
 import type { Pick } from './PlanPicker'
 
 /**
@@ -20,7 +20,7 @@ import type { Pick } from './PlanPicker'
  * ① 어느 계획을 실행했나  [체결일] [매수|매도] — 사슬        후보를 가르는 입력이 후보 위에
  * ② 체결                체결가 | 수량 + 그 칸이 만든 숫자   패널 없이 «원인 옆»
  *                       왜 샀나(선택) / 왜 팔았나(여럿)
- * [기록한다]
+ * [기록]
  * ```
  *
  * - 순차 공개 — 계획을 골라야 ② 가 열린다. 안 열린 뒤쪽은 제목만 흐리게 (Q15 5)
@@ -37,7 +37,8 @@ const signed = (n: number, d = 1) => `${n >= 0 ? '+' : ''}${n.toFixed(d)}`
  */
 export interface FillStart {
   stock: { code: string; name: string }
-  planId: number
+  /** 「NONE」 — 계획 없이 체결 (거래 계획 검색의 빈 판에서 연다) */
+  planId: number | 'NONE'
   /**
    * 대기 카드는 매수로 정해진다. **실행 중 카드는 비워 둔다** (Q23 · 10장 E) — 추가 매수일 수도
    * 있어 확신이 없다. 매도로 미리 눌러 두면 매수를 적다가 못 보고 반대로 기록된다.
@@ -117,14 +118,15 @@ export function NewFillForm({
   const holdBlock = !buy && seen.qty > held
   const ready =
     !!stock && !!side && pick !== null && filled && !cashBlock && !holdBlock
+  // 무엇을 해야 기록되는지로 말한다 — 「~을 골라야 기록할 수 있습니다」 (사용자 표현)
   const why = !stock
-    ? '종목을 고른다'
+    ? '종목을 골라야 기록할 수 있습니다'
     : !side
-      ? '매수인지 매도인지 고른다'
+      ? '매수 · 매도를 골라야 기록할 수 있습니다'
       : pick === null
-        ? '계획을 고른다 — 없으면 「계획에 없음」'
+        ? '계획을 골라야 기록할 수 있습니다 — 없으면 「계획에 없음」'
         : !filled
-          ? '체결가와 수량을 넣는다'
+          ? '체결가와 수량을 넣어야 기록할 수 있습니다'
           : // 막힌 이유를 그대로 — 「막힌 칸이 있다」 는 어느 칸인지 위로 찾게 했다 (Q23 · 10장 F)
             holdBlock
             ? `수량이 보유 ${held}주보다 많다`
@@ -224,34 +226,28 @@ export function NewFillForm({
         </div>
       )}
 
-      {/* ① 어느 계획을 실행했나 — 이 폼의 강제 지점이라 한 단계 밝다 */}
+      {/**
+       * 날짜 · 구분 한 줄 → 계획 줄 목록 → 체결 (Q23 · 체결 폼 다시 짜기 가).
+       * 번호 붙은 상자를 걷고 작은 제목만 — 440px 칸에서 상자 안 상자가 무거웠다.
+       */}
       {stock && (
-        <div className="bg-bg-elevated/40 ring-border-default rounded-lg px-4 py-3 ring-1">
-          <div className="mb-2 flex items-baseline gap-2">
-            <span className="font-number text-[11px] text-white/35">1</span>
-            <span className="text-[12px] font-bold text-white/85">
-              어느 계획을 실행했나
-            </span>
-            <span className="ml-auto text-[10px] text-white/35">
-              골라 두지 않는다
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <input
               type="date"
               aria-label="체결일"
               value={date}
               onChange={(e) => head({ date: e.target.value }, '체결일')}
-              className="bg-bg-input font-number w-[150px] rounded-md px-2 py-1 text-[13px] text-white [color-scheme:dark] outline-none focus:ring-1 focus:ring-white/30"
+              className="bg-bg-input font-number w-[140px] rounded-md px-2 py-1.5 text-[13px] text-white [color-scheme:dark] outline-none focus:ring-1 focus:ring-white/30"
             />
-            <div className="flex overflow-hidden rounded-md ring-1 ring-white/10">
+            <div className="flex shrink-0 overflow-hidden rounded-md ring-1 ring-white/15">
               {(['BUY', 'SELL'] as const).map((s) => (
                 <button
                   key={s}
                   type="button"
                   onClick={() => head({ side: s }, '구분')}
                   className={cn(
-                    'px-3 py-1 text-[12px]',
+                    'px-4 py-1.5 text-[13px] whitespace-nowrap',
                     side === s
                       ? 'bg-white/15 font-bold text-white'
                       : 'text-white/50 hover:text-white/80',
@@ -261,19 +257,20 @@ export function NewFillForm({
                 </button>
               ))}
             </div>
-            <span className="text-[12px] text-white/50">
-              {side ? (
-                `에 ${buy ? '산' : '판'} 것은 어느 계획인가`
-              ) : (
-                <span className="text-warning">매수 · 매도를 고른다</span>
-              )}
-            </span>
+            {!side && (
+              <span className="text-warning text-[12px]">
+                매수 · 매도를 골라야 기록할 수 있습니다
+              </span>
+            )}
           </div>
           {released && (
-            <div className="text-warning mt-1.5 text-[11px]">⚠ {released}</div>
+            <div className="text-warning text-[11px]">⚠ {released}</div>
           )}
-          <div className="mt-2">
-            <PlanChainPick
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[12px] font-bold text-white/85">
+              어느 계획
+            </span>
+            <PlanPickList
               fill={{
                 stockCode: stock.code,
                 side: side ?? 'BUY',
@@ -293,10 +290,7 @@ export function NewFillForm({
       {/* ② 체결 — 숫자는 그 숫자를 만든 칸 밑에 */}
       {stock && opened && side && (
         <div className="border-t border-white/[0.06] pt-3">
-          <div className="mb-2 flex items-baseline gap-2">
-            <span className="font-number text-[11px] text-white/35">2</span>
-            <span className="text-[12px] font-bold text-white/85">체결</span>
-          </div>
+          <div className="mb-2 text-[12px] font-bold text-white/85">체결</div>
           <div className="grid grid-cols-2 gap-x-4">
             <div className="flex flex-col gap-1">
               <NumField
@@ -430,15 +424,16 @@ export function NewFillForm({
       {stock && (!opened || !side) && (
         <div className="flex flex-col text-[12px] text-white/30">
           <div className="flex items-baseline gap-2 border-t border-white/[0.06] py-2.5">
-            <span className="font-number text-[11px]">2</span>
             <span className="font-bold">체결</span>
             <span className="text-[11px]">체결가 · 수량 · 메모</span>
             <span className="ml-auto text-[11px]">
-              {opened ? '구분을 고르면 열린다' : '계획을 고르면 열린다'}
+              {opened
+                ? '매수 · 매도를 골라야 열립니다'
+                : '계획을 골라야 열립니다'}
             </span>
           </div>
           <div className="border-t border-white/[0.06] pt-2.5 font-bold">
-            기록한다
+            기록
           </div>
         </div>
       )}
@@ -477,13 +472,13 @@ export function NewFillForm({
               )
             }
             className={cn(
-              'rounded-md px-4 py-1.5 text-[12px] font-bold',
+              'rounded-md px-5 py-1.5 text-[12px] font-bold whitespace-nowrap',
               !ready || create.isPending
                 ? 'bg-white/[0.06] text-white/25'
                 : 'text-fg-inverse bg-white hover:bg-white/90',
             )}
           >
-            {create.isPending ? '기록하는 중…' : '기록한다'}
+            {create.isPending ? '기록 중…' : '기록'}
           </button>
           {over > 0 && plan && ready && (
             <button
@@ -510,22 +505,16 @@ export function NewFillForm({
                   },
                 )
               }
-              className="rounded-md px-3 py-1.5 text-[12px] text-white/85 ring-1 ring-white/25 hover:bg-white/[0.06]"
+              className="rounded-md px-3 py-1.5 text-[12px] whitespace-nowrap text-white/85 ring-1 ring-white/25 hover:bg-white/[0.06]"
             >
-              계획 수량을 {plan.quantity + over}주로 고치고 기록
+              {plan.quantity + over}주로 고쳐 기록
             </button>
           )}
-          {!ready ? (
-            <span className="text-[11px] text-white/40">{why}</span>
-          ) : (
-            <span className="font-number text-[11px] text-white/40">
-              계좌 총액 {won(total)}원을{' '}
-              {pick === 'NONE' ? '직전 값으로' : '계획 것으로'} 함께 적는다
-            </span>
-          )}
+          {/* 글자를 줄인다 — 계좌 총액 안내 줄은 뺐다 (사용자 「텍스트 양 좀 줄이고」) */}
+          {!ready && <span className="text-[11px] text-white/40">{why}</span>}
           {create.isError && (
             <span className="text-brand-red text-[11px]">
-              기록하지 못했다 — 다시 눌러 본다
+              기록 못 함 — 다시 누른다
             </span>
           )}
         </div>

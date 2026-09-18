@@ -18,6 +18,17 @@ export const STOCKS: MockStock[] = [
   { stockCode: '207940', stockName: '삼성바이오로직스' },
   { stockCode: '051910', stockName: 'LG화학' },
   { stockCode: '006400', stockName: '삼성SDI' },
+  // 화면이 넘칠 만큼 계획을 채우려고 더한 종목들 (거래 계획 목 · 2026-09-18)
+  { stockCode: '042700', stockName: '한미반도체' },
+  { stockCode: '373220', stockName: 'LG에너지솔루션' },
+  { stockCode: '005380', stockName: '현대차' },
+  { stockCode: '000270', stockName: '기아' },
+  { stockCode: '068270', stockName: '셀트리온' },
+  { stockCode: '196170', stockName: '알테오젠' },
+  { stockCode: '267260', stockName: 'HD현대일렉트릭' },
+  { stockCode: '105560', stockName: 'KB금융' },
+  { stockCode: '012450', stockName: '한화에어로스페이스' },
+  { stockCode: '010140', stockName: '삼성중공업' },
 ]
 
 export const stockName = (code: string) =>
@@ -79,6 +90,20 @@ const TODAY_PRICE: Record<string, number> = {
   '005930': 69_000,
   '035720': 74_000,
   '041510': 104_000,
+  // 채움 계획들 (plans.ts FILLS) 의 가격대
+  '042700': 101_000,
+  '373220': 392_000,
+  '005380': 258_000,
+  '196170': 430_000,
+  '267260': 395_000,
+  '012450': 720_000,
+  '105560': 104_000,
+  '000270': 126_000,
+  '068270': 180_000,
+  '010140': 14_700,
+  '006400': 318_000,
+  '051910': 292_000,
+  '207940': 1_070_000,
 }
 
 export function makeCandles(code: string, days = 400): MockCandle[] {

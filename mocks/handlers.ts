@@ -772,9 +772,13 @@ export const handlers = [
   }),
 
   http.get('/api/v1/search/stocks', ({ request }) => {
-    const q = (new URL(request.url).searchParams.get('query') ?? '').trim()
+    // 띄어쓰기 · 대소문자는 가리지 않는다 — 「sk 하이닉스」 도 SK하이닉스 를 찾는다
+    const norm = (v: string) => v.replace(/\s+/g, '').toLowerCase()
+    const q = norm(new URL(request.url).searchParams.get('query') ?? '')
     const hits = q
-      ? STOCKS.filter((s) => s.stockName.includes(q) || s.stockCode.includes(q))
+      ? STOCKS.filter(
+          (s) => norm(s.stockName).includes(q) || s.stockCode.includes(q),
+        )
       : []
     return ok({
       stocks: hits.map((s) => {

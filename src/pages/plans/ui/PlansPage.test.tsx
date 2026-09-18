@@ -44,52 +44,54 @@ const draw = () => {
 }
 
 describe('거래 계획 — 계획 하나 = 카드 하나 · 거르기로 가른다 (Q23 · 4장 ③)', () => {
-  it('처음은 「실행 중」 — 실행 중 계획만 서고 목표 · 진입 · 손절이 한 줄씩', async () => {
+  it('거르기 넷이 한 줄 · 처음은 「실행 중」 · 목표 | 진입 | 손절 세 칸', async () => {
     draw()
-    expect(await screen.findByText('SK하이닉스')).toBeInTheDocument()
+    await screen.findAllByText('SK하이닉스')
+    for (const name of ['실행 중', '대기', '완료', '폐기'])
+      expect(screen.getByRole('button', { name })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '실행 중' })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
-    expect(screen.getByText('진입')).toBeInTheDocument()
-    expect(screen.getByText('손절')).toBeInTheDocument()
-    // 대기만 있는 종목(삼성전자) · 끝난 종목(카카오)은 이 거르기에 없다
+    expect(screen.getAllByText('진입').length).toBeGreaterThan(0)
+    // 회색은 칸마다 하나 — 손절 옆엔 손절폭 % 만
+    expect(screen.getAllByText(/^[−+]?\d+\.\d%$/).length).toBeGreaterThan(0)
     expect(screen.queryByText('삼성전자')).not.toBeInTheDocument()
-    expect(screen.queryByText('카카오')).not.toBeInTheDocument()
   })
 
-  it('「대기」 로 거르면 대기 계획이 서고, 실행 중은 빠진다', async () => {
+  it('「대기」 는 따로 — 종목끼리 판으로 묶지 않고 카드마다 이름', async () => {
     const user = userEvent.setup()
     draw()
-    await screen.findByText('SK하이닉스')
+    await screen.findAllByText('SK하이닉스')
     await user.click(screen.getByRole('button', { name: '대기' }))
-    // 삼성전자 대기 둘 — 한 판 위에, 이름은 판 머리에 한 번만 (4장 ④)
-    expect(screen.getAllByText('삼성전자')).toHaveLength(1)
-    const board = screen.getByRole('region', { name: '삼성전자' })
-    expect(
-      within(board).getAllByRole('button', { name: '+ 체결' }),
-    ).toHaveLength(2)
-    expect(screen.queryByText('실행 중', { selector: 'span' })).toBeNull()
+    // 삼성전자 대기 둘 — 카드 둘에 이름이 각각
+    expect(screen.getAllByText('삼성전자')).toHaveLength(2)
+    expect(screen.queryByRole('region', { name: '삼성전자' })).toBeNull()
   })
 
-  it('「완료 · 폐기」 로 거르면 끝난 계획이 선다', async () => {
+  it('「완료」 는 결과 거르기(모두 · 이익 · 손실) + 정렬 · 「폐기」 는 따로', async () => {
     const user = userEvent.setup()
     draw()
-    await screen.findByText('SK하이닉스')
-    await user.click(screen.getByRole('button', { name: '완료 · 폐기' }))
-    // 두 번째 필터는 없다 — 이익 · 손실 · 폐기 무리가 한 화면에 (9장 ②)
-    expect(screen.queryByRole('button', { name: '이익' })).toBeNull()
-    const win = screen.getByRole('region', { name: '이익' })
-    expect(within(win).getByText('카카오')).toBeInTheDocument()
-    const closed = screen.getByRole('region', { name: '폐기' })
-    expect(within(closed).getByText('에스엠')).toBeInTheDocument()
+    await screen.findAllByText('SK하이닉스')
+    await user.click(screen.getByRole('button', { name: '완료' }))
+    expect(screen.getByRole('button', { name: '모두' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(screen.getByText('카카오')).toBeInTheDocument()
+    expect(screen.getByText('정렬')).toBeInTheDocument()
+    // 손실만 — 카카오(이익) 는 빠진다
+    await user.click(screen.getByRole('button', { name: '손실' }))
+    expect(screen.queryByText('카카오')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '+ 체결' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: '폐기' }))
+    expect(screen.getByText('에스엠')).toBeInTheDocument()
   })
 
   it('카드의 「+ 체결」 은 오른쪽 칸을 그 계획이 골라진 채로 연다', async () => {
     const user = userEvent.setup()
     draw()
-    await screen.findByText('SK하이닉스')
+    await screen.findAllByText('SK하이닉스')
     await user.click(screen.getAllByRole('button', { name: '+ 체결' })[0]!)
     const panel = screen.getByText('체결 기록').closest('section')!
     // 종목이 이미 골라져 있다 — 종목 입력칸이 없다
@@ -103,7 +105,7 @@ describe('거래 계획 — 계획 하나 = 카드 하나 · 거르기로 가른
   it('위 「+ 체결 기록」 은 빈 채로 연다 — 종목부터 고른다', async () => {
     const user = userEvent.setup()
     draw()
-    await screen.findByText('SK하이닉스')
+    await screen.findAllByText('SK하이닉스')
     await user.click(screen.getByRole('button', { name: '+ 체결 기록' }))
     expect(screen.getByLabelText('종목')).toBeInTheDocument()
   })
@@ -111,7 +113,7 @@ describe('거래 계획 — 계획 하나 = 카드 하나 · 거르기로 가른
   it('Esc 로 체결 칸을 닫는다 (4장 ⑥ 서랍)', async () => {
     const user = userEvent.setup()
     draw()
-    await screen.findByText('SK하이닉스')
+    await screen.findAllByText('SK하이닉스')
     act(() => openFill())
     expect(screen.getByLabelText('종목')).toBeInTheDocument()
     await user.keyboard('{Escape}')
@@ -142,12 +144,52 @@ describe('끝난 계획 정렬 — 손익 · 수익률 · 최근 (7장 ②)', ()
 })
 
 describe('처음 여는 필터 — 비어 있지 않은 첫 것 (2장 ①)', () => {
-  it('실행 중이 없으면 대기, 대기도 없으면 완료 · 폐기', async () => {
+  it('실행 중 → 대기 → 완료 → 폐기 순으로 비어 있지 않은 첫 것', async () => {
     const { firstScope } = await import('./PlansPage')
     const of = (status: string) => ({ status }) as never
     expect(firstScope([of('PLANNED'), of('RUNNING')])).toBe('RUNNING')
     expect(firstScope([of('PLANNED'), of('DONE')])).toBe('PLANNED')
-    expect(firstScope([of('CLOSED')])).toBe('ENDED')
+    expect(firstScope([of('CLOSED'), of('DONE')])).toBe('DONE')
+    expect(firstScope([of('CLOSED')])).toBe('CLOSED')
     expect(firstScope([])).toBe('RUNNING')
+  })
+})
+
+describe('거래 계획만의 찾기 — 찾으면 카드 끝에 찾은 종목의 빈 칸', () => {
+  it('찾은 종목의 빈 칸 「+ 새 계획」 — 띄어쓰기 · 대소문자 무시', async () => {
+    const user = userEvent.setup()
+    draw()
+    await screen.findAllByText('SK하이닉스')
+    await user.click(screen.getByRole('button', { name: '대기' }))
+    await user.type(screen.getByLabelText('계획 찾기'), 'sk 하이')
+    const slot = await screen.findByRole('group', { name: 'SK하이닉스 빈 칸' })
+    expect(within(slot).getByText('+ 새 계획')).toBeInTheDocument()
+    expect(screen.queryByText('삼성전자')).not.toBeInTheDocument()
+  })
+
+  it('계획이 없는 종목은 「+ 계획 없이 체결」 도 — 그 종목으로 칸을 연다', async () => {
+    const user = userEvent.setup()
+    draw()
+    await screen.findAllByText('SK하이닉스')
+    await user.type(screen.getByLabelText('계획 찾기'), 'naver')
+    const slot = await screen.findByRole('group', { name: 'NAVER 빈 칸' })
+    expect(within(slot).getByText('계획 없음')).toBeInTheDocument()
+    await user.click(
+      within(slot).getByRole('button', { name: '+ 계획 없이 체결' }),
+    )
+    expect(screen.queryByLabelText('종목')).not.toBeInTheDocument()
+    expect(
+      screen.getAllByText('매수 · 매도를 골라야 기록할 수 있습니다').length,
+    ).toBeGreaterThan(0)
+  })
+
+  it('맞는 것이 없으면 그렇게 말한다', async () => {
+    const user = userEvent.setup()
+    draw()
+    await screen.findAllByText('SK하이닉스')
+    await user.type(screen.getByLabelText('계획 찾기'), '없는종목')
+    expect(
+      await screen.findByText(/에 맞는 계획이 없습니다/),
+    ).toBeInTheDocument()
   })
 })
