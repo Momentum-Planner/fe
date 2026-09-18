@@ -51,6 +51,59 @@ const SCOPE_LABEL: Record<Scope, string> = {
 const inScope = (p: PlanListItem, s: Scope) =>
   s === 'ENDED' ? p.status === 'DONE' || p.status === 'CLOSED' : p.status === s
 
+/**
+ * 끝난 계획은 결과로 **세 무리를 한 화면에** — 이익 → 손실 → 폐기 (Q23 · 9장 ②).
+ * 💀 「아카이브에서 찾고 싶은 건 결과다 — 가장 수익이 높았던 거래」(7장 · Q14).
+ *    두 번째 필터로 넣었다가 뺐다 — 「누르면 새것이 나오면 안 된다」(사용자). 무리는 작은 머리로만 가른다.
+ */
+type Result = 'WIN' | 'LOSS' | 'CLOSED'
+const RESULT_LABEL: Record<Result, string> = {
+  WIN: '이익',
+  LOSS: '손실',
+  CLOSED: '폐기',
+}
+const resultOf = (p: PlanListItem): Result =>
+  p.status === 'CLOSED' ? 'CLOSED' : (p.realized ?? 0) > 0 ? 'WIN' : 'LOSS'
+/**
+ * 끝난 계획의 정렬 — **손익(원) · 수익률(%) · 최근** (Q23 · 7장 ②).
+ * 「가장 많이 번」 과 「가장 효율이 좋았던」 은 다른 매매일 때가 많아 둘을 번갈아 본다.
+ * 이익은 큰 것부터 · 손실은 가장 많이 잃은 것부터 · 폐기는 늘 최근부터.
+ */
+type Sort = 'PNL' | 'PCT' | 'RECENT'
+const SORT_LABEL: Record<Sort, string> = {
+  PNL: '손익',
+  PCT: '수익률',
+  RECENT: '최근',
+}
+const recent = (a: PlanListItem, b: PlanListItem) =>
+  b.writtenAt.localeCompare(a.writtenAt)
+export const sortFor = (r: Result, s: Sort) => {
+  if (r === 'CLOSED' || s === 'RECENT') return recent
+  const v = (p: PlanListItem) => (s === 'PNL' ? p.realized : p.realizedPct) ?? 0
+  return r === 'WIN'
+    ? (a: PlanListItem, b: PlanListItem) => v(b) - v(a)
+    : (a: PlanListItem, b: PlanListItem) => v(a) - v(b)
+}
+
+/** 무리마다 처음 이만큼 · 나머지는 「더 보기」 로 이어 붙인다 (7장 ② 첫 화면) */
+const PAGE = 6
+
+/** 같은 종목끼리 묶는다 — 둘 이상이면 한 판 위에 (Q23 · 4장 ④). 순서는 들어온 순서 그대로 */
+const byStock = (list: PlanListItem[]) => {
+  const by = new Map<string, PlanListItem[]>()
+  for (const p of list) by.set(p.stockCode, [...(by.get(p.stockCode) ?? []), p])
+  return [...by.values()]
+}
+
+/**
+ * 처음 여는 필터 — **비어 있지 않은 첫 것** (Q23 · 2장 ① 빈도).
+ * 실행 중이 없는 날 첫 화면이 「없습니다」 한 줄이었다 — 대기가 있어도 한 번 더 눌러야 했다.
+ */
+export const firstScope = (plans: PlanListItem[]): Scope =>
+  (['RUNNING', 'PLANNED', 'ENDED'] as const).find((s) =>
+    plans.some((p) => inScope(p, s)),
+  ) ?? 'RUNNING'
+
 const EMPTY: Record<Scope, string> = {
   RUNNING: '실행 중인 계획이 없습니다.',
   PLANNED: '대기 중인 계획이 없습니다.',
@@ -65,31 +118,61 @@ const man = (v: number) => {
     ? `${s}${Math.round(a / 10_000).toLocaleString()}만`
     : `${s}${a.toLocaleString()}`
 }
+const pct = (r: number) =>
+  `${r > 0 ? '+' : r < 0 ? '−' : ''}${Math.abs(r * 100).toFixed(1)}%`
+
+/** 손절에 닿으면 얼마 — 음수면 아직 잃을 수 있다. 0 이상이면 「본전 이상 카드」 */
+export const atStop = (p: PlanListItem) =>
+  (p.stopPrice - p.entryPrice) * p.quantity
+
 /** 목표 — 아직 안 닿은 첫 단. 다 닿았으면 마지막 */
 const goalR = (p: PlanListItem) =>
   (p.goals.find((g) => !g.hitAt) ?? p.goals.at(-1))?.r ?? null
 
 export function PlansPage() {
   const { data: account } = useAccount()
-  const [scope, setScope] = useState<Scope>('RUNNING')
+  const [picked, setScope] = useState<Scope | null>(null)
   const fill = useFillPanel()
   const [newPlan, setNewPlan] = useState(false)
   const panel = fill || newPlan
 
   const { data: plans = [], isLoading, isError } = usePlanList({})
+  // 사용자가 누르기 전까지는 비어 있지 않은 첫 필터
+  const scope = picked ?? firstScope(plans)
+  const [sort, setSort] = useState<Sort>('PNL')
+  const [shown, setShown] = useState<Record<Result, number>>({
+    WIN: PAGE,
+    LOSS: PAGE,
+    CLOSED: PAGE,
+  })
 
-  /**
-   * 같은 종목끼리 묶는다 — 둘 이상이면 한 판 위에 (Q23 · 4장 ④ 폐쇄성).
-   * 판의 순서는 그 안의 가장 최근 계획 순, 판 안은 쓴 날 최신 순.
-   */
-  const groups = useMemo(() => {
-    const by = new Map<string, PlanListItem[]>()
-    for (const p of plans
-      .filter((x) => inScope(x, scope))
-      .sort((a, b) => b.writtenAt.localeCompare(a.writtenAt)))
-      by.set(p.stockCode, [...(by.get(p.stockCode) ?? []), p])
-    return [...by.values()]
-  }, [plans, scope])
+  /** 보일 무리 — 완료 · 폐기 만 결과로 셋, 나머지는 머리 없는 하나 */
+  const sections = useMemo(() => {
+    const list = plans.filter((x) => inScope(x, scope))
+    if (scope === 'ENDED')
+      return (Object.keys(RESULT_LABEL) as Result[])
+        .map((r) => {
+          const all = list
+            .filter((p) => resultOf(p) === r)
+            .sort(sortFor(r, sort))
+          return {
+            key: r as Result | null,
+            label: RESULT_LABEL[r] as string | null,
+            groups: byStock(all.slice(0, shown[r])),
+            more: all.length > shown[r],
+          }
+        })
+        .filter((x) => x.groups.length > 0)
+    const sorted = [...list].sort((a, b) =>
+      // 실행 중은 손절에 닿으면 가장 많이 잃는 것부터 (Q23 · 9장 ① 위치)
+      scope === 'RUNNING'
+        ? atStop(a) - atStop(b)
+        : b.writtenAt.localeCompare(a.writtenAt),
+    )
+    return sorted.length
+      ? [{ key: null, label: null, groups: byStock(sorted), more: false }]
+      : []
+  }, [plans, scope, sort, shown])
 
   const onFill = (p: PlanListItem) => {
     setNewPlan(false)
@@ -131,6 +214,26 @@ export function PlansPage() {
               </button>
             ))}
           </div>
+          {scope === 'ENDED' && (
+            <div className="flex items-baseline gap-2 text-[12px]">
+              <span className="text-white/35">정렬</span>
+              {(Object.keys(SORT_LABEL) as Sort[]).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={sort === k}
+                  onClick={() => setSort(k)}
+                  className={
+                    sort === k
+                      ? 'font-medium text-white'
+                      : 'text-white/45 hover:text-white/75'
+                  }
+                >
+                  {SORT_LABEL[k]}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="ml-auto flex items-center gap-2">
             <button
               type="button"
@@ -165,32 +268,62 @@ export function PlansPage() {
           <Empty>불러오는 중…</Empty>
         ) : isError ? (
           <Empty>계획을 불러오지 못했습니다.</Empty>
-        ) : groups.length === 0 ? (
+        ) : sections.length === 0 ? (
           <Empty>{EMPTY[scope]}</Empty>
         ) : (
-          /* 계획 하나 = 카드 하나 · 균등한 그리드 (Q23 · 4장 ③ · 패턴 28) */
-          <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-2.5">
-            {groups.map((g) =>
-              g.length === 1 ? (
-                <PlanTile key={g[0]!.planId} p={g[0]!} onFill={onFill} />
-              ) : (
-                <section
-                  key={g[0]!.stockCode}
-                  aria-label={g[0]!.stockName}
-                  className="col-span-full rounded-xl px-2.5 pt-2 pb-2.5 ring-1 ring-white/15"
+          sections.map((sec) => (
+            <section key={sec.key ?? 'all'} aria-label={sec.label ?? undefined}>
+              {sec.label && (
+                <h4 className="m-0 mt-5 text-[12px] font-medium text-white/50">
+                  {sec.label}
+                </h4>
+              )}
+              {/* 계획 하나 = 카드 하나 · 균등한 그리드 (Q23 · 4장 ③ · 패턴 28) */}
+              <div
+                className={cn(
+                  'grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-2.5',
+                  sec.label ? 'mt-2' : 'mt-4',
+                )}
+              >
+                {sec.groups.map((g) =>
+                  g.length === 1 ? (
+                    <PlanTile key={g[0]!.planId} p={g[0]!} onFill={onFill} />
+                  ) : (
+                    <section
+                      key={g[0]!.stockCode}
+                      aria-label={g[0]!.stockName}
+                      className="col-span-full rounded-xl px-2.5 pt-2 pb-2.5 ring-1 ring-white/15"
+                    >
+                      <h4 className="t-h3 m-0 px-1.5 pb-2 text-white">
+                        {g[0]!.stockName}
+                      </h4>
+                      <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-2.5">
+                        {g.map((p) => (
+                          <PlanTile
+                            key={p.planId}
+                            p={p}
+                            onFill={onFill}
+                            hideName
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  ),
+                )}
+              </div>
+              {sec.more && sec.key && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShown((v) => ({ ...v, [sec.key!]: v[sec.key!] + PAGE }))
+                  }
+                  className="rounded-pill mt-2.5 w-full py-1.5 text-[12px] text-white/60 ring-1 ring-white/12 hover:text-white/85"
                 >
-                  <h4 className="t-h3 m-0 px-1.5 pb-2 text-white">
-                    {g[0]!.stockName}
-                  </h4>
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-2.5">
-                    {g.map((p) => (
-                      <PlanTile key={p.planId} p={p} onFill={onFill} hideName />
-                    ))}
-                  </div>
-                </section>
-              ),
-            )}
-          </div>
+                  더 보기
+                </button>
+              )}
+            </section>
+          ))
         )}
       </section>
 
@@ -245,6 +378,8 @@ function PlanTile({
   const { entryPrice: entry, stopPrice: stop, quantity: qty } = p
   // 1R 은 실행 때 박힌 최초 손절폭 — 손절가를 올려도 목표가는 안 변한다. 대기면 계획 손절폭
   const oneR = p.initialStopWidth ?? entry - stop
+  // 본전 이상 카드 — 손절을 진입 위로 올려 오늘 챙길 일이 적다. 한 단 흐리게 (9장 ① 밝기)
+  const evenUp = running && stop >= entry
   const goalPrice = goal !== null && oneR > 0 ? entry + goal * oneR : null
 
   return (
@@ -252,6 +387,7 @@ function PlanTile({
       className={cn(
         'flex flex-col rounded-lg px-4 pt-3 pb-3',
         act ? 'bg-bg-elevated' : 'bg-white/[0.03]',
+        evenUp && 'opacity-55 transition-opacity hover:opacity-100',
       )}
     >
       <header className="flex items-baseline gap-2">
@@ -299,6 +435,8 @@ function PlanTile({
               label="손절"
               price={stop}
               tag="text-candle-down ring-candle-down/60"
+              // 손절폭 % — 손절폭 상한과 바로 견준다 (Q23 · 9장 ③ 필요한 정확성)
+              note={entry > 0 ? pct((stop - entry) / entry) : undefined}
               amount={(stop - entry) * qty}
             />
           </dl>
@@ -330,6 +468,12 @@ function PlanTile({
               )}
             >
               {p.realized === 0 ? '본전' : man(p.realized)}
+              {/* 수익률로도 줄 세우므로 같이 싣는다 (7장 ②) */}
+              {p.realizedPct !== null && (
+                <span className="ml-1.5 text-[11px] text-white/45">
+                  {pct(p.realizedPct / 100)}
+                </span>
+              )}
             </span>
           )}
         </div>

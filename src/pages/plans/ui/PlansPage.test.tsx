@@ -77,7 +77,12 @@ describe('거래 계획 — 계획 하나 = 카드 하나 · 거르기로 가른
     draw()
     await screen.findByText('SK하이닉스')
     await user.click(screen.getByRole('button', { name: '완료 · 폐기' }))
-    expect(screen.getByText('카카오')).toBeInTheDocument()
+    // 두 번째 필터는 없다 — 이익 · 손실 · 폐기 무리가 한 화면에 (9장 ②)
+    expect(screen.queryByRole('button', { name: '이익' })).toBeNull()
+    const win = screen.getByRole('region', { name: '이익' })
+    expect(within(win).getByText('카카오')).toBeInTheDocument()
+    const closed = screen.getByRole('region', { name: '폐기' })
+    expect(within(closed).getByText('에스엠')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '+ 체결' })).toBeNull()
   })
 
@@ -111,5 +116,38 @@ describe('거래 계획 — 계획 하나 = 카드 하나 · 거르기로 가른
     expect(screen.getByLabelText('종목')).toBeInTheDocument()
     await user.keyboard('{Escape}')
     expect(screen.queryByLabelText('종목')).not.toBeInTheDocument()
+  })
+})
+
+describe('실행 중 순서 — 손절에 닿으면 가장 많이 잃는 것부터 (9장 ①)', () => {
+  it('atStop 은 (손절 − 진입) × 수량이다 — 본전 이상이면 0 이상', async () => {
+    const { atStop } = await import('./PlansPage')
+    const p = { entryPrice: 201_000, stopPrice: 190_000, quantity: 20 }
+    expect(atStop(p as never)).toBe(-220_000)
+    expect(atStop({ ...p, stopPrice: 201_000 } as never)).toBe(0)
+  })
+})
+
+describe('끝난 계획 정렬 — 손익 · 수익률 · 최근 (7장 ②)', () => {
+  const a = { realized: 690_000, realizedPct: 5, writtenAt: '2026-08-01' }
+  const b = { realized: 310_000, realizedPct: 15, writtenAt: '2026-09-01' }
+  it('이익 — 손익이면 큰 돈, 수익률이면 큰 % 가 앞 · 최근이면 날짜', async () => {
+    const { sortFor } = await import('./PlansPage')
+    const order = (s: 'PNL' | 'PCT' | 'RECENT') =>
+      ([a, b] as never[]).sort(sortFor('WIN', s)).map((x) => x === a)
+    expect(order('PNL')).toEqual([true, false])
+    expect(order('PCT')).toEqual([false, true])
+    expect(order('RECENT')).toEqual([false, true])
+  })
+})
+
+describe('처음 여는 필터 — 비어 있지 않은 첫 것 (2장 ①)', () => {
+  it('실행 중이 없으면 대기, 대기도 없으면 완료 · 폐기', async () => {
+    const { firstScope } = await import('./PlansPage')
+    const of = (status: string) => ({ status }) as never
+    expect(firstScope([of('PLANNED'), of('RUNNING')])).toBe('RUNNING')
+    expect(firstScope([of('PLANNED'), of('DONE')])).toBe('PLANNED')
+    expect(firstScope([of('CLOSED')])).toBe('ENDED')
+    expect(firstScope([])).toBe('RUNNING')
   })
 })
