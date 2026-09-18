@@ -1,5 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import { at } from '@/shared/lib/at'
+import { toServerRegime } from '@/shared/lib/snapshots'
 import type { PlanDetail, StopPickBody } from '@/entities/plan'
 import { makeScreening } from './data/screening'
 import {
@@ -641,11 +642,14 @@ export const handlers = [
     return ok({
       stocks: hits.map((s) => {
         const candles = makeCandles(s.stockCode)
+        // 종목 화면 머리줄과 같은 뱃지가 서도록 «마지막 판정» 을 그대로 싣는다
+        const last = makeScreening(s.stockCode).at(-1)
         return {
           stockCode: s.stockCode,
           stockName: s.stockName,
           price: at(candles, -1).closePrice,
-          regime: regimeOf(s.stockCode),
+          regime: last ? toServerRegime(last.regime) : regimeOf(s.stockCode),
+          entryState: last?.entryState ?? null,
         }
       }),
     })
