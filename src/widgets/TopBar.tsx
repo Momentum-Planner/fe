@@ -134,7 +134,7 @@ export function TopBar() {
         </div>
 
         {account?.isLoggedIn ? (
-          <div className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-white/[0.06] pr-1 pl-3">
+          <div className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-white/[0.06] pr-3 pl-3 min-[360px]:pr-1">
             {/* 닉네임 칩이 마이페이지로 간다 (Q5) */}
             <Link
               to="/profile"
@@ -155,7 +155,8 @@ export function TopBar() {
               }
               disabled={logout.isPending}
               aria-label="로그아웃"
-              className="flex h-7 w-7 items-center justify-center rounded-full text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+              // 360px 미만에선 뺀다 — 320 에서 상단 바가 20px 넘쳤다. 로그아웃은 마이페이지 머리에도 있다 (2026-09-19 사용자 · 가)
+              className="hidden h-7 w-7 items-center justify-center rounded-full text-white/60 transition-colors hover:bg-white/10 hover:text-white min-[360px]:flex"
             >
               <LogOut size={15} strokeWidth={2} />
             </button>
