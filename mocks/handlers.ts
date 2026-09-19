@@ -79,51 +79,35 @@ const MA_PERIOD: Record<string, number> = {
 const likes = new Set<string>(['000660'])
 
 /**
- * 펀더멘털 세 축과 그 합계 (최종미지 ①-2) — **전부 목이다.**
+ * 최근 3분기 펀더멘털 (최종미지 ①-2) — **전부 목이다.**
+ * 오래된 분기 → 최근 분기. EPS · 매출은 전년 동기 대비 증가율(%), 마진은 마진율(%).
  *
- *   수준  분기 EPS 증가율   40%↑ 3.0 · 25~40% 2.0 · 20~25% 1.5 · 0~20% 1.0
- *   방향  가속 +1 · 유지 0 · 감속 −1
- *   동반  EPS↑ · 매출↑ · 마진↑  각 1점 (3분기 관측 창)
+ * 판정(연속 · 가속 · 코드 33)이 골고루 나오게 증가율의 «기울기»를 먼저 고르고
+ * 그 위에 값을 얹는다 — 순전히 난수로 뽑으면 세 분기가 함께 오르는 경우가 드물다.
  *
- * ⚠️ 백엔드 DTO 에 이 필드들이 하나도 없다. 분기 매출·마진 계열이 있어야
- *    만들 수 있는데 그게 있는지도 아직 모른다 (Q6 미결).
- *
+ * ⚠️ 백엔드 DTO 에 없다. 분기 매출·마진 계열이 있는지도 아직 모른다 (Q6 미결).
  * 종목코드 seed 로 뽑아 **새로고침해도 같은 값**이 나오게 한다.
  */
 function fundamentals(code: string) {
   const seed = seedOf(code)
-
-  // 수준 — 구간을 먼저 고르고 그 구간 «안»의 값을 뽑는다. 그래야 화면에
-  // 뜨는 증가율과 점수가 서로 안 어긋난다
-  // 튜플로 못박는다 — 배열 리터럴이면 인덱싱 결과가 `undefined` 를 낀다
-  const BANDS = [
-    [0, 20, 1.0],
-    [20, 5, 1.5],
-    [25, 15, 2.0],
-    [40, 60, 3.0],
-  ] as const satisfies ReadonlyArray<readonly [number, number, number]>
-  const band = Math.floor(rand(seed, 7) * 4)
-  const [lo, span, level] = at([...BANDS], band)
-  const epsGrowth = +(lo + rand(seed, 10) * span).toFixed(0)
-
-  const direction = at(
-    [...(['decel', 'flat', 'accel'] as const)],
-    Math.floor(rand(seed, 8) * 3),
-  )
-  const dirPoint = { decel: -1, flat: 0, accel: 1 }[direction]
-
-  const up = {
-    eps: rand(seed, 11) > 0.35,
-    revenue: rand(seed, 12) > 0.45,
-    margin: rand(seed, 13) > 0.55,
+  // 기울기 — 오름(+) · 들쭉(0) · 내림(−) 을 대략 반반
+  const series = (i: number, base: number, span: number, step: number) => {
+    const b = base + rand(seed, i) * span
+    const up = rand(seed, i + 1) < 0.55
+    const d1 = (up ? 1 : -1) * (0.3 + rand(seed, i + 2)) * step
+    const d2 =
+      (rand(seed, i + 3) < 0.75 ? Math.sign(d1) : -Math.sign(d1)) *
+      (0.3 + rand(seed, i + 4)) *
+      step
+    return [b, b + d1, b + d1 + d2]
   }
-  const together = Number(up.eps) + Number(up.revenue) + Number(up.margin)
-
+  const round = (xs: number[], d = 0) => xs.map((x) => +x.toFixed(d))
   return {
-    epsGrowth,
-    direction,
-    up,
-    fundamentalScore: +(level + dirPoint + together).toFixed(1),
+    quarters: {
+      eps: round(series(20, 8, 40, 12)),
+      revenue: round(series(30, 5, 25, 5)),
+      margin: round(series(40, 6, 18, 1.5), 1),
+    },
   }
 }
 
@@ -299,7 +283,7 @@ export const handlers = [
             fipScore: +(rand(seedOf(s.stockCode), 2) * 0.8 + 0.1).toFixed(2),
             ...fundamentals(s.stockCode),
           }
-        }).sort((a, b) => b.fundamentalScore - a.fundamentalScore),
+        }),
       }),
     ),
   ),

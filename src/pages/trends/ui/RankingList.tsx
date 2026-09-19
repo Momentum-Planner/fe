@@ -1,11 +1,8 @@
 import { Info } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import { cn } from '@/shared/lib/cn'
-import {
-  dedupeRanking,
-  sortRanking,
-  useMergedRanking,
-} from '@/entities/ranking'
+import { dedupeRanking, EPS_FLOOR, useMergedRanking } from '@/entities/ranking'
+import type { Quarters } from '@/entities/ranking'
 import { useRankingStream } from '@/entities/realtime'
 
 // 6:4로 좁아졌고 관심 패널이 열리면 더 좁아진다 — 지표 칸을 최소치로 잡고
@@ -17,13 +14,19 @@ import { useRankingStream } from '@/entities/realtime'
 // 서로 다른 자리에 서고, 그게 열이 어긋나 보이던 이유였다.
 // 간격을 1.5 → 2.5 로 벌리고 그만큼 칸 폭을 깎았다 (종목명은 안 건드린다)
 /**
- * 순위 · 종목 · EPS 증가율 · 동반 상승 · 현재 가격.
- * 「점수」 열은 뺐다 (2026-09-19 사용자) — 순서가 이미 점수다.
- * 현재 가격은 96px · 한 줄 — 72px 에서 「₩ 1,240,000」 이 두 줄로 꺾였다.
+ * 순위 · 종목 · 현재 가격.
+ * 판정(EPS · 연속 · 가속 · 33)은 화면에 안 쓴다 (2026-09-19 사용자 · 「그냥 화면에 보여주지 말자」).
+ * 어떻게 줄 세웠는지는 ⓘ 에 적는다. 현재 가격은 96px · 한 줄.
  */
-const GRID =
-  // 좁으면(sm 미만) 「동반 상승」 을 감춘다 — 네 칸 고정 폭에 종목 이름 칸이 0 으로 눌려 이름이 사라졌다 (2026-09-19)
-  'grid grid-cols-[20px_minmax(0,1fr)_64px_92px] items-center gap-2.5 sm:grid-cols-[20px_minmax(0,1fr)_68px_72px_96px]'
+const GRID = 'grid grid-cols-[20px_minmax(0,1fr)_96px] items-center gap-2.5'
+
+/** ⓘ 점수표 — `scoreOf` 와 같은 넷 */
+const SCORE_ROWS = [
+  [`EPS 증가율 ${EPS_FLOOR}% 이상`, `${EPS_FLOOR}% 이상인 분기마다 1점`, '0~3'],
+  ['EPS 증가율이 오름', '직전 분기보다 오르면 1점', '0~2'],
+  ['매출 증가율이 오름', '직전 분기보다 오르면 1점', '0~2'],
+  ['마진율이 오름', '직전 분기보다 오르면 1점', '0~2'],
+] as const
 
 interface RankingRow {
   stockName: string
@@ -31,41 +34,7 @@ interface RankingRow {
   currentPrice: number | null
   oneYearMomentum: number
   fipScore: number
-  epsGrowth: number | null
-  direction: 'accel' | 'flat' | 'decel' | null
-  up: { eps: boolean; revenue: boolean; margin: boolean } | null
-  fundamentalScore: number | null
-}
-
-const DASH = '—'
-
-/** 방향 — 「증가율이 가속하는가」. 부호(+1/0/−1)가 아니라 말로 쓴다. */
-const DIRECTION = { accel: '가속', flat: '유지', decel: '감속' } as const
-
-/**
- * 동반 상승 — EPS · 매출 · 마진이 «함께» 오르는가 (책 C §4 코드 33).
- *
- * 화살표 셋이었는데 **무엇의 화살표인지 볼 수가 없었다.** 자리로만 뜻을
- * 실으면 열 이름을 따로 읽어야 하고, 열 이름 칸은 셋을 다 못 적는다.
- * 그래서 «이름 자체»를 띄우고 오른 것만 밝힌다 — 이름표가 자기를 설명하니
- * 범례가 필요 없고, 색을 빼도 명도로 남는다 (책 13장 ① · 33장 ②).
- */
-function Coincident({ up }: { up: RankingRow['up'] }) {
-  if (!up) return <span className="text-center text-white/30">{DASH}</span>
-  const cells = [
-    ['EPS', up.eps],
-    ['매출', up.revenue],
-    ['마진', up.margin],
-  ] as const
-  return (
-    <span className="flex justify-center gap-[4px] text-[10px] leading-none whitespace-nowrap">
-      {cells.map(([k, v]) => (
-        <span key={k} className={v ? 'text-brand-red' : 'text-white/25'}>
-          {k}
-        </span>
-      ))}
-    </span>
-  )
+  quarters: Quarters | null
 }
 
 /**
@@ -98,12 +67,10 @@ export function RankingList() {
   const live = success || ready ? [...(success ?? []), ...(ready ?? [])] : null
 
   const items: RankingRow[] = live
-    ? sortRanking(dedupeRanking(live)).map((r) => ({
+    ? // 실시간 스트림엔 분기 값이 없다 — 판정 못 하니 서버가 준 순서 그대로
+      dedupeRanking(live).map((r) => ({
         ...r,
-        epsGrowth: null,
-        direction: null,
-        up: null,
-        fundamentalScore: r.fundamentalScore ?? null,
+        quarters: null,
       }))
     : restItems.map((r) => ({
         stockName: r.stockName,
@@ -111,10 +78,7 @@ export function RankingList() {
         currentPrice: r.currentPrice,
         oneYearMomentum: r.oneYearMomentum,
         fipScore: r.fipScore,
-        epsGrowth: r.epsGrowth,
-        direction: r.direction,
-        up: r.up,
-        fundamentalScore: r.fundamentalScore,
+        quarters: r.quarters,
       }))
 
   return (
@@ -143,37 +107,35 @@ export function RankingList() {
           </button>
           <div
             role="tooltip"
-            className="pointer-events-none absolute top-full right-0 z-30 mt-2 w-[300px] rounded-xl border border-white/10 bg-[#1a1a1a] p-4 text-left opacity-0 shadow-[0_16px_40px_rgba(0,0,0,0.5)] transition-opacity duration-150 group-hover:opacity-100"
+            className="pointer-events-none absolute top-full right-0 z-30 mt-2 w-[320px] rounded-xl border border-white/10 bg-[#1a1a1a] p-4 text-left opacity-0 shadow-[0_16px_40px_rgba(0,0,0,0.5)] transition-opacity duration-150 group-hover:opacity-100"
           >
             <div className="text-[13px] font-bold text-white">
               이 순위는 어떻게 매겨지나요?
             </div>
             <p className="mt-2 text-[12px] leading-relaxed text-white/70">
-              게이트를 통과한 종목끼리 <b className="text-white/90">0~7점</b>{' '}
-              으로 줄 세웁니다. 가격이 아니라 실적입니다.
+              게이트를 통과한 종목을 <b className="text-white/90">최근 3분기</b>{' '}
+              실적으로 채점합니다. 관측 하나에 1점,{' '}
+              <b className="text-white/90">9점 만점</b>
+              입니다. 증가율은 전년 동기 대비입니다.
             </p>
-            {/* 「수준 · 방향 · 동반」이라고만 적었더니 읽어도 무슨 말인지
-                알 수 없었다. 축 이름 대신 **묻는 말**을 그대로 쓴다 */}
+            {/* 점수표를 그대로 — 20% 는 분기마다(셋), 오름은 분기 사이 비교마다(둘) */}
             <ul className="mt-3 space-y-2 text-[12px] leading-relaxed">
-              <li>
-                <div className="text-white/90">EPS 증가율이 얼마나 높은가</div>
-                <div className="font-number text-white/45">
-                  40% 이상 3점 · 25~40% 2점 · 20~25% 1.5점 · 0~20% 1점
-                </div>
-              </li>
-              <li>
-                <div className="text-white/90">그 증가율이 오르고 있는가</div>
-                <div className="text-white/45">
-                  가속 +1점 · 유지 0점 · 감속 −1점
-                </div>
-              </li>
-              <li>
-                <div className="text-white/90">
-                  EPS · 매출 · 마진이 같이 오르는가
-                </div>
-                <div className="text-white/45">각 1점 — 최근 3분기 기준</div>
-              </li>
+              {SCORE_ROWS.map(([what, how, pts]) => (
+                <li key={what} className="flex items-baseline gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-white/90">{what}</div>
+                    <div className="text-white/45">{how}</div>
+                  </div>
+                  <span className="font-number shrink-0 text-white/70">
+                    {pts}
+                  </span>
+                </li>
+              ))}
             </ul>
+            <p className="mt-3 text-[12px] leading-relaxed text-white/45">
+              점수가 높은 순입니다. 같으면 EPS 증가율 상승폭(최근 − 3분기 전,
+              %p)이 큰 순입니다.
+            </p>
           </div>
         </div>
       </div>
@@ -185,8 +147,6 @@ export function RankingList() {
       >
         <span />
         <span />
-        <span className="text-center">EPS 증가율</span>
-        <span className="hidden text-center sm:block">동반 상승</span>
         <span className="text-right">현재 가격</span>
       </div>
 
@@ -226,19 +186,6 @@ export function RankingList() {
             </span>
             <span className="truncate font-medium text-white">
               {row.stockName}
-            </span>
-            {/* 「방향」을 따로 세우지 않는다 — 무엇의 방향인지 열 이름만 봐서는
-                알 수 없었다. 방향은 «이 증가율의» 방향이므로 같은 칸에 붙인다 */}
-            <span className="flex items-baseline justify-center gap-1 whitespace-nowrap">
-              <span className="font-number text-[13px] text-white/85">
-                {row.epsGrowth != null ? `+${row.epsGrowth}%` : DASH}
-              </span>
-              <span className="text-[11px] text-white/45">
-                {row.direction != null ? DIRECTION[row.direction] : ''}
-              </span>
-            </span>
-            <span className="hidden sm:block">
-              <Coincident up={row.up} />
             </span>
             <span className="font-number text-right font-medium whitespace-nowrap text-white">
               {row.currentPrice != null

@@ -48,6 +48,17 @@ const DIM = 'rgba(255,255,255,.45)'
 const GRID = 'rgba(255,255,255,.06)'
 const Q = ['25 Q1', '25 Q2', '25 Q3', '25 Q4', '26 Q1']
 
+/**
+ * 그림 높이. 분기 라벨 밑에 「vs 24 Q3」 한 줄을 더 둔다 (2026-09-19 사용자 · 가) —
+ * 전년 동기 대비가 «어느 분기와» 견준 값인지 축에서 읽히게. 104 → 118.
+ * 마진율 카드는 견준 값이 아니라 그 줄이 비지만 높이는 같게 둔다 — 세 카드의 축이 한 줄에 선다.
+ */
+const H = 118
+
+/** 「26 Q1」 → 「25 Q1」 — 1년 전 같은 분기 */
+const yearAgo = (q: string) =>
+  q.replace(/^(\d+)/, (y) => String(Number(y) - 1).padStart(2, '0'))
+
 /* ───────────── 카드 틀 — 종목 상세 sdCard--metric 과 같은 규격 ───────────── */
 
 function MetricCard({
@@ -63,7 +74,8 @@ function MetricCard({
   /** 제목 밑 — 이것이 «무엇인가» */
   sub: string
   /** 차트 상단 가운데 — 이 숫자들이 «무엇에 견준 값인가» */
-  unit: string
+  /** 그림 위 기준선 글자 — 제목이 이미 말하면 비운다 */
+  unit?: string
   desc: string
   rankLabel: string
   rank: string
@@ -95,9 +107,11 @@ function MetricCard({
         {/* 배경은 «내용 높이»에만 깐다 — flex-1 에 직접 깔면 위아래 여백까지
             칠해져서 제목·푸터와 딱 붙어 보인다 */}
         <div className="min-w-0 rounded-[10px] bg-white/[0.04] py-2">
-          <div className="text-center text-[length:var(--ic-foot)] text-white/40">
-            {unit}
-          </div>
+          {unit && (
+            <div className="text-center text-[length:var(--ic-foot)] text-white/40">
+              {unit}
+            </div>
+          )}
           <div ref={ref} className="min-w-0">
             {w > 0 && chart(w)}
           </div>
@@ -297,9 +311,12 @@ function ZeroLine({ y, show, w }: { y: number; show: boolean; w: number }) {
 function QuarterLabels({
   x,
   labels,
+  yoy = false,
 }: {
   x: (i: number) => number
   labels: string[]
+  /** 밑에 견준 분기(1년 전 같은 분기)를 한 줄 더 */
+  yoy?: boolean
 }) {
   return (
     <g
@@ -313,6 +330,18 @@ function QuarterLabels({
           {l}
         </text>
       ))}
+      {yoy &&
+        labels.map((l, i) => (
+          <text
+            key={`vs-${l}`}
+            x={x(i)}
+            y="113"
+            fontSize="10"
+            fill="rgba(255,255,255,.3)"
+          >
+            vs {yearAgo(l)}
+          </text>
+        ))}
     </g>
   )
 }
@@ -361,9 +390,9 @@ function DotChart({ points: all, w }: { points: number[]; w: number }) {
   const { x, y, zero, hasNeg } = scale(points, false, w)
   return (
     <svg
-      viewBox={`0 0 ${w} 104`}
+      viewBox={`0 0 ${w} ${H}`}
       preserveAspectRatio="xMidYMid meet"
-      height="104"
+      height={H}
       className="w-full"
     >
       <Grid w={w} />
@@ -394,7 +423,7 @@ function DotChart({ points: all, w }: { points: number[]; w: number }) {
           </g>
         )
       })}
-      <QuarterLabels x={x} labels={labels} />
+      <QuarterLabels x={x} labels={labels} yoy />
     </svg>
   )
 }
@@ -408,9 +437,9 @@ function BarChart({ points: all, w }: { points: number[]; w: number }) {
   const { x, y, zero } = scale(points, true, w)
   return (
     <svg
-      viewBox={`0 0 ${w} 104`}
+      viewBox={`0 0 ${w} ${H}`}
       preserveAspectRatio="xMidYMid meet"
-      height="104"
+      height={H}
       className="w-full"
     >
       <Grid w={w} />
@@ -437,7 +466,7 @@ function BarChart({ points: all, w }: { points: number[]; w: number }) {
           </g>
         )
       })}
-      <QuarterLabels x={x} labels={labels} />
+      <QuarterLabels x={x} labels={labels} yoy />
     </svg>
   )
 }
@@ -468,9 +497,9 @@ function AreaChart({ points: all, w }: { points: number[]; w: number }) {
   const area = `${line} L ${x(points.length - 1)} ${zero} L ${x(0)} ${zero} Z`
   return (
     <svg
-      viewBox={`0 0 ${w} 104`}
+      viewBox={`0 0 ${w} ${H}`}
       preserveAspectRatio="xMidYMid meet"
-      height="104"
+      height={H}
       className="w-full"
     >
       <Grid w={w} />
@@ -533,9 +562,9 @@ export function EpsCard() {
   const pts = [12, 19, -8, 28, 42]
   return (
     <MetricCard
-      title="EPS 증가율"
+      // 무엇 대비인지를 제목이 말한다 (2026-09-19 사용자) — 안쪽 「전년 동기 대비」 글자는 걷었다
+      title="전년 동기 대비 EPS 증가율"
       sub="(순이익 ÷ 주식 수) 증가율"
-      unit="전년 동기 대비"
       desc="전년 동기 대비 변화율"
       rankLabel="3분기 증가율 상승폭"
       rank={fmtDelta(windowDelta(pts))}
@@ -552,9 +581,8 @@ export function RevenueCard() {
   const pts = [4, -6, 9, 13, 18]
   return (
     <MetricCard
-      title="매출 증가율"
+      title="전년 동기 대비 매출 증가율"
       sub="손익계산서 매출액 증가율"
-      unit="전년 동기 대비"
       desc="전년 동기 대비 변화율"
       rankLabel="3분기 증가율 상승폭"
       rank={fmtDelta(windowDelta(pts))}
@@ -567,9 +595,8 @@ export function MarginCard() {
   const pts = [8.2, -2.1, 12.4, 18.6, 24.1]
   return (
     <MetricCard
-      title="마진율"
+      title="분기별 마진율"
       sub="순이익 ÷ 매출"
-      unit="해당 분기"
       desc="분기별 순이익률"
       rankLabel="3분기 상승폭"
       rank={fmtDelta(windowDelta(pts))}
