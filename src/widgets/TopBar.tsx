@@ -1,10 +1,5 @@
-import { Link } from '@tanstack/react-router'
-import {
-  ClipboardList,
-  LogOut,
-  TrendingUp,
-  User,
-} from 'lucide-react'
+import { Link, useNavigate } from '@tanstack/react-router'
+import { ClipboardList, LogOut, TrendingUp, User } from 'lucide-react'
 import { useState } from 'react'
 import type { ComponentType } from 'react'
 import { MomentumLogo } from '@/shared/ui/MomentumLogo'
@@ -56,6 +51,7 @@ export function TopBar() {
 
   const { data: account } = useAccount()
   const logout = useLogout()
+  const navigate = useNavigate()
 
   return (
     <header
@@ -122,7 +118,7 @@ export function TopBar() {
 
         {account?.isLoggedIn ? (
           <div className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-white/[0.06] pr-1 pl-3">
-            {/* 닉네임 칩이 마이페이지로 간다 (Q5) — 거래 통계가 거기 있다 (2026-09-19) */}
+            {/* 닉네임 칩이 마이페이지로 간다 (Q5) */}
             <Link
               to="/profile"
               aria-label="마이페이지"
@@ -135,7 +131,11 @@ export function TopBar() {
             </Link>
             <button
               type="button"
-              onClick={() => logout.mutate()}
+              onClick={() =>
+                logout.mutate(undefined, {
+                  onSettled: () => void navigate({ to: '/trends' }),
+                })
+              }
               disabled={logout.isPending}
               aria-label="로그아웃"
               className="flex h-7 w-7 items-center justify-center rounded-full text-white/60 transition-colors hover:bg-white/10 hover:text-white"

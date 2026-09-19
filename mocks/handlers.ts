@@ -3,6 +3,7 @@ import { at } from '@/shared/lib/at'
 import { toServerRegime } from '@/shared/lib/snapshots'
 import type { PlanDetail, StopPickBody } from '@/entities/plan'
 import type { TradeRecord } from '@/entities/tradeRecord'
+import { mockMe, mockSession } from './data/auth'
 import { makeScreening } from './data/screening'
 import {
   PLANS,
@@ -305,10 +306,62 @@ export const handlers = [
 
   // ─────────────── 계정 ───────────────
   // ⚠️ 목이다. 사용자 축(계획 · 거래 기록 · 계좌) 화면은 로그인 상태여야 내용이 뜨는데,
-  //    백엔드가 안 떠 있으면 dev 에서 그 화면들을 «볼 수가 없다».
-  http.get('/api/v1/auth/account', () =>
-    ok({ isLoggedIn: true, nickname: '개발자', email: 'dev@example.com' }),
+  //    백엔드가 안 떠 있으면 dev 에서 그 화면들을 «볼 수가 없다». 그래서 로그인된 채로 시작한다.
+  // 토큰은 쿠키라 목이 흉내 낼 게 없다 — 로그인 여부만 mockSession 에 둔다.
+  http.get('/api/v1/auth/csrf', () =>
+    HttpResponse.json(
+      {
+        meta: { result: 'SUCCESS', errorCode: null, message: null },
+        data: null,
+      },
+      { headers: { 'Set-Cookie': 'csrfToken=mock-csrf; Path=/' } },
+    ),
   ),
+  http.get('/api/v1/auth/account', () =>
+    mockSession.loggedIn
+      ? ok({
+          isLoggedIn: true,
+          userId: mockMe.userId,
+          nickname: mockMe.nickname,
+        })
+      : fail(401, 'Unauthorized', '로그인이 필요합니다.'),
+  ),
+  http.post('/api/v1/auth/refresh', () =>
+    mockSession.loggedIn
+      ? ok(null)
+      : fail(401, 'Unauthorized', '리프레시 토큰이 없습니다.'),
+  ),
+  http.post('/api/v1/auth/logout', () => {
+    mockSession.loggedIn = false
+    return ok(null)
+  }),
+  // 카카오 동의 화면을 건너뛰고 곧장 콜백으로 돌려보낸다
+  http.get('/api/v1/auth/oauth/kakao/authorize-url', ({ request }) => {
+    const url = new URL(request.url)
+    const state = url.searchParams.get('state') ?? ''
+    return ok({
+      url: `${url.origin}/auth/kakao/callback?code=mock-kakao-code&state=${encodeURIComponent(state)}`,
+    })
+  }),
+  http.post('/api/v1/auth/oauth/kakao', () => {
+    mockSession.loggedIn = true
+    return ok(null)
+  }),
+  http.get('/api/v1/members/me', () =>
+    mockSession.loggedIn
+      ? ok(mockMe)
+      : fail(401, 'Unauthorized', '로그인이 필요합니다.'),
+  ),
+  http.patch('/api/v1/members/me', async ({ request }) => {
+    if (!mockSession.loggedIn)
+      return fail(401, 'Unauthorized', '로그인이 필요합니다.')
+    const { nickname } = (await request.json()) as { nickname?: string }
+    const next = (nickname ?? '').trim()
+    if (!next || next.length > 20)
+      return fail(400, 'Bad Request', '닉네임은 1~20자여야 합니다.')
+    mockMe.nickname = next
+    return ok(mockMe)
+  }),
 
   /**
    * 하루치 스크리닝 판정 목록 (⑤-2 · `DailyScreeningResult`).

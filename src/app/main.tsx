@@ -3,7 +3,7 @@ import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { routeTree } from '@/app/routeTree.gen'
 import { queryClient } from '@/shared/api'
-import { authApi, authKeys, initAuth, restoreSession } from '@/entities/auth'
+import { authApi, authKeys, initAuth } from '@/entities/auth'
 
 const router = createRouter({
   routeTree,
@@ -35,22 +35,20 @@ const rootElement = document.getElementById('app')!
 
 if (!rootElement.innerHTML) {
   const root = ReactDOM.createRoot(rootElement)
-  enableMocking()
-    .then(() => restoreSession())
-    .then(() => {
-      // 계정을 캐시에 채워 둔다 — `/` 로더가 이 값으로 첫 화면을 가른다(Q7-2).
-      // ⚠️ **await 하지 않는다.** 인증 엔드포인트가 없거나 느린 환경에서
-      //    부트스트랩이 그대로 멈춰 앱이 안 뜬다. 못 채우면 로더가 알아서
-      //    짧게 기다렸다가 비로그인으로 넘어간다.
-      void queryClient.prefetchQuery({
-        queryKey: authKeys.account(),
-        queryFn: () => authApi.account(),
-      })
-
-      root.render(
-        <QueryClientProvider client={queryClient}>
-          <RouterProvider router={router} />
-        </QueryClientProvider>,
-      )
+  void enableMocking().then(() => {
+    // 계정을 캐시에 채워 둔다 — `/` 로더가 이 값으로 첫 화면을 가른다(Q7-2).
+    // ⚠️ **await 하지 않는다.** 인증 엔드포인트가 없거나 느린 환경에서
+    //    부트스트랩이 그대로 멈춰 앱이 안 뜬다. 못 채우면 로더가 알아서
+    //    짧게 기다렸다가 비로그인으로 넘어간다.
+    void queryClient.prefetchQuery({
+      queryKey: authKeys.account(),
+      queryFn: () => authApi.account(),
     })
+
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    )
+  })
 }

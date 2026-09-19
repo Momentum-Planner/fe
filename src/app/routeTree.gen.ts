@@ -21,6 +21,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as StocksTickerRouteImport } from './routes/stocks.$ticker'
 import { Route as SnapshotsNewRouteImport } from './routes/snapshots.new'
 import { Route as SnapshotsEditRouteImport } from './routes/snapshots.edit'
+import { Route as AuthKakaoCallbackRouteImport } from './routes/auth.kakao.callback'
 import { Route as StocksTickerPlanPlanIdRouteImport } from './routes/stocks.$ticker_.plan.$planId'
 
 const TrendsRoute = TrendsRouteImport.update({
@@ -83,6 +84,11 @@ const SnapshotsEditRoute = SnapshotsEditRouteImport.update({
   path: '/snapshots/edit',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthKakaoCallbackRoute = AuthKakaoCallbackRouteImport.update({
+  id: '/auth/kakao/callback',
+  path: '/auth/kakao/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StocksTickerPlanPlanIdRoute = StocksTickerPlanPlanIdRouteImport.update({
   id: '/stocks/$ticker_/plan/$planId',
   path: '/stocks/$ticker/plan/$planId',
@@ -102,6 +108,7 @@ export interface FileRoutesByFullPath {
   '/snapshots/edit': typeof SnapshotsEditRoute
   '/snapshots/new': typeof SnapshotsNewRoute
   '/stocks/$ticker': typeof StocksTickerRoute
+  '/auth/kakao/callback': typeof AuthKakaoCallbackRoute
   '/stocks/$ticker/plan/$planId': typeof StocksTickerPlanPlanIdRoute
 }
 export interface FileRoutesByTo {
@@ -117,6 +124,7 @@ export interface FileRoutesByTo {
   '/snapshots/edit': typeof SnapshotsEditRoute
   '/snapshots/new': typeof SnapshotsNewRoute
   '/stocks/$ticker': typeof StocksTickerRoute
+  '/auth/kakao/callback': typeof AuthKakaoCallbackRoute
   '/stocks/$ticker/plan/$planId': typeof StocksTickerPlanPlanIdRoute
 }
 export interface FileRoutesById {
@@ -133,6 +141,7 @@ export interface FileRoutesById {
   '/snapshots/edit': typeof SnapshotsEditRoute
   '/snapshots/new': typeof SnapshotsNewRoute
   '/stocks/$ticker': typeof StocksTickerRoute
+  '/auth/kakao/callback': typeof AuthKakaoCallbackRoute
   '/stocks/$ticker_/plan/$planId': typeof StocksTickerPlanPlanIdRoute
 }
 export interface FileRouteTypes {
@@ -150,6 +159,7 @@ export interface FileRouteTypes {
     | '/snapshots/edit'
     | '/snapshots/new'
     | '/stocks/$ticker'
+    | '/auth/kakao/callback'
     | '/stocks/$ticker/plan/$planId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -165,6 +175,7 @@ export interface FileRouteTypes {
     | '/snapshots/edit'
     | '/snapshots/new'
     | '/stocks/$ticker'
+    | '/auth/kakao/callback'
     | '/stocks/$ticker/plan/$planId'
   id:
     | '__root__'
@@ -180,6 +191,7 @@ export interface FileRouteTypes {
     | '/snapshots/edit'
     | '/snapshots/new'
     | '/stocks/$ticker'
+    | '/auth/kakao/callback'
     | '/stocks/$ticker_/plan/$planId'
   fileRoutesById: FileRoutesById
 }
@@ -196,6 +208,7 @@ export interface RootRouteChildren {
   SnapshotsEditRoute: typeof SnapshotsEditRoute
   SnapshotsNewRoute: typeof SnapshotsNewRoute
   StocksTickerRoute: typeof StocksTickerRoute
+  AuthKakaoCallbackRoute: typeof AuthKakaoCallbackRoute
   StocksTickerPlanPlanIdRoute: typeof StocksTickerPlanPlanIdRoute
 }
 
@@ -285,6 +298,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SnapshotsEditRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth/kakao/callback': {
+      id: '/auth/kakao/callback'
+      path: '/auth/kakao/callback'
+      fullPath: '/auth/kakao/callback'
+      preLoaderRoute: typeof AuthKakaoCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/stocks/$ticker_/plan/$planId': {
       id: '/stocks/$ticker_/plan/$planId'
       path: '/stocks/$ticker/plan/$planId'
@@ -308,6 +328,7 @@ const rootRouteChildren: RootRouteChildren = {
   SnapshotsEditRoute: SnapshotsEditRoute,
   SnapshotsNewRoute: SnapshotsNewRoute,
   StocksTickerRoute: StocksTickerRoute,
+  AuthKakaoCallbackRoute: AuthKakaoCallbackRoute,
   StocksTickerPlanPlanIdRoute: StocksTickerPlanPlanIdRoute,
 }
 export const routeTree = rootRouteImport
