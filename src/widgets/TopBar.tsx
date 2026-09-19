@@ -32,14 +32,16 @@ type NavEntry = {
  *   계획 잇기     사슬에서 들어감
  */
 const navItems: NavEntry[] = [
-  { to: '/trends', label: '오늘의 후보', icon: TrendingUp },
+  // 「오늘의 후보」 → 「스크리너」 (2026-09-19 사용자 · 시원하게)
+  { to: '/trends', label: '스크리너', icon: TrendingUp },
   // 이 서비스의 집이다 (Q22) — 종목별 사슬 · 체결도 여기서 붙인다
   { to: '/plans', label: '거래 계획', icon: ClipboardList },
   // 「거래 통계」 는 마이페이지(닉네임 칩) 로 옮겼다 (2026-09-19)
 ]
 
+// 글자 크기는 폭 따라 줄이지 않는다 (4장 ⑦ 가) — clamp(12.5~14) 가 1170px 아래에서 헤더를 «줄어든» 것처럼 보이게 했다
 const itemClass =
-  'flex shrink-0 items-center gap-2 rounded-[10px] px-3 py-2 text-[clamp(12.5px,1.2vw,14px)] whitespace-nowrap text-white/60 transition-colors hover:text-white/90'
+  'flex shrink-0 items-center gap-2 rounded-[10px] px-3 py-2 text-[14px] whitespace-nowrap text-white/60 transition-colors hover:text-white/90'
 
 /**
  * 세로 사이드바를 대신하는 가로 바 (Q0 = C안).
@@ -60,16 +62,24 @@ export function TopBar() {
     >
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
 
-      {/* Brand — home button → 오늘의 후보 */}
+      {/* Brand — home button → 스크리너 */}
       <Link
         to="/trends"
-        aria-label="Momentum — 오늘의 후보"
+        aria-label="Momentum Planner — 스크리너"
         className="mr-4 flex shrink-0 items-center gap-2"
       >
-        <MomentumLogo size={20} />
-        {/* 좁으면(sm 미만) 글자 없이 로고만 — 상단 바가 화면보다 넓어져 페이지 전체가 옆으로 밀렸다 (2026-09-19) */}
-        <span className="font-number hidden text-[clamp(15px,1.4vw,17px)] font-bold tracking-[-0.01em] whitespace-nowrap text-white sm:inline">
-          Momentum
+        {/* 두 줄 글자 높이(약 27px)에 맞춰 로고 20 → 28 */}
+        <MomentumLogo size={28} />
+        {/* 520px 미만에서 로고 글자를 뺀다 — 메뉴 글자보다 먼저 빠진다 (2026-09-19 · 440 에선 헤더가 41px 넘쳤다)
+            「Momentum」 → 「Momentum / PLANNER」 두 줄 (2026-09-19 사용자 · Plan → Planner → 쌓기).
+            Planner 가 길어 한 줄이면 198px — 쌓으면 Momentum 한 단어 폭. 회색 글씨 ✕ */}
+        <span className="font-number hidden flex-col leading-[1.05] whitespace-nowrap text-white min-[520px]:flex">
+          <span className="text-[15px] font-bold tracking-[-0.01em]">
+            Momentum
+          </span>
+          <span className="text-[10px] font-semibold tracking-[0.24em]">
+            PLANNER
+          </span>
         </span>
       </Link>
 
@@ -89,11 +99,15 @@ export function TopBar() {
              * 다른 화면**이다 — 라우트 파일 이름의 밑줄(`plans_.$planId`)이
              * 이미 그 뜻이었는데 내비만 모르고 있었다.
              */
-            activeOptions={{ exact: true }}
+            activeOptions={{ exact: true, includeSearch: false }}
           >
-            <Icon size={17} strokeWidth={2} />
-            {/* 좁으면 아이콘만 */}
-            <span className="hidden md:inline">{label}</span>
+            {/* 아이콘 + 글자 둘 다 (2026-09-19 사용자) — 메뉴가 둘뿐이라 좁아도 들어간다.
+                아이콘만 남기면 두 아이콘이 무엇인지 눌러 봐야 알았다 */}
+            {/* 400px 미만에선 아이콘을 뺀다 — 375 에서 16px 넘쳤다 */}
+            <span className="hidden min-[400px]:block">
+              <Icon size={17} strokeWidth={2} />
+            </span>
+            <span>{label}</span>
           </Link>
         ))}
       </nav>
@@ -106,8 +120,10 @@ export function TopBar() {
         {/* 폭이 모자라면 여기가 줄어든다 — 검색어 칸은 좁아져도 읽히지만
             로그인·메뉴는 글자가 접히면 못 읽는다 */}
         {/* 좁으면(md 미만) 검색칸을 감춘다 — 거래 계획 · 후보에 저마다 찾기가 있다 */}
-        <div className="hidden min-w-0 md:block">
-          <SearchBar size="sm" className="w-[280px] min-w-[104px]" />
+        {/* 검색칸은 남는 폭만큼 — 160 ~ 280 (4장 ⑦ 가 · 2026-09-19).
+            💀 안쪽이 280 고정이고 감싼 칸만 줄어 800px 에서 「관심」 밑으로 파고들었다 */}
+        <div className="hidden w-[280px] min-w-[160px] md:block">
+          <SearchBar size="sm" className="w-full" />
         </div>
 
         {/* 「보유 중」 드롭다운은 Q4 에서 뺐다 — 보유 목록은 계좌에 붙는다.
@@ -122,7 +138,7 @@ export function TopBar() {
             <Link
               to="/profile"
               aria-label="마이페이지"
-              className="flex items-center gap-1.5 truncate text-[clamp(12px,1.05vw,13px)] font-semibold whitespace-nowrap text-white hover:text-white/80"
+              className="flex items-center gap-1.5 truncate text-[13px] font-semibold whitespace-nowrap text-white hover:text-white/80"
             >
               <User size={15} strokeWidth={2} />
               <span className="hidden sm:inline">
@@ -150,7 +166,7 @@ export function TopBar() {
           <button
             type="button"
             onClick={() => setAuthOpen(true)}
-            className="flex h-9 shrink-0 items-center rounded-full border border-white/30 bg-white/[0.12] px-4 text-[clamp(13px,1.15vw,14px)] font-semibold whitespace-nowrap text-white transition-colors hover:border-white/45 hover:bg-white/[0.18]"
+            className="flex h-9 shrink-0 items-center rounded-full border border-white/30 bg-white/[0.12] px-4 text-[14px] font-semibold whitespace-nowrap text-white transition-colors hover:border-white/45 hover:bg-white/[0.18]"
           >
             로그인
           </button>

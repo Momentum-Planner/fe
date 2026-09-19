@@ -236,7 +236,7 @@ describe('관심 종목', () => {
 
 describe('랭킹 · 검색', () => {
   it.each(['breakout-success', 'breakout-ready'])(
-    '%s 랭킹은 종목마다 최근 3분기 EPS · 매출 · 마진을 싣는다',
+    '%s 랭킹은 종목마다 최근 5분기 EPS · 매출 · 마진을 싣는다',
     async (regime) => {
       const r = await get(`/api/v1/ranking/${regime}`)
       const { stocks } = r.data as {
@@ -246,9 +246,9 @@ describe('랭킹 · 검색', () => {
       }
       expect(stocks.length).toBeGreaterThan(0)
       for (const { quarters } of stocks) {
-        expect(quarters.eps).toHaveLength(3)
-        expect(quarters.revenue).toHaveLength(3)
-        expect(quarters.margin).toHaveLength(3)
+        expect(quarters.eps).toHaveLength(5)
+        expect(quarters.revenue).toHaveLength(5)
+        expect(quarters.margin).toHaveLength(5)
       }
     },
   )

@@ -44,7 +44,7 @@ export function ChainOverview({
         aria-label="사슬 전체 보기"
         title="사슬 전체 보기"
         onClick={() => setOpen(true)}
-        // 「오늘의 후보」 차트 카드의 확대 표시와 같은 아이콘
+        // 「스크리너」 차트 카드의 확대 표시와 같은 아이콘
         className="p-1 text-white/50 transition-colors hover:text-white"
       >
         <Maximize2 size={14} strokeWidth={2} />

@@ -15,7 +15,7 @@
  * ⚠️ 무게(관측 하나 = 1점)는 책이 정한 것이 아니다. 9점 중 5점이 EPS 에서 나온다.
  */
 
-/** 오래된 분기 → 최근 분기. 셋 다 길이 3 */
+/** 오래된 분기 → 최근 분기. 길이 3 이상 — 점수는 마지막 3분기(관측 창)만 센다 */
 export interface Quarters {
   /** EPS 증가율 (전년 동기 대비 %) */
   eps: number[]
@@ -43,7 +43,15 @@ export interface Score {
   epsRise: number
 }
 
-export function scoreOf(q: Quarters): Score {
+export const WINDOW = 3
+const win = (xs: number[]) => xs.slice(-WINDOW)
+
+export function scoreOf(quarters: Quarters): Score {
+  const q = {
+    eps: win(quarters.eps),
+    revenue: win(quarters.revenue),
+    margin: win(quarters.margin),
+  }
   const epsFloor = q.eps.filter((x) => x >= EPS_FLOOR).length
   const epsUp = rises(q.eps)
   const revenueUp = rises(q.revenue)

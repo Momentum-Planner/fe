@@ -90,7 +90,8 @@ const likes = new Set<string>(['000660'])
  */
 function fundamentals(code: string) {
   const seed = seedOf(code)
-  // 기울기 — 오름(+) · 들쭉(0) · 내림(−) 을 대략 반반
+  // 기울기 — 오름(+) · 내림(−) 을 대략 반반. 카드가 넓으면 5분기를 그리고
+  // 점수는 마지막 3분기만 센다 — 앞의 둘은 창 밖 맥락이다
   const series = (i: number, base: number, span: number, step: number) => {
     const b = base + rand(seed, i) * span
     const up = rand(seed, i + 1) < 0.55
@@ -99,7 +100,9 @@ function fundamentals(code: string) {
       (rand(seed, i + 3) < 0.75 ? Math.sign(d1) : -Math.sign(d1)) *
       (0.3 + rand(seed, i + 4)) *
       step
-    return [b, b + d1, b + d1 + d2]
+    const p1 = b - (rand(seed, i + 5) - 0.4) * step * 1.5
+    const p0 = p1 - (rand(seed, i + 6) - 0.5) * step * 1.5
+    return [p0, p1, b, b + d1, b + d1 + d2]
   }
   const round = (xs: number[], d = 0) => xs.map((x) => +x.toFixed(d))
   return {

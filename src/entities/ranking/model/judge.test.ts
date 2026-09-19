@@ -22,6 +22,11 @@ describe('펀더멘털 점수 — 최근 3분기 · 관측 하나에 1점 (0~9)'
     expect(scoreOf(q([30, 25, 22])).total).toBe(5)
   })
 
+  it('5분기가 와도 마지막 3분기만 센다', () => {
+    const five = q([1, 90, 30, 25, 22], [1, 2, 10, 9, 8], [1, 2, 8, 9, 10])
+    expect(scoreOf(five)).toMatchObject({ total: 5, epsRise: -8 })
+  })
+
   it('점수 순 · 동점은 EPS 증가율 상승폭 · 값 없으면 뒤', () => {
     const rows = [
       { id: 'none', quarters: null },

@@ -1,5 +1,5 @@
 /**
- * 오늘의 후보 — 차트 밑 카드 셋. **랭킹 화면에서 카드는 순위다** (Q6).
+ * 스크리너 — 차트 밑 카드 셋. **랭킹 화면에서 카드는 순위다** (Q6).
  *
  * 카드 셋이 순위를 정하는 세 축(EPS·매출·마진)을 그대로 펼친 것이다.
  * 트렌드 템플릿과 RS 는 ①-1 **게이트**라 목록 안에서 아무것도 가르지 않으므로
@@ -15,6 +15,8 @@
  */
 
 import { useLayoutEffect, useRef, useState } from 'react'
+import { cn } from '@/shared/lib/cn'
+import type { Quarters } from '@/entities/ranking'
 
 /**
  * 그림이 그려질 실제 폭(px)을 잰다.
@@ -63,6 +65,7 @@ const yearAgo = (q: string) =>
 
 function MetricCard({
   title,
+  qualifier,
   sub,
   unit,
   desc,
@@ -70,7 +73,10 @@ function MetricCard({
   rank,
   chart,
 }: {
+  /** 무엇인가 — 명사 (「EPS 증가율」) */
   title: string
+  /** 무엇과 견줬나 — 제목 줄 오른쪽 끝 (「전년 동기 대비」) */
+  qualifier: string
   /** 제목 밑 — 이것이 «무엇인가» */
   sub: string
   /** 차트 상단 가운데 — 이 숫자들이 «무엇에 견준 값인가» */
@@ -79,18 +85,27 @@ function MetricCard({
   desc: string
   rankLabel: string
   rank: string
-  chart: (w: number) => React.ReactNode
+  /** 값이 없으면(백엔드 미구현 · 실시간 행) null — 그림 대신 한 줄 */
+  chart: ((w: number) => React.ReactNode) | null
 }) {
   const [ref, w] = useWidth<HTMLDivElement>()
   // 좁으면 그림이 세 분기로 줄고, 푸터 설명도 뺀다 — 남는 자리를 숫자에 준다
   const narrow = w > 0 && !fitsAll(w, Q.length)
   return (
-    <article className="flex h-[260px] w-full min-w-0 flex-col justify-between overflow-hidden rounded-[16px] bg-black/80 px-5 py-[18px] transition-transform hover:scale-[1.02]">
+    // 판 안의 칸 (4장 ④ 가) — 옅은 면 · 안쪽 12. 떠오르는 hover 는 뺐다(판 밖으로 삐져나온다)
+    <article className="flex h-[260px] w-full min-w-0 flex-col justify-between overflow-hidden rounded-[12px] bg-white/[0.03] px-3 py-[18px]">
       <div>
-        <div className="text-[length:var(--ic-title)] font-bold text-white">
-          {title}
+        {/* 명사 왼쪽 · 수식어 오른쪽 끝 (2026-09-19 · 마) — 한 줄이라 높이가 안 늘고,
+            이름이 먼저 읽히고 「전년 동기 대비」 는 표의 단위처럼 붙는다 */}
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="truncate text-[15px] font-semibold text-white">
+            {title}
+          </span>
+          <span className="shrink-0 text-[11px] whitespace-nowrap text-white/45">
+            {qualifier}
+          </span>
         </div>
-        <div className="mt-1 text-[length:var(--ic-sub)] leading-[1.4] text-white/60 before:content-['·_']">
+        <div className="mt-1 text-[11px] leading-[1.4] text-white/45">
           {sub}
         </div>
       </div>
@@ -106,14 +121,27 @@ function MetricCard({
       <div className="flex min-w-0 flex-1 flex-col justify-center">
         {/* 배경은 «내용 높이»에만 깐다 — flex-1 에 직접 깔면 위아래 여백까지
             칠해져서 제목·푸터와 딱 붙어 보인다 */}
-        <div className="min-w-0 rounded-[10px] bg-white/[0.04] py-2">
+        {/* 좁으면(3분기) 상자 전체가 회색 = 관측 창. 넓으면(5분기) 상자는 검정이고
+            최근 3분기만 회색 면(Window) — 넓어도 좁을 때와 같은 3분기가 강조된다 (2026-09-19 사용자) */}
+        <div
+          className={cn(
+            'min-w-0 rounded-[10px] py-2',
+            narrow ? 'bg-white/[0.04]' : 'bg-black/50',
+          )}
+        >
           {unit && (
             <div className="text-center text-[length:var(--ic-foot)] text-white/40">
               {unit}
             </div>
           )}
           <div ref={ref} className="min-w-0">
-            {w > 0 && chart(w)}
+            {chart ? (
+              w > 0 && chart(w)
+            ) : (
+              <div className="flex h-[118px] items-center justify-center text-[12px] text-white/35">
+                분기 값이 없습니다
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -274,22 +302,33 @@ function Window({
   x,
   from,
   to,
+  w,
 }: {
   x: (i: number) => number
   from: number
   to: number
+  w: number
 }) {
-  const pad = 18
+  // 거의 칸을 채운다 (2026-09-19 사용자 · 「애매하게 잡지 말고」) — 세로는 그림 전체(분기 라벨까지),
+  // 가로는 이웃 분기와의 사이 절반에서 4px 만 남긴다. 좁을 때 상자 전체가 회색인 것과 같은 크기로 읽힌다
+  const step = to > from ? (x(to) - x(from)) / (to - from) : 40
+  const pad = step / 2 - 4
+  const left = x(from) - pad
+  // 오른쪽은 그림 끝에서 멈춘다 — 넘기면 둥근 모서리가 잘려 네모로 보인다
+  const right = Math.min(x(to) + pad, w)
   return (
     <rect
-      x={x(from) - pad}
-      y="1"
-      width={x(to) - x(from) + pad * 2}
-      height="87"
+      x={left}
+      y="0"
+      width={right - left}
+      height={H}
       rx="8"
-      fill="rgba(255,255,255,.035)"
-      stroke="rgba(255,255,255,.12)"
-      strokeWidth="1"
+      // 회색 면만 — 좁을 때(3분기) 그림 상자 전체가 회색인 것과 같게, 넓을 땐 이 면이 그 3분기만 덮는다.
+      // 테두리까지 두르니 너저분했다 (2026-09-19 사용자)
+      // 좁을 때 회색과 «같은 색»으로 (2026-09-19 사용자 · 채도 통일).
+      // 좁을 때 = 칸(흰 3%) 위 흰 4% ≈ 34. 넓을 때는 그 위에 검정 50% 가 한 번 깔려 ≈ 13 에서 시작하므로
+      // 같은 34 에 닿으려면 흰 8.5% 가 든다 (판 그라데이션 위아래로 ±2 차이)
+      fill="rgba(255,255,255,.085)"
     />
   )
 }
@@ -384,7 +423,7 @@ function ValueLabel({
 /** EPS — 점. 값의 높이와 점끼리의 기울기가 수준·방향 그 자체다. */
 function DotChart({ points: all, w }: { points: number[]; w: number }) {
   const points = crop(all, w)
-  const labels = crop(Q, w)
+  const labels = crop(Q.slice(-all.length), w)
   const cropped = points.length < all.length
   // 점 = 위치 규약화 → 축을 값에 맞춰 좁힌다 (2장 ③)
   const { x, y, zero, hasNeg } = scale(points, false, w)
@@ -397,7 +436,7 @@ function DotChart({ points: all, w }: { points: number[]; w: number }) {
     >
       <Grid w={w} />
       {!cropped && (
-        <Window x={x} from={points.length - 3} to={points.length - 1} />
+        <Window x={x} from={points.length - 3} to={points.length - 1} w={w} />
       )}
       <ZeroLine y={zero} show={hasNeg} w={w} />
       {points.map((v, i) => {
@@ -431,7 +470,7 @@ function DotChart({ points: all, w }: { points: number[]; w: number }) {
 /** 매출 — 막대. 「얼마나 많이」라 바닥에서 자란 기둥이 맞다. */
 function BarChart({ points: all, w }: { points: number[]; w: number }) {
   const points = crop(all, w)
-  const labels = crop(Q, w)
+  const labels = crop(Q.slice(-all.length), w)
   const cropped = points.length < all.length
   // 막대 = 길이 규약화 → 축은 항상 0에서 (2장 ③)
   const { x, y, zero } = scale(points, true, w)
@@ -444,7 +483,7 @@ function BarChart({ points: all, w }: { points: number[]; w: number }) {
     >
       <Grid w={w} />
       {!cropped && (
-        <Window x={x} from={points.length - 3} to={points.length - 1} />
+        <Window x={x} from={points.length - 3} to={points.length - 1} w={w} />
       )}
       <ZeroLine y={zero} show w={w} />
       {points.map((v, i) => {
@@ -487,7 +526,7 @@ function BarChart({ points: all, w }: { points: number[]; w: number }) {
  */
 function AreaChart({ points: all, w }: { points: number[]; w: number }) {
   const points = crop(all, w)
-  const labels = crop(Q, w)
+  const labels = crop(Q.slice(-all.length), w)
   const cropped = points.length < all.length
   // 면적 = 영역 규약화 → 축은 항상 0에서 (2장 ③)
   const { x, y, zero } = scale(points, true, w)
@@ -504,7 +543,7 @@ function AreaChart({ points: all, w }: { points: number[]; w: number }) {
     >
       <Grid w={w} />
       {!cropped && (
-        <Window x={x} from={points.length - 3} to={points.length - 1} />
+        <Window x={x} from={points.length - 3} to={points.length - 1} w={w} />
       )}
       <path d={area} fill={RED} opacity=".12" />
       {/* 선은 «연결»만 진다. 「이번 분기」는 점의 채도가 이미 지고 있으므로
@@ -558,17 +597,18 @@ function AreaChart({ points: all, w }: { points: number[]; w: number }) {
  * 매출이 얼마나 커졌고, 그중 얼마가 남았고, 주주 몫으로 얼마가 왔는지가 왼쪽에서
  * 오른쪽으로 읽힌다. 세 계열이 «함께» 오르는지를 보는 코드 33 이 이 항등식 위에 있다.
  */
-export function EpsCard() {
-  const pts = [12, 19, -8, 28, 42]
+export function EpsCard({ quarters }: { quarters: Quarters | null }) {
+  const pts = quarters?.eps ?? null
   return (
     <MetricCard
       // 무엇 대비인지를 제목이 말한다 (2026-09-19 사용자) — 안쪽 「전년 동기 대비」 글자는 걷었다
-      title="전년 동기 대비 EPS 증가율"
-      sub="(순이익 ÷ 주식 수) 증가율"
+      title="EPS 증가율"
+      qualifier="전년 동기 대비"
+      sub="순이익 ÷ 주식 수"
       desc="전년 동기 대비 변화율"
       rankLabel="3분기 증가율 상승폭"
-      rank={fmtDelta(windowDelta(pts))}
-      chart={(w) => <DotChart points={pts} w={w} />}
+      rank={pts ? fmtDelta(windowDelta(pts)) : '—'}
+      chart={pts ? (w) => <DotChart points={pts} w={w} /> : null}
     />
   )
 }
@@ -577,30 +617,32 @@ export function EpsCard() {
  * 매출 — 손익계산서 맨 윗줄 그대로다. 원서가 정의를 안 주는 이유이기도 하다
  * (회계 상식으로 전제한다). 우리가 따로 지어낼 것이 없다.
  */
-export function RevenueCard() {
-  const pts = [4, -6, 9, 13, 18]
+export function RevenueCard({ quarters }: { quarters: Quarters | null }) {
+  const pts = quarters?.revenue ?? null
   return (
     <MetricCard
-      title="전년 동기 대비 매출 증가율"
-      sub="손익계산서 매출액 증가율"
+      title="매출 증가율"
+      qualifier="전년 동기 대비"
+      sub="손익계산서 매출액"
       desc="전년 동기 대비 변화율"
       rankLabel="3분기 증가율 상승폭"
-      rank={fmtDelta(windowDelta(pts))}
-      chart={(w) => <BarChart points={pts} w={w} />}
+      rank={pts ? fmtDelta(windowDelta(pts)) : '—'}
+      chart={pts ? (w) => <BarChart points={pts} w={w} /> : null}
     />
   )
 }
 
-export function MarginCard() {
-  const pts = [8.2, -2.1, 12.4, 18.6, 24.1]
+export function MarginCard({ quarters }: { quarters: Quarters | null }) {
+  const pts = quarters?.margin ?? null
   return (
     <MetricCard
-      title="분기별 마진율"
+      title="마진율"
+      qualifier="분기별"
       sub="순이익 ÷ 매출"
       desc="분기별 순이익률"
       rankLabel="3분기 상승폭"
-      rank={fmtDelta(windowDelta(pts))}
-      chart={(w) => <AreaChart points={pts} w={w} />}
+      rank={pts ? fmtDelta(windowDelta(pts)) : '—'}
+      chart={pts ? (w) => <AreaChart points={pts} w={w} /> : null}
     />
   )
 }
