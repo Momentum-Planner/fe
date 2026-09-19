@@ -92,7 +92,7 @@ export function SnapshotPage({ mode }: SnapshotPageProps) {
           referenceSnapshotIds: detail?.referenceSnapshotIds ?? [],
           retrospective,
         },
-        { onSuccess: () => navigate({ to: '/captures' }) },
+        { onSuccess: () => navigate({ to: '/plans' }) },
       )
     } else {
       const stockCode = search.ticker
@@ -109,13 +109,15 @@ export function SnapshotPage({ mode }: SnapshotPageProps) {
           referenceSnapshotIds: [],
           retrospective,
         },
-        { onSuccess: () => navigate({ to: '/captures' }) },
+        { onSuccess: () => navigate({ to: '/plans' }) },
       )
     }
   }
 
   // 이전 회고 페이저 — 과거 스냅샷들을 넘겨봄
   const [noteIdx, setNoteIdx] = useState(0)
+  // 목 상수 배열이고 인덱스는 화면이 잡아 늘 유효한데, 타입은 그것을 모른다.
+  // 없으면 «그 칸을 안 그린다» — 화면이 조용히 빈 것이 예외보다 낫다
   const note = pastSnapshots[noteIdx]
   const moveNote = (delta: number) =>
     setNoteIdx((i) =>
@@ -246,7 +248,7 @@ export function SnapshotPage({ mode }: SnapshotPageProps) {
         <div className="compare">
           <div className="compareHead">
             <span>
-              지표 변화 · {pastSnapshots[activeIdx].dt.split(' · ')[0]} → 지금
+              지표 변화 · {pastSnapshots[activeIdx]?.dt.split(' · ')[0]} → 지금
             </span>
             <span className="cnt">
               <b>7</b> 변경 · 1 유지
@@ -375,15 +377,15 @@ export function SnapshotPage({ mode }: SnapshotPageProps) {
                   fontWeight: 500,
                 }}
               >
-                {note.dt} · {note.tag} 시점
+                {note?.dt} · {note?.tag} 시점
               </span>
             </div>
             <div className="noteMeta">
-              <span>{note.price}</span>
+              <span>{note?.price}</span>
               <span style={{ opacity: 0.4 }}>·</span>
-              <span>{note.meta}</span>
+              <span>{note?.meta}</span>
             </div>
-            <div className="noteBody">{note.memo}</div>
+            <div className="noteBody">{note?.memo}</div>
             <div className="noteFoot">
               <span>
                 {noteIdx + 1} / {pastSnapshots.length}

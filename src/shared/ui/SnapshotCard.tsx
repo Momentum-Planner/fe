@@ -1,13 +1,7 @@
 import { Link } from '@tanstack/react-router'
-import {
-  JUDGMENT_LABEL,
-  JUDGMENT_STYLE,
-  REGIME_BG,
-  REGIME_COLOR,
-  REGIME_LABEL,
-} from '@/shared/lib/snapshots'
+import { JUDGMENT_LABEL, JUDGMENT_STYLE } from '@/shared/lib/snapshots'
 import type { Snapshot } from '@/shared/lib/snapshots'
-import { RegimeIcon } from '@/shared/ui/RegimeIcon'
+import { RegimeBadge } from '@/shared/ui/RegimeBadge'
 
 /**
  * A saved-snapshot card (내 스냅샷 / 종목 상세 지난 스냅샷). Clicking opens the edit view.
@@ -24,17 +18,7 @@ export function SnapshotCard({ snap }: { snap: Snapshot }) {
           <div className="truncate text-[22px] leading-tight font-bold text-white">
             {snap.stock}
           </div>
-          <span
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border-[1.5px] px-3 py-[5px] text-[12px] font-bold whitespace-nowrap"
-            style={{
-              color: REGIME_COLOR[snap.regime],
-              borderColor: REGIME_COLOR[snap.regime],
-              background: REGIME_BG[snap.regime],
-            }}
-          >
-            <RegimeIcon regime={snap.regime} width={18} height={14} />
-            {REGIME_LABEL[snap.regime]}
-          </span>
+          <RegimeBadge regime={snap.regime} />
         </div>
         <span
           className="shrink-0 rounded-full border-[1.5px] px-3.5 py-1 text-[13px] font-bold whitespace-nowrap"

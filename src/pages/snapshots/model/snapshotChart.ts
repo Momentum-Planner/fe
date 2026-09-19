@@ -72,11 +72,11 @@ const designedCandles: CandlestickData[] = rawCandles.map(
 )
 
 const HISTORY_LEN = 160
-const history = makeHistory(
-  HISTORY_LEN,
-  designedCandles[0].time as number,
-  designedCandles[0].open,
-)
+// 손으로 박은 상수 배열이라 첫 봉이 늘 있다. 타입만 그것을 모른다
+const firstDesigned = designedCandles[0]
+const history = firstDesigned
+  ? makeHistory(HISTORY_LEN, firstDesigned.time as number, firstDesigned.open)
+  : []
 
 export const snapshotCandles: CandlestickData[] = [
   ...history,
@@ -105,10 +105,11 @@ function sma(period: number): LineData[] {
     let sum = 0
     let n = 0
     for (let j = start; j <= i; j++) {
-      sum += snapshotCandles[j].close
+      sum += snapshotCandles[j]?.close ?? 0
       n++
     }
-    out.push({ time: snapshotCandles[i].time, value: sum / n })
+    const c = snapshotCandles[i]
+    if (c) out.push({ time: c.time, value: sum / n })
   }
   return out
 }

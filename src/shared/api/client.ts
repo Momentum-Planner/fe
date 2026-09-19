@@ -1,5 +1,4 @@
 import { env } from '@/shared/config'
-import { getAccessToken, setAccessToken } from './tokenStore'
 
 /** 백엔드 공통 응답 래퍼 (ApiResponse<T>). */
 export type ApiResult = 'SUCCESS' | 'FAIL'
@@ -28,18 +27,20 @@ export class ApiError extends Error {
 }
 
 // ─────────────────────────── 401 자동 refresh ───────────────────────────
+// accessToken · refreshToken 둘 다 HttpOnly 쿠키다 — JS 는 토큰을 만지지 않는다.
 // entities/auth 가 refresh 구현을 주입한다(레이어 역전 방지). 동시에 여러 요청이
 // 401 을 받아도 refresh 는 한 번만 수행하도록 single-flight 로 묶는다.
-type RefreshHandler = () => Promise<string | null>
+/** 새 쿠키를 받았으면 true. */
+type RefreshHandler = () => Promise<boolean>
 let refreshHandler: RefreshHandler | null = null
-let inFlightRefresh: Promise<string | null> | null = null
+let inFlightRefresh: Promise<boolean> | null = null
 
 export function setRefreshHandler(fn: RefreshHandler | null): void {
   refreshHandler = fn
 }
 
-function runRefresh(): Promise<string | null> {
-  if (!refreshHandler) return Promise.resolve(null)
+function runRefresh(): Promise<boolean> {
+  if (!refreshHandler) return Promise.resolve(false)
   if (!inFlightRefresh) {
     inFlightRefresh = refreshHandler().finally(() => {
       inFlightRefresh = null
@@ -49,15 +50,36 @@ function runRefresh(): Promise<string | null> {
 }
 
 // ─────────────────────────── CSRF ───────────────────────────
+// 이중 제출 쿠키. 서버가 준 csrfToken 쿠키(JS 가 읽을 수 있다)를 X-CSRF-Token 헤더로
+// 되돌린다. 인증 쿠키는 브라우저가 자동으로 붙이지만 «헤더»는 우리 페이지만 만들 수 있다.
+// 상태를 바꾸는 요청 전부에 필요하다 — 쿠키가 없으면 먼저 받아 온다.
 const CSRF_COOKIE = 'csrfToken'
 const CSRF_HEADER = 'X-CSRF-Token'
+const CSRF_PATH = '/api/v1/auth/csrf'
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
+let inFlightCsrf: Promise<string | null> | null = null
+
+async function ensureCsrfToken(): Promise<string | null> {
+  const existing = readCookie(CSRF_COOKIE)
+  if (existing) return existing
+  if (!inFlightCsrf) {
+    inFlightCsrf = fetch(buildUrl(CSRF_PATH), { credentials: 'include' })
+      .then(() => readCookie(CSRF_COOKIE))
+      .catch(() => null)
+      .finally(() => {
+        inFlightCsrf = null
+      })
+  }
+  return inFlightCsrf
+}
 
 function readCookie(name: string): string | null {
   const match = document.cookie.match(
     new RegExp('(?:^|; )' + name + '=([^;]*)'),
   )
-  return match ? decodeURIComponent(match[1]) : null
+  const value = match?.[1]
+  return value === undefined ? null : decodeURIComponent(value)
 }
 
 // ─────────────────────────── 요청 ───────────────────────────
@@ -129,9 +151,6 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const method = (opts.method ?? 'GET').toUpperCase()
   const headers: Record<string, string> = { Accept: 'application/json' }
 
-  const token = getAccessToken()
-  if (token) headers.Authorization = `Bearer ${token}`
-
   let body: BodyInit | undefined
   if (opts.body !== undefined) {
     headers['Content-Type'] = 'application/json'
@@ -139,7 +158,7 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   }
 
   if (UNSAFE_METHODS.has(method)) {
-    const csrf = readCookie(CSRF_COOKIE)
+    const csrf = await ensureCsrfToken()
     if (csrf) headers[CSRF_HEADER] = csrf
   }
 
@@ -153,9 +172,7 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
 
   // accessToken 만료(401) → refresh 후 1회 재시도
   if (res.status === 401 && !opts.skipAuthRefresh && !opts._retried) {
-    const newToken = await runRefresh()
-    if (newToken) {
-      setAccessToken(newToken)
+    if (await runRefresh()) {
       return request<T>(path, { ...opts, _retried: true })
     }
   }

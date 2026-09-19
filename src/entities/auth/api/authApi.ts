@@ -1,82 +1,48 @@
-import { api, setAccessToken, clearAccessToken } from '@/shared/api'
-import type {
-  AccessTokenResponse,
-  Account,
-  FindEmailRequest,
-  FindEmailResponse,
-  FindPasswordRequest,
-  LoginRequest,
-  RegisterRequest,
-} from '../model/types'
+import { ApiError, api } from '@/shared/api'
+import type { Account, OAuthAuthorizeUrlResponse } from '../model/types'
 
 const BASE = '/api/v1/auth'
 
-function hasCsrfCookie(): boolean {
-  return /(?:^|; )csrfToken=/.test(document.cookie)
-}
+const LOGGED_OUT: Account = { isLoggedIn: false, userId: null, nickname: null }
 
 /**
- * CSRF 토큰 쿠키를 보장한다. 백엔드는 login/refresh/logout POST 에 대해
- * `X-CSRF-Token` 헤더(쿠키 echo)를 요구하므로, 해당 호출 전에 쿠키가 없으면
- * 먼저 발급받는다.
+ * 토큰은 전부 HttpOnly 쿠키다 — 로그인·refresh 응답에 바디가 없다.
+ * CSRF 헤더는 shared/api 의 클라이언트가 상태를 바꾸는 요청마다 붙인다.
  */
-export async function ensureCsrfToken(): Promise<void> {
-  if (hasCsrfCookie()) return
-  await api.get<void>(`${BASE}/csrf`)
-}
-
 export const authApi = {
-  /** CSRF 토큰 발급 (쿠키 설정). */
-  csrf: () => api.get<void>(`${BASE}/csrf`),
-
-  async login(req: LoginRequest): Promise<AccessTokenResponse> {
-    await ensureCsrfToken()
-    const res = await api.post<AccessTokenResponse>(`${BASE}/login`, req)
-    setAccessToken(res.accessToken)
-    return res
-  },
-
-  async register(req: RegisterRequest): Promise<AccessTokenResponse> {
-    const res = await api.post<AccessTokenResponse>(`${BASE}/register`, req)
-    setAccessToken(res.accessToken)
-    return res
-  },
-
-  account: () => api.get<Account>(`${BASE}/account`),
-
   /**
-   * refreshToken(HttpOnly 쿠키)으로 accessToken 을 재발급한다.
-   * 401 자동 재시도 루프에 걸리지 않도록 skipAuthRefresh 로 호출한다.
-   * 실패 시 accessToken 을 비우고 null 을 반환한다.
+   * `/account` 는 보호 경로라 비로그인이면 401 이다(refresh 도 실패한 뒤).
+   * 화면은 그것을 오류가 아니라 「비로그인」으로 읽는다.
    */
-  async refresh(): Promise<string | null> {
+  async account(): Promise<Account> {
     try {
-      await ensureCsrfToken()
-      const res = await api.post<AccessTokenResponse>(
-        `${BASE}/refresh`,
-        undefined,
-        { skipAuthRefresh: true },
-      )
-      setAccessToken(res.accessToken)
-      return res.accessToken
+      return await api.get<Account>(`${BASE}/account`)
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) return LOGGED_OUT
+      throw e
+    }
+  },
+
+  /** refreshToken 쿠키로 두 쿠키를 다시 받는다. 401 재시도 루프에 걸리지 않게 skipAuthRefresh. */
+  async refresh(): Promise<boolean> {
+    try {
+      await api.post<void>(`${BASE}/refresh`, undefined, {
+        skipAuthRefresh: true,
+      })
+      return true
     } catch {
-      clearAccessToken()
-      return null
+      return false
     }
   },
 
-  async logout(): Promise<void> {
-    await ensureCsrfToken()
-    try {
-      await api.post<void>(`${BASE}/logout`)
-    } finally {
-      clearAccessToken()
-    }
-  },
+  logout: () =>
+    api.post<void>(`${BASE}/logout`, undefined, { skipAuthRefresh: true }),
 
-  findEmail: (req: FindEmailRequest) =>
-    api.post<FindEmailResponse>(`${BASE}/email/find`, req),
+  kakaoAuthorizeUrl: (state: string) =>
+    api.get<OAuthAuthorizeUrlResponse>(`${BASE}/oauth/kakao/authorize-url`, {
+      searchParams: { state },
+    }),
 
-  findPassword: (req: FindPasswordRequest) =>
-    api.post<void>(`${BASE}/password/find`, req),
+  kakaoLogin: (code: string) =>
+    api.post<void>(`${BASE}/oauth/kakao`, { code }, { skipAuthRefresh: true }),
 }

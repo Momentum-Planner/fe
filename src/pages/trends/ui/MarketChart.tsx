@@ -1,131 +1,150 @@
 import { useEffect, useRef } from 'react'
 import {
-  CandlestickSeries,
-  ColorType,
-  CrosshairMode,
-  LineStyle,
-  createChart,
-} from 'lightweight-charts'
-import { formatChartDate } from '@/shared/lib/chartHistory'
-import {
-  VISIBLE_BARS,
-  baseBoxes,
-  currentPrice,
-  marketCandles,
-} from '../model/marketData'
+  CANDLE_DOWN,
+  CANDLE_UP,
+  Highcharts,
+  baseBoxAnnotation,
+  baseStockOptions,
+  priceAxis,
+} from '@/shared/lib/chartOptions'
+import type { BaseItem, DailyCandle } from '@/entities/stock'
+
+// 머리글을 한 줄로 접어 47px 을 되찾았고 그만큼을 차트에 돌려줬다.
+// 차트 «폭»은 Q0 이 지킨 값이라 건드리지 않는다 — 이 상수는 세로의 «바닥»이다.
+// 화면이 크면 판을 따라 늘어난다 (2026-09-19) — 높이는 담는 칸이 정한다
+const HEIGHT = 440
+/** 처음 보이는 봉 수 — 왼쪽으로 끌면 과거가 나온다 */
+const VISIBLE_BARS = 90
+
+const toTime = (d: string) => {
+  const [y = 0, m = 1, day = 1] = d.split('-').map(Number)
+  return Date.UTC(y, m - 1, day)
+}
 
 /**
- * Candlestick chart (Korean convention: red = up, blue = down) rendered with
- * lightweight-charts. The yellow S/R consolidation boxes are drawn as an
- * absolutely-positioned overlay using the chart's coordinate conversions, so
- * they stay glued to the candles on resize.
+ * 오늘의 후보 화면의 캔들 차트 (한국식 — 상승 빨강 / 하락 파랑).
+ *
+ * **목록에서 고른 종목을 그린다** (2026-09-19 · 4장 ① 가). 전에는 `marketData.ts` 의
+ * 손으로 박은 상수(SK하이닉스 모양)였다 — 실제 일봉 · 베이스 API 로 갈아끼웠다.
+ *
+ * 설정은 전부 `shared/lib/chartOptions` 에서 온다 (Q2).
+ * 지지/저항 박스는 annotation 이라 축 값에 붙어 있다.
  */
-export function MarketChart() {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const overlayRef = useRef<HTMLDivElement>(null)
+export function MarketChart({
+  candles,
+  bases,
+}: {
+  candles: DailyCandle[] | undefined
+  bases: BaseItem[] | undefined
+}) {
+  const boxRef = useRef<HTMLDivElement>(null)
+  const frameRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const container = containerRef.current
-    const overlay = overlayRef.current
-    if (!container || !overlay) return
+    const el = boxRef.current
+    if (!el || !candles?.length) return
 
-    const chart = createChart(container, {
-      width: container.clientWidth,
-      height: container.clientHeight,
-      layout: {
-        background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: 'rgba(255,255,255,0.45)',
-        fontFamily: "'DM Sans', sans-serif",
-        attributionLogo: false,
+    const sorted = [...candles].sort((a, b) =>
+      a.tradeDate.localeCompare(b.tradeDate),
+    )
+    const data = sorted.map((c) => [
+      toTime(c.tradeDate),
+      c.openPrice,
+      c.highPrice,
+      c.lowPrice,
+      c.closePrice,
+    ])
+    const from = data[Math.max(0, data.length - VISIBLE_BARS)]?.[0]
+    const to = data.at(-1)?.[0]
+    const last = sorted.at(-1)?.closePrice
+    if (from === undefined || to === undefined || last === undefined) return
+
+    const chart = Highcharts.stockChart(el, {
+      ...baseStockOptions(),
+      xAxis: {
+        ...baseStockOptions().xAxis,
+        min: from,
+        max: to,
       },
-      grid: {
-        vertLines: { visible: false },
-        horzLines: { color: 'rgba(255,255,255,0.05)', style: LineStyle.Dashed },
+      yAxis: [
+        priceAxis({
+          plotLines: [
+            {
+              value: last,
+              color: '#FF367C',
+              width: 1,
+              dashStyle: 'Dash',
+              zIndex: 3,
+              label: {
+                text: last.toLocaleString('ko-KR'),
+                align: 'right',
+                x: -8,
+                y: -4,
+                style: { color: '#FF367C', fontSize: '11px' },
+              },
+            },
+          ],
+        }),
+      ],
+      annotations: bases?.length
+        ? [
+            baseBoxAnnotation(
+              bases.map((b) => ({
+                from: toTime(b.startDate),
+                to: toTime(b.endDate),
+                low: b.supportPrice,
+                high: b.resistancePrice,
+              })),
+            ),
+          ]
+        : [],
+      tooltip: {
+        ...baseStockOptions().tooltip,
+        pointFormatter() {
+          const p = this as unknown as {
+            open: number
+            high: number
+            low: number
+            close: number
+          }
+          const color = p.close >= p.open ? CANDLE_UP : CANDLE_DOWN
+          return (
+            `시 ${p.open.toLocaleString('ko-KR')} · 고 ${p.high.toLocaleString('ko-KR')}<br/>` +
+            `저 ${p.low.toLocaleString('ko-KR')} · <span style="color:${color}">종 ${p.close.toLocaleString('ko-KR')}</span>`
+          )
+        },
       },
-      rightPriceScale: {
-        borderVisible: false,
-        scaleMargins: { top: 0.08, bottom: 0.12 },
-      },
-      timeScale: { borderVisible: false },
-      localization: { timeFormatter: formatChartDate },
-      crosshair: {
-        mode: CrosshairMode.Normal,
-        vertLine: { labelVisible: true, color: 'rgba(255,255,255,0.2)' },
-        horzLine: { color: 'rgba(255,255,255,0.2)' },
-      },
+      series: [
+        {
+          type: 'candlestick',
+          name: '가격',
+          data,
+        } as Highcharts.SeriesCandlestickOptions,
+      ],
     })
 
-    const series = chart.addSeries(CandlestickSeries, {
-      upColor: '#FF3636',
-      downColor: '#34ADE4',
-      borderVisible: false,
-      wickUpColor: '#FF3636',
-      wickDownColor: '#34ADE4',
-      priceFormat: { type: 'price', precision: 0, minMove: 1 },
-    })
-    series.setData(marketCandles)
-    series.createPriceLine({
-      price: currentPrice,
-      color: '#FF367C',
-      lineWidth: 1,
-      lineStyle: LineStyle.Dashed,
-      axisLabelVisible: true,
-      title: '',
-    })
-    const total = marketCandles.length
-    chart
-      .timeScale()
-      .setVisibleLogicalRange({ from: total - VISIBLE_BARS, to: total + 2 })
-
-    const drawBoxes = () => {
-      const ts = chart.timeScale()
-      const c0 = ts.timeToCoordinate(marketCandles[0].time)
-      const c1 = ts.timeToCoordinate(marketCandles[1].time)
-      const halfW = c0 != null && c1 != null ? Math.abs(c1 - c0) / 2 : 4
-
-      let html = ''
-      for (const box of baseBoxes) {
-        const x1 = ts.timeToCoordinate(marketCandles[box.fromIndex].time)
-        const x2 = ts.timeToCoordinate(marketCandles[box.toIndex].time)
-        const yHigh = series.priceToCoordinate(box.high)
-        const yLow = series.priceToCoordinate(box.low)
-        if (x1 == null || x2 == null || yHigh == null || yLow == null) continue
-
-        const left = x1 - halfW
-        const width = x2 - x1 + halfW * 2
-        const height = yLow - yHigh
-        html +=
-          `<div style="position:absolute;left:${left}px;top:${yHigh}px;` +
-          `width:${width}px;height:${height}px;` +
-          `border-top:1.5px solid #EEB82D;border-bottom:1.5px solid #EEB82D;` +
-          `background:rgba(238,184,45,0.12)"></div>`
-      }
-      overlay.innerHTML = html
-    }
-
-    const raf = requestAnimationFrame(drawBoxes)
-    chart.timeScale().subscribeVisibleLogicalRangeChange(drawBoxes)
-
-    const ro = new ResizeObserver(() => {
-      chart.applyOptions({
-        width: container.clientWidth,
-        height: container.clientHeight,
-      })
-      requestAnimationFrame(drawBoxes)
-    })
-    ro.observe(container)
-
+    // 칸 높이가 바뀌면(창 크기) 다시 맞춘다
+    // 💀 reflow() 는 폭만 따라가고 높이는 처음 값(466)에 멈췄다 — 칸이 646 인데도. 크기를 직접 준다
+    const frame = frameRef.current ?? el
+    const ro = new ResizeObserver(() =>
+      chart.setSize(frame.clientWidth, frame.clientHeight, false),
+    )
+    ro.observe(frame)
     return () => {
-      cancelAnimationFrame(raf)
       ro.disconnect()
-      chart.remove()
+      chart.destroy()
     }
-  }, [])
+  }, [candles, bases])
 
+  // 차트는 칸 안에 «띄운다»(absolute) — 흐름 안에 두면 차트의 높이가 칸을 붙잡아
+  // 창을 줄여도 646 에 멈췄다. 칸의 높이는 판이 정하고 차트는 그것을 따른다
   return (
-    <div className="relative">
-      <div ref={containerRef} className="h-[440px] w-full" />
-      <div ref={overlayRef} className="pointer-events-none absolute inset-0" />
+    <div
+      ref={frameRef}
+      className="relative w-full flex-1"
+      style={{ minHeight: HEIGHT }}
+    >
+      <div ref={boxRef} className="absolute inset-0" />
     </div>
   )
 }

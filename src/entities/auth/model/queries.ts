@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { authApi } from '../api/authApi'
-import type { FindEmailRequest, LoginRequest, RegisterRequest } from './types'
 
 export const authKeys = {
   all: ['auth'] as const,
@@ -15,38 +14,21 @@ export function useAccount() {
   })
 }
 
-export function useLogin() {
+export function useKakaoLogin() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (req: LoginRequest) => authApi.login(req),
+    mutationFn: (code: string) => authApi.kakaoLogin(code),
     onSuccess: () => qc.invalidateQueries({ queryKey: authKeys.account() }),
   })
 }
 
-export function useRegister() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (req: RegisterRequest) => authApi.register(req),
-    onSuccess: () => qc.invalidateQueries({ queryKey: authKeys.account() }),
-  })
-}
-
+/** 로그아웃하면 사용자 축 캐시(계획·거래 기록·내 정보)가 남지 않게 전부 비운다. */
 export function useLogout() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: () => authApi.logout(),
-    onSuccess: () => qc.invalidateQueries({ queryKey: authKeys.account() }),
-  })
-}
-
-export function useFindEmail() {
-  return useMutation({
-    mutationFn: (req: FindEmailRequest) => authApi.findEmail(req),
-  })
-}
-
-export function useFindPassword() {
-  return useMutation({
-    mutationFn: authApi.findPassword,
+    onSettled: () => {
+      qc.clear()
+    },
   })
 }

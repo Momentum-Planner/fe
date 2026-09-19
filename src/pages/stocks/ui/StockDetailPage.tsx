@@ -21,7 +21,6 @@ import {
   useVolumeInsight,
 } from '@/entities/stock'
 import { SnapshotCard } from '@/shared/ui/SnapshotCard'
-import { SearchBar } from '@/shared/ui/SearchBar'
 import { StockChart } from './StockChart'
 import { ItemGrid } from './ItemCards'
 import {
@@ -95,11 +94,8 @@ export function StockDetailPage() {
     ],
     [ma50, ma150, ma200],
   )
-  const baseBoxes = useMemo(
-    () => toBaseBoxes(bases ?? [], candles),
-    [bases, candles],
-  )
-  const lastClose = candles.at(-1)?.close ?? null
+  const baseBoxes = useMemo(() => toBaseBoxes(bases ?? []), [bases])
+  const lastClose = candles.at(-1)?.[4] ?? null
   const priceTags = useMemo(
     () => (lastClose != null ? [{ price: lastClose, color: '#FF367C' }] : []),
     [lastClose],
@@ -121,10 +117,6 @@ export function StockDetailPage() {
 
   return (
     <main className="stock-detail">
-      <header className="topbar">
-        <SearchBar />
-      </header>
-
       <div className="content">
         {/* Chart card */}
         <section className="chartCard">

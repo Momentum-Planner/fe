@@ -1,37 +1,33 @@
 import { useEffect, useRef } from 'react'
 import {
-  CandlestickSeries,
-  ColorType,
-  CrosshairMode,
-  HistogramSeries,
-  LineSeries,
-  LineStyle,
-  createChart,
-} from 'lightweight-charts'
-import type {
-  CandlestickData,
-  HistogramData,
-  ISeriesApi,
-  LineData,
-} from 'lightweight-charts'
-import { formatChartDate } from '@/shared/lib/chartHistory'
+  CANDLE_UP,
+  Highcharts,
+  baseBoxAnnotation,
+  baseStockOptions,
+  priceAxis,
+} from '@/shared/lib/chartOptions'
 
 export type ChartBaseBox = {
-  fromIndex: number
-  toIndex: number
+  from: number
+  to: number
   low: number
   high: number
 }
-export type ChartMovingAverage = { color: string; data: LineData[] }
+export type ChartMovingAverage = {
+  color: string
+  data: Array<[number, number]>
+}
 export type ChartPriceTag = { price: number; color: string }
+export type ChartCandle = [number, number, number, number, number]
+export type ChartVolumeBar = { x: number; y: number; color: string }
 
 type StockChartProps = {
   /** 지지선/저항선 — show the yellow S/R boxes */
   showSR: boolean
   /** 이동평균선 — per-line visibility (50 / 150 / 200) */
   maVisible: boolean[]
-  candles: CandlestickData[]
-  volume: HistogramData[]
+  candles: ChartCandle[]
+  volume: ChartVolumeBar[]
   movingAverages: ChartMovingAverage[]
   baseBoxes: ChartBaseBox[]
   priceTags: ChartPriceTag[]
@@ -39,10 +35,14 @@ type StockChartProps = {
   visibleBars: number
 }
 
+const MA_SERIES_ID = (i: number) => `ma-${i}`
+
 /**
- * Stock-detail candlestick chart (lightweight-charts): candles + moving
- * averages + right-axis price tags + yellow S/R overlay boxes. 데이터는 부모가
- * API(useDailyCandles/useMovingAverages/useBases)에서 받아 props 로 주입한다.
+ * 종목 상세 캔들 차트 — 캔들+거래량 2단, 이동평균 3선, 지지/저항 오버레이, 현재가 라인.
+ *
+ * 설정은 `shared/lib/chartOptions` 공용 바탕을 따른다. 이유는 `docs/결정/Q11_차트_바탕.md`.
+ * 토글(showSR·maVisible)은 차트를 다시 만들지 않고 `series.setVisible` /
+ * `annotation.update` 로만 바꾼다 — 매번 재생성하면 dataGrouping 이 다시 돌아 깜빡인다.
  */
 export function StockChart({
   showSR,
@@ -55,211 +55,131 @@ export function StockChart({
   visibleBars,
 }: StockChartProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const overlayRef = useRef<HTMLDivElement>(null)
-  const tooltipRef = useRef<HTMLDivElement>(null)
-  const maSeriesRef = useRef<ISeriesApi<'Line'>[]>([])
-  const drawRef = useRef<() => void>(() => {})
-  const showSRRef = useRef(showSR)
+  const chartRef = useRef<Highcharts.Chart | null>(null)
 
   useEffect(() => {
-    const container = containerRef.current
-    const overlay = overlayRef.current
-    if (!container || !overlay) return
-    if (candles.length === 0) return
+    const el = containerRef.current
+    if (!el || candles.length === 0) return
 
-    const chart = createChart(container, {
-      width: container.clientWidth,
-      height: container.clientHeight,
-      layout: {
-        background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: 'rgba(255,255,255,0.55)',
-        fontFamily: "'DM Sans', sans-serif",
-        attributionLogo: false,
-      },
-      grid: {
-        vertLines: { visible: false },
-        horzLines: { color: 'rgba(255,255,255,0.05)' },
-      },
-      rightPriceScale: {
-        visible: true,
-        borderVisible: false,
-        scaleMargins: { top: 0.08, bottom: 0.1 },
-      },
-      timeScale: { borderVisible: false },
-      localization: { timeFormatter: formatChartDate },
-      crosshair: {
-        mode: CrosshairMode.Normal,
-        vertLine: { labelVisible: true, color: 'rgba(255,255,255,0.2)' },
-        horzLine: { color: 'rgba(255,255,255,0.2)' },
-      },
-    })
+    // 위에서 «비어 있으면» 이미 나갔으므로 둘 다 있다. 타입만 그것을 모른다
+    const from = candles[Math.max(0, candles.length - visibleBars)]?.[0]
+    const to = candles.at(-1)?.[0]
+    if (from === undefined || to === undefined) return
 
-    const volumeSeries = chart.addSeries(
-      HistogramSeries,
-      {
-        priceScaleId: 'right',
-        priceFormat: {
-          type: 'custom',
-          minMove: 1,
-          formatter: (v: number) => `${Math.round(v)}M`,
+    const chart = Highcharts.stockChart(el, {
+      ...baseStockOptions(),
+      xAxis: {
+        ...baseStockOptions().xAxis,
+        min: from,
+        max: to,
+      },
+      yAxis: [
+        priceAxis({
+          height: '78%',
+          resize: { enabled: true },
+          plotLines: priceTags.map((tag) => ({
+            value: tag.price,
+            color: tag.color,
+            width: 1,
+            dashStyle: 'Dash',
+            zIndex: 3,
+          })),
+        }),
+        priceAxis({
+          top: '80%',
+          height: '20%',
+          offset: 0,
+          labels: { enabled: false },
+        }),
+      ],
+      annotations: [baseBoxAnnotation(showSR ? baseBoxes : [])],
+      tooltip: {
+        ...baseStockOptions().tooltip,
+        pointFormatter() {
+          const p = this as unknown as {
+            series: Highcharts.Series
+            open?: number
+            high?: number
+            low?: number
+            close?: number
+            y?: number
+          }
+          if (p.series.type === 'column') {
+            return `거래량 ${Math.round(p.y ?? 0).toLocaleString('ko-KR')}M`
+          }
+          if (p.open == null)
+            return `${p.series.name} ${p.y?.toLocaleString('ko-KR')}`
+          const color = (p.close ?? 0) >= (p.open ?? 0) ? CANDLE_UP : '#34ADE4'
+          return (
+            `시 ${p.open.toLocaleString('ko-KR')} · 고 ${p.high?.toLocaleString('ko-KR')}<br/>` +
+            `저 ${p.low?.toLocaleString('ko-KR')} · <span style="color:${color}">종 ${p.close?.toLocaleString('ko-KR')}</span>`
+          )
         },
-        lastValueVisible: false,
-        priceLineVisible: false,
       },
-      1,
-    )
-    volumeSeries.priceScale().applyOptions({
-      borderVisible: false,
-      scaleMargins: { top: 0.15, bottom: 0.05 },
-    })
-    volumeSeries.setData(volume)
-
-    chart.subscribeCrosshairMove((param) => {
-      const tooltip = tooltipRef.current
-      if (!tooltip) return
-      const v = param.seriesData.get(volumeSeries) as
-        | { value?: number }
-        | undefined
-      if (!param.point || param.time == null || !v || v.value == null) {
-        tooltip.style.display = 'none'
-        return
-      }
-      tooltip.style.display = 'block'
-      tooltip.textContent = `거래량 ${Math.round(v.value)}M`
-      tooltip.style.left = `${param.point.x + 12}px`
-      tooltip.style.top = `${param.point.y + 12}px`
-    })
-
-    maSeriesRef.current = movingAverages.map((ma, i) => {
-      const line = chart.addSeries(LineSeries, {
-        color: ma.color,
-        lineWidth: 2,
-        priceLineVisible: false,
-        lastValueVisible: false,
-        crosshairMarkerVisible: false,
-        visible: maVisible[i] ?? true,
-      })
-      line.setData(ma.data)
-      return line
+      series: [
+        {
+          type: 'candlestick',
+          id: 'main',
+          name: '가격',
+          data: candles,
+          yAxis: 0,
+        } as Highcharts.SeriesCandlestickOptions,
+        {
+          type: 'column',
+          name: '거래량',
+          // point 를 객체로 주면 등락색을 point 단위로 지정할 수 있다
+          data: volume.map((v) => ({ x: v.x, y: v.y, color: v.color })),
+          yAxis: 1,
+        } as Highcharts.SeriesColumnOptions,
+        ...movingAverages.map(
+          (ma, i) =>
+            ({
+              type: 'line',
+              id: MA_SERIES_ID(i),
+              name: `MA ${i}`,
+              data: ma.data,
+              color: ma.color,
+              lineWidth: 2,
+              marker: { enabled: false },
+              visible: maVisible[i] ?? true,
+              yAxis: 0,
+              enableMouseTracking: false,
+              dataGrouping: { enabled: true },
+            }) as Highcharts.SeriesLineOptions,
+        ),
+      ],
     })
 
-    const candle = chart.addSeries(CandlestickSeries, {
-      priceScaleId: 'right',
-      upColor: '#FF3636',
-      downColor: '#34ADE4',
-      borderVisible: false,
-      wickUpColor: '#FF3636',
-      wickDownColor: '#34ADE4',
-      priceFormat: { type: 'price', precision: 0, minMove: 1 },
-      lastValueVisible: false,
-      priceLineVisible: false,
-    })
-    candle.setData(candles)
-
-    const panes = chart.panes()
-    if (panes.length > 1) {
-      panes[0].setStretchFactor(2.5)
-      panes[1].setStretchFactor(1)
-    }
-
-    for (const tag of priceTags) {
-      candle.createPriceLine({
-        price: tag.price,
-        color: tag.color,
-        lineWidth: 1,
-        lineStyle: LineStyle.Dashed,
-        lineVisible: false,
-        axisLabelVisible: true,
-      })
-    }
-
-    const total = candles.length
-    chart
-      .timeScale()
-      .setVisibleLogicalRange({ from: total - visibleBars, to: total + 2 })
-
-    const drawBoxes = () => {
-      if (!showSRRef.current) {
-        overlay.innerHTML = ''
-        return
-      }
-      const ts = chart.timeScale()
-      const c0 = ts.timeToCoordinate(candles[0].time)
-      const c1 =
-        candles.length > 1 ? ts.timeToCoordinate(candles[1].time) : null
-      const halfW = c0 != null && c1 != null ? Math.abs(c1 - c0) / 2 : 4
-
-      let html = ''
-      for (const box of baseBoxes) {
-        if (box.fromIndex < 0 || box.toIndex >= candles.length) continue
-        const x1 = ts.timeToCoordinate(candles[box.fromIndex].time)
-        const x2 = ts.timeToCoordinate(candles[box.toIndex].time)
-        const yHigh = candle.priceToCoordinate(box.high)
-        const yLow = candle.priceToCoordinate(box.low)
-        if (x1 == null || x2 == null || yHigh == null || yLow == null) continue
-        html +=
-          `<div style="position:absolute;left:${x1 - halfW}px;top:${yHigh}px;` +
-          `width:${x2 - x1 + halfW * 2}px;height:${yLow - yHigh}px;` +
-          `border-top:1.5px solid #EEB82D;border-bottom:1.5px solid #EEB82D;` +
-          `background:rgba(238,184,45,0.10)"></div>`
-      }
-      overlay.innerHTML = html
-    }
-    drawRef.current = drawBoxes
-
-    const raf = requestAnimationFrame(drawBoxes)
-    chart.timeScale().subscribeVisibleLogicalRangeChange(drawBoxes)
-
-    const ro = new ResizeObserver(() => {
-      chart.applyOptions({
-        width: container.clientWidth,
-        height: container.clientHeight,
-      })
-      requestAnimationFrame(drawBoxes)
-    })
-    ro.observe(container)
-
+    chartRef.current = chart
     return () => {
-      cancelAnimationFrame(raf)
-      ro.disconnect()
-      chart.remove()
-      maSeriesRef.current = []
+      chart.destroy()
+      chartRef.current = null
     }
+    // candles/volume/movingAverages/priceTags 는 API 응답이 바뀔 때만 갱신되므로
+    // 차트를 다시 만든다. showSR/maVisible 은 아래 별도 effect 가 라이브 토글한다.
   }, [candles, volume, movingAverages, baseBoxes, priceTags, visibleBars])
 
-  // Live toggles: MA visibility + S/R boxes
+  // 라이브 토글 — 차트를 다시 만들지 않는다.
+  // annotations 모듈은 chart 인스턴스 API(addAnnotation 등)가 공식 타입에 없어서,
+  // 타입이 있는 chart.update({ annotations }) 로 통째로 교체한다 — 매번 축소판이라 싸다.
   useEffect(() => {
-    maSeriesRef.current.forEach((s, i) => {
-      s.applyOptions({ visible: maVisible[i] ?? true })
+    const chart = chartRef.current
+    if (!chart) return
+    movingAverages.forEach((_, i) => {
+      chart.series
+        .find((s) => s.options.id === MA_SERIES_ID(i))
+        ?.setVisible(maVisible[i] ?? true, false)
     })
-    showSRRef.current = showSR
-    drawRef.current()
-  }, [showSR, maVisible])
+    chart.update(
+      { annotations: [baseBoxAnnotation(showSR ? baseBoxes : [])] },
+      false,
+    )
+    chart.redraw(false)
+  }, [showSR, maVisible, baseBoxes, movingAverages])
 
   return (
     <div className="chartArea">
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
-      <div
-        ref={overlayRef}
-        style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
-      />
-      <div
-        ref={tooltipRef}
-        style={{
-          position: 'absolute',
-          display: 'none',
-          pointerEvents: 'none',
-          zIndex: 3,
-          padding: '4px 8px',
-          borderRadius: 6,
-          background: 'rgba(0,0,0,0.8)',
-          border: '1px solid rgba(255,255,255,0.12)',
-          color: '#fff',
-          fontSize: 11,
-          fontFamily: "'DM Sans', sans-serif",
-          whiteSpace: 'nowrap',
-        }}
-      />
     </div>
   )
 }
