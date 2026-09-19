@@ -28,6 +28,7 @@ const p = (
   initialStopWidth: null,
   realized: null,
   realizedPct: null,
+  lastClose: null,
 })
 
 const SK = [

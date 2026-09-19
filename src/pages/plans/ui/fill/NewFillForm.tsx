@@ -156,16 +156,19 @@ export function NewFillForm({
   }
 
   return (
-    <section className="bg-bg-surface ring-border-default flex flex-col gap-4 rounded-lg px-5 py-4 ring-1">
+    <section className="bg-bg-surface ring-border-default flex flex-col gap-4 rounded-lg px-4 py-4 ring-1 sm:px-5">
       <header className="flex items-center gap-2">
-        <span className="text-[14px] font-bold text-white">체결 기록</span>
-        <span className="text-[11px] text-white/40">
+        <span className="text-[14px] font-bold whitespace-nowrap text-white">
+          체결 기록
+        </span>
+        {/* 좁으면 안내 한 줄은 감춘다 — 제목이 두 줄로 꺾였다 */}
+        <span className="hidden truncate text-[11px] text-white/40 sm:inline">
           체결 하나가 한 줄이다 — 분할 매도면 여러 번 넣는다
         </span>
         <button
           type="button"
           onClick={onClose}
-          className="ml-auto text-[11px] text-white/35 hover:text-white/70"
+          className="ml-auto text-[11px] whitespace-nowrap text-white/35 hover:text-white/70"
         >
           닫기
         </button>
@@ -173,12 +176,15 @@ export function NewFillForm({
 
       {/* 종목 — 고르고 나면 머리줄 글자가 된다 */}
       {stock ? (
-        <div className="flex items-baseline gap-2">
-          <span className="text-[16px] font-bold text-white">{stock.name}</span>
+        // 좁으면 보유 · 평단 · 현금 은 둘째 줄로 — 종목 이름이 「HD현대일렉트 / 릭」 으로 꺾였다
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span className="text-[16px] font-bold whitespace-nowrap text-white">
+            {stock.name}
+          </span>
           <span className="font-number text-[11px] text-white/40">
             {stock.code}
           </span>
-          <span className="font-number ml-auto text-[11px] text-white/50">
+          <span className="font-number order-last w-full text-[11px] text-white/50 sm:order-none sm:ml-auto sm:w-auto">
             보유 {held}주 · 평단 {won(avg)} · 현금 {won(cash)}
           </span>
           <button
@@ -188,7 +194,7 @@ export function NewFillForm({
               setPick(null)
               setOpened(false)
             }}
-            className="text-[11px] text-white/35 hover:text-white/70"
+            className="ml-auto text-[11px] whitespace-nowrap text-white/35 hover:text-white/70 sm:ml-0"
           >
             바꾸기
           </button>
@@ -431,9 +437,6 @@ export function NewFillForm({
                 ? '매수 · 매도를 골라야 열립니다'
                 : '계획을 골라야 열립니다'}
             </span>
-          </div>
-          <div className="border-t border-white/[0.06] pt-2.5 font-bold">
-            기록
           </div>
         </div>
       )}

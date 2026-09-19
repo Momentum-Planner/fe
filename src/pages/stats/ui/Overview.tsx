@@ -96,12 +96,13 @@ export function Overview({
        * **층은 선이 아니라 여백이 가른다** (Q15 ④ 근접성). 층 안은 좁게,
        * 층 사이는 넓게 — 최대 둘 위의 선을 걷었다.
        */}
-      <div className="grid grid-cols-4 gap-x-4">
+      {/* 좁으면 두 칸씩 · 차트와 위험은 위아래로 (2026-09-19 휴대폰 폭에서 타일 숫자가 넘쳤다) */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 sm:gap-y-0">
         <PerfTiles s={sum} />
       </div>
 
-      <div className="mt-4 grid grid-cols-4 gap-x-4">
-        <div className="col-span-3 flex flex-col gap-1">
+      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-4 md:gap-y-0">
+        <div className="flex min-w-0 flex-col gap-1 md:col-span-3">
           <div className="flex items-baseline gap-2 text-[11px]">
             <span className="text-fg-tertiary">월별 손익과 누적</span>
             <span className="text-white/30">
@@ -120,7 +121,7 @@ export function Overview({
         <RiskList risk={risk} />
       </div>
 
-      <div className="mt-3 grid grid-cols-4 gap-x-4">
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4 sm:gap-x-4">
         <PeakTrades closed={picked} />
       </div>
     </div>

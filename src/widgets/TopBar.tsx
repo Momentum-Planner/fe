@@ -1,6 +1,5 @@
 import { Link } from '@tanstack/react-router'
 import {
-  BarChart3,
   ClipboardList,
   LogOut,
   TrendingUp,
@@ -41,7 +40,7 @@ const navItems: NavEntry[] = [
   { to: '/trends', label: '오늘의 후보', icon: TrendingUp },
   // 이 서비스의 집이다 (Q22) — 종목별 사슬 · 체결도 여기서 붙인다
   { to: '/plans', label: '거래 계획', icon: ClipboardList },
-  { to: '/stats', label: '거래 통계', icon: BarChart3 },
+  // 「거래 통계」 는 마이페이지(닉네임 칩) 로 옮겼다 (2026-09-19)
 ]
 
 const itemClass =
@@ -66,9 +65,14 @@ export function TopBar() {
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
 
       {/* Brand — home button → 오늘의 후보 */}
-      <Link to="/trends" className="mr-4 flex shrink-0 items-center gap-2">
+      <Link
+        to="/trends"
+        aria-label="Momentum — 오늘의 후보"
+        className="mr-4 flex shrink-0 items-center gap-2"
+      >
         <MomentumLogo size={20} />
-        <span className="font-number text-[clamp(15px,1.4vw,17px)] font-bold tracking-[-0.01em] whitespace-nowrap text-white">
+        {/* 좁으면(sm 미만) 글자 없이 로고만 — 상단 바가 화면보다 넓어져 페이지 전체가 옆으로 밀렸다 (2026-09-19) */}
+        <span className="font-number hidden text-[clamp(15px,1.4vw,17px)] font-bold tracking-[-0.01em] whitespace-nowrap text-white sm:inline">
           Momentum
         </span>
       </Link>
@@ -78,6 +82,7 @@ export function TopBar() {
           <Link
             key={to}
             to={to}
+            aria-label={label}
             className={`${itemClass} [&.active]:bg-white/[0.08] [&.active]:font-bold [&.active]:text-white`}
             activeProps={{ className: 'active' }}
             /**
@@ -91,7 +96,8 @@ export function TopBar() {
             activeOptions={{ exact: true }}
           >
             <Icon size={17} strokeWidth={2} />
-            <span>{label}</span>
+            {/* 좁으면 아이콘만 */}
+            <span className="hidden md:inline">{label}</span>
           </Link>
         ))}
       </nav>
@@ -103,7 +109,10 @@ export function TopBar() {
       <div className="ml-auto flex min-w-0 items-center gap-3 lg:gap-5">
         {/* 폭이 모자라면 여기가 줄어든다 — 검색어 칸은 좁아져도 읽히지만
             로그인·메뉴는 글자가 접히면 못 읽는다 */}
-        <SearchBar size="sm" className="w-[280px] min-w-[104px]" />
+        {/* 좁으면(md 미만) 검색칸을 감춘다 — 거래 계획 · 후보에 저마다 찾기가 있다 */}
+        <div className="hidden min-w-0 md:block">
+          <SearchBar size="sm" className="w-[280px] min-w-[104px]" />
+        </div>
 
         {/* 「보유 중」 드롭다운은 Q4 에서 뺐다 — 보유 목록은 계좌에 붙는다.
             관심만 남는다 (Q0 이 「가로를 안 먹고 모든 화면에서 같은 자리」로 고른 것) */}
@@ -113,10 +122,17 @@ export function TopBar() {
 
         {account?.isLoggedIn ? (
           <div className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-white/[0.06] pr-1 pl-3">
-            <span className="flex items-center gap-1.5 truncate text-[clamp(12px,1.05vw,13px)] font-semibold whitespace-nowrap text-white">
+            {/* 닉네임 칩이 마이페이지로 간다 (Q5) — 거래 통계가 거기 있다 (2026-09-19) */}
+            <Link
+              to="/profile"
+              aria-label="마이페이지"
+              className="flex items-center gap-1.5 truncate text-[clamp(12px,1.05vw,13px)] font-semibold whitespace-nowrap text-white hover:text-white/80"
+            >
               <User size={15} strokeWidth={2} />
-              {account.nickname ?? '회원'}
-            </span>
+              <span className="hidden sm:inline">
+                {account.nickname ?? '회원'}
+              </span>
+            </Link>
             <button
               type="button"
               onClick={() => logout.mutate()}

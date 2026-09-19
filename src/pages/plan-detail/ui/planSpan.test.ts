@@ -20,6 +20,7 @@ const item = (over: Partial<PlanListItem>): PlanListItem => ({
   fundamentalScore: 5,
   realized: null,
   realizedPct: null,
+  lastClose: null,
   previousPlanId: null,
   goals: [],
   initialStopWidth: null,

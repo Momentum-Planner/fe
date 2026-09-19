@@ -148,9 +148,9 @@ function FirstPlanView({ stockCode }: { stockCode: string }) {
         </div>
       </section>
 
-      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_324px] items-start gap-3">
+      <div className="grid min-w-0 grid-cols-1 items-start gap-3 lg:grid-cols-[minmax(0,1fr)_324px]">
         <section
-          className={cn(LIT_PANEL, 'sticky top-[68px] min-w-0 px-3 py-3')}
+          className={cn(LIT_PANEL, 'min-w-0 px-3 py-3 lg:sticky lg:top-[68px]')}
         >
           <PlanChart
             stockCode={stockCode}
@@ -442,14 +442,14 @@ function PlanDetailView({
           구조라 두 칸이 같이 읽혀야 하고, 계획 정보가 172px 짜리 두 칸으로 쪼개져
           경고 문구(「✕ 현금 …보다 …크다」)가 잘리고 있었다.
           차트는 770px 로 줄지만 90봉이면 봉당 8.5px 이라 Q0 이 걱정한 516px 과 멀다. */}
-      <div className="grid grid-cols-[minmax(0,1fr)_324px] items-start gap-3">
+      <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[minmax(0,1fr)_324px]">
         {/* 차트가 «주»다 — 종목 상세를 대체하는 화면이므로 차트가 그 폭을 가져야 한다.
             Q0 이 잰 값이 826px 이고, 여기 1fr 이 그 근처에 선다 */}
         {/* 차트 카드를 **붙잡아 둔다** (Q12 영역). 계획 칸이 길어 끝까지 내려도 차트가
             옆에 남아야 진입가 · 스톱가격을 차트에서 집을 수 있다.
             top 68 = 상단 내비 56 + 간격 12 */}
         <section
-          className={cn(LIT_PANEL, 'sticky top-[68px] min-w-0 px-3 py-3')}
+          className={cn(LIT_PANEL, 'min-w-0 px-3 py-3 lg:sticky lg:top-[68px]')}
         >
           <PlanChart
             stockCode={plan.stockCode}

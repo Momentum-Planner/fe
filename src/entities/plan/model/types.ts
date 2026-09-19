@@ -239,6 +239,11 @@ export interface PlanListItem {
   realized: number | null
   /** 실현 수익률 % — 실현 손익 ÷ (평단 × 매도 수량). 매도가 없으면 null */
   realizedPct: number | null
+  /**
+   * 전날 종가 — 목록의 「지금 어디쯤」 막대가 쓴다 (Q23 · 줄 배치 A).
+   * 장중 실시간이 아니라 마감 뒤 값이다(non-goals). 모르면 null
+   */
+  lastClose: number | null
 }
 
 /**

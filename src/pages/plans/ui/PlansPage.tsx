@@ -2,7 +2,7 @@ import { Link } from '@tanstack/react-router'
 import { ArrowUpDown, ChevronRight, Search, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useAccount } from '@/entities/auth'
-import { usePlanList } from '@/entities/plan'
+import { usePlanDefaults, usePlanList } from '@/entities/plan'
 import type { PlanListItem } from '@/entities/plan'
 import { useStockSearch } from '@/entities/search'
 import { cn } from '@/shared/lib/cn'
@@ -12,7 +12,7 @@ import {
   closeFill,
   openFill,
   useFillPanel,
-} from '@/widgets/fill'
+} from './fill'
 
 /**
  * 거래 계획 — **이 서비스의 집이다** (Q22).
@@ -113,6 +113,21 @@ const pct = (r: number) =>
 
 const norm = (v: string) => v.replace(/\s+/g, '').toLowerCase()
 
+/**
+ * **예상 위험노출 %** — 계획대로 다 샀다면 · 지금 손절 기준 (Q23 · 사용자 「예상 위험노출만」).
+ * max(0, 계획 진입 − 지금 손절) × 계획 수량 ÷ 계좌 총액. 손절을 R 로 올려야 줄고, 본전 이상이면 0.
+ * 💀 체결 기준(보유 · 평단) 으로 재 봤다가 걷었다 — 위험노출은 손절을 올려야 바뀌는 값이지 체결로 바뀌는 값이 아니다.
+ * R배수와 다른 값이다. 계좌 총액을 모르면 null.
+ */
+export const riskOf = (p: PlanListItem, accountTotal: number) =>
+  accountTotal > 0
+    ? (Math.max(0, p.entryPrice - p.stopPrice) * p.quantity * 100) /
+      accountTotal
+    : null
+/** 위험노출 구간 — 1% 미만 / 1~2.5% / 2.5% 초과(경고만 · 막지 않는다) */
+const riskTone = (v: number) =>
+  v > 2.5 ? 'text-warning' : v === 0 ? 'text-white/35' : 'text-white'
+
 /** 손절에 닿으면 얼마 — 음수면 아직 잃을 수 있다. 0 이상이면 「본전 이상 카드」 */
 export const atStop = (p: PlanListItem) =>
   (p.stopPrice - p.entryPrice) * p.quantity
@@ -125,7 +140,6 @@ export function PlansPage() {
   const { data: account } = useAccount()
   const [picked, setScope] = useState<Scope | null>(null)
   const fill = useFillPanel()
-  const panel = fill
 
   const { data: plans = [], isLoading, isError } = usePlanList({})
   // 사용자가 누르기 전까지는 비어 있지 않은 첫 필터
@@ -158,7 +172,15 @@ export function PlansPage() {
       // 실행 중은 손절에 닿으면 가장 많이 잃는 것부터 (Q23 · 9장 ① 위치)
       scope === 'RUNNING' ? atStop(a) - atStop(b) : recent(a, b),
     )
-    return sorted
+    if (scope === 'RUNNING') return sorted
+    /**
+     * 대기 · 폐기 — **같은 종목은 붙여 세운다** (Q23 · 줄 4장 ④ 나 근접성). 종목 순서는 그 안 가장 최근 계획 순.
+     * 판 · 테두리 없이 붙이기만 — 둘째 줄부터 이름을 흐린다(PlanRow repeat).
+     */
+    const by = new Map<string, PlanListItem[]>()
+    for (const p of sorted)
+      by.set(p.stockCode, [...(by.get(p.stockCode) ?? []), p])
+    return [...by.values()].flat()
   }, [plans, scope, sort, result, q])
 
   /**
@@ -181,6 +203,16 @@ export function PlansPage() {
     })
   }
 
+  // 계좌 총액 — 사용자에 하나(F7). 목에선 종목별 기본값에 실려 온다 — 아무 실행 중 종목으로 꺼낸다
+  const running = plans.filter((p) => p.status === 'RUNNING')
+  const { data: defaults } = usePlanDefaults(
+    running[0]?.stockCode ?? plans[0]?.stockCode,
+  )
+  const accountTotal = defaults?.accountTotal ?? 0
+
+  const showSheet =
+    !!account?.isLoggedIn && !isLoading && !isError && rows.length > 0
+
   const onFill = (p: PlanListItem) => {
     openFill({
       stock: { code: p.stockCode, name: p.stockName },
@@ -195,183 +227,210 @@ export function PlansPage() {
   return (
     <main
       className={cn(
-        'grid items-start gap-4 px-6 pt-6 pb-10',
-        panel && 'xl:grid-cols-[minmax(0,1fr)_440px]',
+        'grid items-start gap-4 px-3 pt-4 pb-10 sm:px-6 sm:pt-6',
+        fill && 'xl:grid-cols-[minmax(0,1fr)_440px]',
       )}
     >
-      <section className="card flex min-w-0 flex-col px-5 pt-5 pb-5">
-        <header className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <h3 className="m-0 text-[18px] font-bold text-white">거래 계획</h3>
-          <div className="flex items-center gap-0.5 rounded-md bg-white/[0.04] p-0.5">
-            {(Object.keys(SCOPE_LABEL) as Scope[]).map((s) => (
-              <button
-                key={s}
-                type="button"
-                aria-pressed={scope === s}
-                onClick={() => setScope(s)}
-                className={cn(
-                  'rounded-sm px-2.5 py-1 text-[12px] transition-colors',
-                  scope === s
-                    ? 'bg-white/[0.14] text-white'
-                    : 'text-white/50 hover:text-white/75',
-                )}
-              >
-                {SCOPE_LABEL[s]}
-              </button>
-            ))}
-          </div>
-          <div className="ml-auto flex items-center gap-2">
-            {/**
-             * 거래 계획만의 찾기 — 지금 거르기 안의 카드를 줄이고, 실행 중 · 대기 에선 찾은 종목의 빈 칸이 선다.
-             * 💀 처음엔 배경과 같은 어두운 칸이라 「안 보인다」 — 테두리 · 돋보기 · 지우기를 붙였다.
-             */}
-            <label className="rounded-pill bg-bg-input relative flex h-8 w-[240px] items-center ring-1 ring-white/20 transition-shadow focus-within:ring-white/45">
-              <Search
-                size={14}
-                aria-hidden
-                className="pointer-events-none absolute left-3 text-white/50"
-              />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="종목 · 계획 이름으로 찾기"
-                aria-label="계획 찾기"
-                className="h-full w-full bg-transparent pr-8 pl-8 text-[13px] text-white outline-none placeholder:text-white/40"
-              />
-              {query && (
-                <button
-                  type="button"
-                  onClick={() => setQuery('')}
-                  aria-label="찾기 지우기"
-                  className="absolute right-2 flex h-5 w-5 items-center justify-center rounded-full text-white/50 hover:bg-white/10 hover:text-white"
-                >
-                  <X size={12} aria-hidden />
-                </button>
-              )}
-            </label>
-            {/**
-             * **가장 밝은 버튼은 체결 기록이다** (Q23 · 8장 ① 관습 · 패턴 56) — F2 거래 기록이
-             * 유일한 필수 행동이다. 상단 바로 올렸다가 **이 페이지에만 두는 것으로 되돌렸다** (4장 ⑦).
-             */}
-            <button
-              type="button"
-              onClick={() => {
-                openFill()
-              }}
-              className="rounded-pill text-fg-inverse bg-white px-3 py-1.5 text-[12px] font-bold hover:bg-white/90"
-            >
-              + 체결 기록
-            </button>
-          </div>
-        </header>
-
+      <section className="card flex min-w-0 flex-col px-3 pb-5 sm:px-5">
         {/**
-         * 완료의 도구 줄 — **왼쪽 결과 거르기 · 오른쪽 정렬** (사용자 「정렬로 보이게 · 이익 · 손실도 필터로」).
-         * 정렬은 ↕ 아이콘 + 「정렬」 로 거르기와 모양을 가른다 — 둘 다 같은 알약이면 무엇이 무엇인지 안 읽힌다.
+         * **도구 줄 + 열 머리를 함께 붙잡는다** (Q23 · 줄 4장 ⑦ 다) — 상단 바(56px) 밑에 붙어 따라온다.
+         * 어디까지 내려가도 거르고 · 찾고 · 「+ 체결 기록」 을 누르고, 흰 숫자가 어느 열인지 머리가 알려 준다.
+         * @container 는 이 틀에 — 머리와 줄이 같은 폭을 보고 접혀야 열이 맞는다.
          */}
-        {scope === 'DONE' && (
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Seg
-              label="결과"
-              value={result}
-              options={[
-                ['ALL', '모두'],
-                ['WIN', '이익'],
-                ['LOSS', '손실'],
-              ]}
-              onChange={setResult}
-            />
-            <div className="ml-auto flex items-center gap-2">
-              <span className="flex items-center gap-1 text-[12px] text-white/45">
-                <ArrowUpDown size={13} aria-hidden />
-                정렬
-              </span>
+        <div className="@container">
+          <div className="bg-bg-surface sticky top-[56px] z-20 -mx-3 px-3 pt-4 sm:-mx-5 sm:px-5 sm:pt-5">
+            <header className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <h3 className="m-0 text-[18px] font-bold text-white">
+                거래 계획
+              </h3>
               <div className="flex items-center gap-0.5 rounded-md bg-white/[0.04] p-0.5">
-                {(Object.keys(SORT_LABEL) as Sort[]).map((k) => (
+                {(Object.keys(SCOPE_LABEL) as Scope[]).map((s) => (
                   <button
-                    key={k}
+                    key={s}
                     type="button"
-                    aria-pressed={sort === k}
-                    onClick={() => setSort(k)}
+                    aria-pressed={scope === s}
+                    onClick={() => setScope(s)}
                     className={cn(
-                      'flex items-center gap-1 rounded-sm px-2.5 py-1 text-[12px] transition-colors',
-                      sort === k
+                      'rounded-sm px-2.5 py-1 text-[12px] transition-colors',
+                      scope === s
                         ? 'bg-white/[0.14] text-white'
                         : 'text-white/50 hover:text-white/75',
                     )}
                   >
-                    {SORT_LABEL[k]}
-                    {sort === k && k !== 'RECENT' && (
-                      <span aria-hidden className="text-[10px] text-white/60">
-                        {result === 'LOSS' ? '↑' : '↓'}
-                      </span>
-                    )}
+                    {SCOPE_LABEL[s]}
                   </button>
                 ))}
               </div>
-            </div>
-          </div>
-        )}
+              <div className="ml-auto flex items-center gap-2">
+                {/**
+                 * 거래 계획만의 찾기 — 지금 거르기 안의 카드를 줄이고, 실행 중 · 대기 에선 찾은 종목의 빈 칸이 선다.
+                 * 💀 처음엔 배경과 같은 어두운 칸이라 「안 보인다」 — 테두리 · 돋보기 · 지우기를 붙였다.
+                 */}
+                <label className="rounded-pill bg-bg-input relative flex h-8 w-[240px] items-center ring-1 ring-white/20 transition-shadow focus-within:ring-white/45">
+                  <Search
+                    size={14}
+                    aria-hidden
+                    className="pointer-events-none absolute left-3 text-white/50"
+                  />
+                  <input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="종목 · 계획 이름으로 찾기"
+                    aria-label="계획 찾기"
+                    className="h-full w-full bg-transparent pr-8 pl-8 text-[13px] text-white outline-none placeholder:text-white/40"
+                  />
+                  {query && (
+                    <button
+                      type="button"
+                      onClick={() => setQuery('')}
+                      aria-label="찾기 지우기"
+                      className="absolute right-2 flex h-5 w-5 items-center justify-center rounded-full text-white/50 hover:bg-white/10 hover:text-white"
+                    >
+                      <X size={12} aria-hidden />
+                    </button>
+                  )}
+                </label>
+                {/**
+                 * **가장 밝은 버튼은 체결 기록이다** (Q23 · 8장 ① 관습 · 패턴 56) — F2 거래 기록이
+                 * 유일한 필수 행동이다. 상단 바로 올렸다가 **이 페이지에만 두는 것으로 되돌렸다** (4장 ⑦).
+                 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    openFill()
+                  }}
+                  className="rounded-pill text-fg-inverse bg-white px-3 py-1.5 text-[12px] font-bold whitespace-nowrap hover:bg-white/90"
+                >
+                  + 체결 기록
+                </button>
+              </div>
+            </header>
 
-        {!account?.isLoggedIn ? (
-          <Empty>로그인 후 이용할 수 있습니다.</Empty>
-        ) : isLoading ? (
-          <Empty>불러오는 중…</Empty>
-        ) : isError ? (
-          <Empty>계획을 불러오지 못했습니다.</Empty>
-        ) : rows.length === 0 && slots.length === 0 ? (
-          <Empty>
-            {q ? `「${q}」 에 맞는 계획이 없습니다.` : EMPTY[scope]}
-          </Empty>
-        ) : (
-          <>
-            {rows.length > 0 && (
-              /* 계획 하나 = 한 판 위의 줄 하나 · 열 이름은 머리에 한 번 (Q23 · 목록 나) */
-              /**
-               * **판 폭에 맞춰 줄이 접힌다 — 화면 폭이 아니라** (컨테이너 쿼리 @container).
-               * 💀 오른쪽 체결 칸(440px) 이 열리면 판이 좁아지는데 열 틀이 화면 폭(lg) 을 봐서 줄이 넘쳤다.
-               */
-              <div className="bg-bg-elevated @container mt-4 overflow-hidden rounded-lg">
-                <SheetHead ended={scope === 'DONE' || scope === 'CLOSED'} />
-                {rows.map((p) => (
-                  <PlanRow key={p.planId} p={p} onFill={onFill} />
-                ))}
+            {/**
+             * 완료의 도구 줄 — **왼쪽 결과 거르기 · 오른쪽 정렬** (사용자 「정렬로 보이게 · 이익 · 손실도 필터로」).
+             * 정렬은 ↕ 아이콘 + 「정렬」 로 거르기와 모양을 가른다 — 둘 다 같은 알약이면 무엇이 무엇인지 안 읽힌다.
+             */}
+            {scope === 'DONE' && (
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <Seg
+                  label="결과"
+                  value={result}
+                  options={[
+                    ['ALL', '모두'],
+                    ['WIN', '이익'],
+                    ['LOSS', '손실'],
+                  ]}
+                  onChange={setResult}
+                />
+                <div className="ml-auto flex items-center gap-2">
+                  <span className="flex items-center gap-1 text-[12px] text-white/45">
+                    <ArrowUpDown size={13} aria-hidden />
+                    정렬
+                  </span>
+                  <div className="flex items-center gap-0.5 rounded-md bg-white/[0.04] p-0.5">
+                    {(Object.keys(SORT_LABEL) as Sort[]).map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        aria-pressed={sort === k}
+                        onClick={() => setSort(k)}
+                        className={cn(
+                          'flex items-center gap-1 rounded-sm px-2.5 py-1 text-[12px] transition-colors',
+                          sort === k
+                            ? 'bg-white/[0.14] text-white'
+                            : 'text-white/50 hover:text-white/75',
+                        )}
+                      >
+                        {SORT_LABEL[k]}
+                        {sort === k && k !== 'RECENT' && (
+                          <span
+                            aria-hidden
+                            className="text-[10px] text-white/60"
+                          >
+                            {result === 'LOSS' ? '↑' : '↓'}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
-            {slots.length > 0 && (
-              <div className="mt-2.5 grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-2.5">
-                {slots.map((h) => {
-                  const none = !plans.some((p) => p.stockCode === h.stockCode)
-                  return (
-                    <Slot
-                      key={h.stockCode}
-                      code={h.stockCode}
-                      name={h.stockName}
-                      none={none}
-                      onFillBare={() => fillBare(h.stockCode, h.stockName)}
+            {showSheet && (
+              <div className="bg-bg-elevated mt-4 rounded-t-lg">
+                <SheetHead kind={kindOf(scope)} />
+              </div>
+            )}
+          </div>
+
+          {!account?.isLoggedIn ? (
+            <Empty>로그인 후 이용할 수 있습니다.</Empty>
+          ) : isLoading ? (
+            <Empty>불러오는 중…</Empty>
+          ) : isError ? (
+            <Empty>계획을 불러오지 못했습니다.</Empty>
+          ) : rows.length === 0 && slots.length === 0 ? (
+            <Empty>
+              {q ? `「${q}」 에 맞는 계획이 없습니다.` : EMPTY[scope]}
+            </Empty>
+          ) : (
+            <>
+              {rows.length > 0 && (
+                /* 계획 하나 = 한 판 위의 줄 하나 · 열 이름은 머리에 한 번 (Q23 · 목록 나) */
+                /**
+                 * **판 폭에 맞춰 줄이 접힌다 — 화면 폭이 아니라** (컨테이너 쿼리 @container).
+                 * 💀 오른쪽 체결 칸(440px) 이 열리면 판이 좁아지는데 열 틀이 화면 폭(lg) 을 봐서 줄이 넘쳤다.
+                 */
+                <div className="bg-bg-elevated overflow-hidden rounded-lg @4xl:rounded-t-none">
+                  {rows.map((p, i) => (
+                    <PlanRow
+                      key={p.planId}
+                      p={p}
+                      onFill={onFill}
+                      repeat={
+                        scope !== 'DONE' &&
+                        rows[i - 1]?.stockCode === p.stockCode
+                      }
+                      risk={riskOf(p, accountTotal)}
                     />
-                  )
-                })}
-              </div>
-            )}
-          </>
-        )}
+                  ))}
+                </div>
+              )}
+              {slots.length > 0 && (
+                <div className="mt-2.5 grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-2.5">
+                  {slots.map((h) => {
+                    const none = !plans.some((p) => p.stockCode === h.stockCode)
+                    return (
+                      <Slot
+                        key={h.stockCode}
+                        code={h.stockCode}
+                        name={h.stockName}
+                        none={none}
+                        onFillBare={() => fillBare(h.stockCode, h.stockName)}
+                      />
+                    )
+                  })}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </section>
 
       {/**
-       * 체결 · 새 계획 칸 — **넓으면 오른쪽 칸, 좁으면 서랍** (Q23 · 4장 ⑥).
-       * 💀 1280px 미만에서 칸이 목록 밑에 붙어, 카드의 「+ 체결」 을 눌러도 폼이 화면 밖이었다.
+       * 체결 칸 — 누를 때만 · 넓으면 오른쪽 칸, 좁으면 서랍 (Q23 · 4장 ⑥).
+       * 늘 세워 두는 안(C) 은 써 보고 A(현재가 막대) 로 옮겼다.
        */}
-      {fill ? (
+      {fill && (
         <FillSheet dock onClose={closeFill}>
           <NewFillForm
-            // 다른 카드를 누르면 폼이 그 계획으로 새로 선다
+            // 다른 줄을 누르면 폼이 그 계획으로 새로 선다
             key={fill.start?.planId ?? 'blank'}
             start={fill.start}
             onClose={closeFill}
           />
         </FillSheet>
-      ) : null}
+      )}
     </main>
   )
 }
@@ -436,27 +495,81 @@ const Empty = ({ children }: { children: React.ReactNode }) => (
  * **한 판 목록** (Q23 · 사용자 「붕 떠 보인다」 → 나) — 카드를 걷고 판 하나에 줄을 쌓는다.
  * 열 이름은 머리에 한 번 · 줄 사이는 옅은 선 · 머리와 줄이 **같은 열 틀** 을 써서 세로로 곧게 선다.
  * 💀 따로 떠 있는 긴 카드는 둥근 판 · 틈 · 줄마다 반복되는 「목표 · 진입 · 손절」 때문에 떠 보였다.
- * 판이 좁으면(@3xl = 768px 미만) 머리를 감추고 줄이 위아래로 접힌다.
+ * 판이 좁으면(@4xl = 896px 미만) 머리를 감추고 줄이 위아래로 접힌다.
  */
+/**
+ * 열 틀 — **값 열은 고정 폭 · 숫자 오른쪽 맞춤 · 남는 폭은 버튼 앞 한 칸(1fr)** (Q23 · 줄 4장 ③ 나).
+ * 💀 값 열이 판 폭을 나눠 가져 넓을수록 벌어졌고, 왼쪽 맞춤이라 자릿수가 다른 줄은 끝이 어긋났다.
+ */
+const COLS =
+  // 가 (열 간격) — 값은 96px 고정으로 촘촘히 한 덩어리 · 이름 288 · 남는 폭은 버튼 앞 한 칸 · 버튼 칸은 내용 폭
+  // 「조화」(값 1fr : 틈 0.6fr) 는 써 보고 「별로」 로 되돌렸다
+  '@4xl:grid @4xl:grid-cols-[minmax(180px,224px)_repeat(3,minmax(88px,112px))_minmax(0,1fr)_max-content] @4xl:items-center @4xl:gap-x-3'
 const LIVE_COLS =
-  '@3xl:grid @3xl:grid-cols-[minmax(180px,1.6fr)_repeat(3,minmax(110px,1fr))_150px] @3xl:items-center'
-const ENDED_COLS =
-  '@3xl:grid @3xl:grid-cols-[minmax(180px,1.6fr)_repeat(3,minmax(100px,1fr))_150px] @3xl:items-center'
+  '@4xl:grid @4xl:grid-cols-[minmax(180px,224px)_repeat(3,minmax(88px,112px))_minmax(100px,132px)_minmax(150px,1fr)_max-content] @4xl:items-center @4xl:gap-x-3'
+const ENDED_COLS = COLS
+/** 실행 중 · 대기는 값 열이 넷 — 손절 뒤에 「예상 위험노출」 */
+const RUN_COLS =
+  '@4xl:grid @4xl:grid-cols-[minmax(180px,224px)_repeat(3,minmax(88px,112px))_minmax(100px,132px)_minmax(150px,1fr)_max-content] @4xl:items-center @4xl:gap-x-3'
 
-function SheetHead({ ended }: { ended: boolean }) {
+type Kind = 'RUNNING' | 'PLANNED' | 'ENDED'
+const kindOf = (s: Scope): Kind =>
+  s === 'RUNNING' ? 'RUNNING' : s === 'PLANNED' ? 'PLANNED' : 'ENDED'
+const colsOf = (k: Kind) =>
+  k === 'RUNNING' ? RUN_COLS : k === 'PLANNED' ? LIVE_COLS : ENDED_COLS
+
+function SheetHead({ kind }: { kind: Kind }) {
+  const ended = kind === 'ENDED'
   const cols = ended
     ? ['종목 · 계획', '쓴 날', '실현 손익', '수익률']
-    : ['종목 · 계획', '목표', '진입', '손절']
+    : ['종목 · 계획', '목표', '진입', '손절', '예상 위험노출']
   return (
     <div
       className={cn(
-        'hidden border-b border-white/[0.08] px-5 py-2 text-[11px] text-white/45',
-        ended ? ENDED_COLS : LIVE_COLS,
+        'hidden border-b border-white/[0.08] px-3 py-2 text-[11px] text-white/45 sm:px-5',
+        colsOf(kind),
       )}
     >
-      {cols.map((c) => (
-        <span key={c}>{c}</span>
+      {cols.map((c, i) => (
+        <span
+          key={c}
+          className={cn(
+            i > 0 && 'text-right',
+            // 가격 셋과 위험노출을 조금 떼어 놓는다 — 폭 132(값 96 + 36) · 옅은 세로선
+            c === '예상 위험노출' &&
+              '@4xl:self-stretch @4xl:border-l @4xl:border-white/[0.08]',
+          )}
+        >
+          {/* 색은 머리에만 — 차트 태그 색을 한 번 알려 준다 (Q23 · 줄 4장 ⑤ 나) */}
+          {!ended && (c === '목표' || c === '손절') ? (
+            <span
+              className={cn(
+                'inline-flex items-center gap-1.5',
+                c === '목표' ? 'text-candle-up' : 'text-candle-down',
+              )}
+            >
+              <span
+                aria-hidden
+                className={cn(
+                  'h-1.5 w-1.5 rounded-full',
+                  c === '목표' ? 'bg-candle-up' : 'bg-candle-down',
+                )}
+              />
+              {c}
+            </span>
+          ) : (
+            c
+          )}
+        </span>
       ))}
+      {ended ? (
+        <span />
+      ) : (
+        // 「현재가」 — 전날 종가(마감 뒤 값) 가 손절 · 목표 사이 어디 있나 (Q23 · 줄 배치 A · 이름은 랭킹 · 검색과 맞춘다)
+        <span className="@4xl:self-stretch @4xl:border-l @4xl:border-white/[0.08] @4xl:pl-4">
+          현재가
+        </span>
+      )}
       <span />
     </div>
   )
@@ -465,9 +578,15 @@ function SheetHead({ ended }: { ended: boolean }) {
 function PlanRow({
   p,
   onFill,
+  repeat = false,
+  risk = null,
 }: {
   p: PlanListItem
   onFill: (p: PlanListItem) => void
+  /** 바로 윗줄과 같은 종목 — 이름을 흐린다 (줄 4장 ④) */
+  repeat?: boolean
+  /** 예상 위험노출 % — 계좌 총액을 모르면 null */
+  risk?: number | null
 }) {
   const running = p.status === 'RUNNING'
   const waiting = p.status === 'PLANNED'
@@ -476,43 +595,40 @@ function PlanRow({
   const { entryPrice: entry, stopPrice: stop } = p
   // 1R 은 실행 때 박힌 최초 손절폭 — 손절가를 올려도 목표가는 안 변한다. 대기면 계획 손절폭
   const oneR = p.initialStopWidth ?? entry - stop
-  // 본전 이상 — 손절을 진입 위로 올려 오늘 챙길 일이 적다. 작은 표시 하나
-  const evenUp = running && stop >= entry
+
   const goalPrice = goal !== null && oneR > 0 ? entry + goal * oneR : null
   const tone = (v: number) =>
     v > 0 ? 'text-candle-up' : v < 0 ? 'text-candle-down' : 'text-white/55'
 
-  const link = (
-    <Link
-      to="/stocks/$ticker/plan/$planId"
-      params={{ ticker: p.stockCode, planId: String(p.planId) }}
-      aria-label={`${p.title} 계획 보기`}
-      className="flex shrink-0 items-center text-[12px] text-white/55 hover:text-white"
-    >
-      계획
-      <ChevronRight size={14} aria-hidden />
-    </Link>
+  /** 줄 끝 › — 줄 전체가 계획 화면으로 간다는 표지 (링크는 이름에 걸려 줄을 덮는다) */
+  const chevron = (
+    <ChevronRight size={16} aria-hidden className="shrink-0 text-white/55" />
   )
 
   return (
     <article
       className={cn(
         // 줄무늬 리듬 — 선 대신 번갈아 한 단 밝은 바탕 (Q23 · 줄 4장 ② 다)
-        'group flex flex-col gap-2 px-5 py-3 transition-colors even:bg-white/[0.035] hover:bg-white/[0.06]',
-        act ? LIVE_COLS : ENDED_COLS,
+        // 줄 전체가 계획 화면 — 이름 링크가 줄을 덮는다(after:inset-0) · 「+ 체결」 만 위에 뜬다 (Q23 · 줄 4장 ⑥ 나)
+        // 좁으면(판 896 미만) 네 칸 격자 — 이름 · 동작 한 줄, 값 넷 한 줄, 현재가 한 줄 (값이 한 줄씩 늘어져 줄이 길었다)
+        'group relative grid cursor-pointer grid-cols-4 gap-x-3 gap-y-2 px-3 py-3 transition-colors even:bg-white/[0.035] hover:bg-white/[0.06] sm:px-5',
+        colsOf(running ? 'RUNNING' : waiting ? 'PLANNED' : 'ENDED'),
       )}
     >
       {/* 종목 · 계획 */}
-      <div className="min-w-0 pr-4">
+      <div className="col-span-3 min-w-0 pr-4 @4xl:col-span-1">
         <div className="flex items-baseline gap-2">
-          <span className="truncate text-[15px] font-bold text-white">
+          <Link
+            to="/stocks/$ticker/plan/$planId"
+            params={{ ticker: p.stockCode, planId: String(p.planId) }}
+            aria-label={`${p.stockName} ${p.title} 계획 보기`}
+            className={cn(
+              "truncate text-[15px] outline-none after:absolute after:inset-0 after:content-[''] focus-visible:after:ring-1 focus-visible:after:ring-white/40",
+              repeat ? 'font-medium text-white/30' : 'font-bold text-white',
+            )}
+          >
             {p.stockName}
-          </span>
-          {evenUp && (
-            <span className="bg-candle-up/15 text-candle-up shrink-0 rounded-xs px-1.5 text-[10px] leading-[16px]">
-              본전 이상
-            </span>
-          )}
+          </Link>
         </div>
         <p className="m-0 mt-0.5 truncate text-[11px] text-white/45">
           {/* 회색은 칸마다 하나 — 수량은 계획 화면에서 (Q23 · 줄 보조 글자 나) */}
@@ -525,37 +641,55 @@ function PlanRow({
           <Cell
             head="목표"
             value={goalPrice}
-            tone="text-candle-up"
+            tone="text-white"
             note={goalPrice !== null ? `${goal}R` : null}
           />
           <Cell head="진입" value={entry} tone="text-white" note={null} />
           <Cell
             head="손절"
             value={stop}
-            tone="text-candle-down"
+            tone="text-white"
             // 손절폭 % — 손절폭 상한과 매일 견준다 (9장 ③). 금액(원) 은 계획 화면에서
             note={entry > 0 ? pct((stop - entry) / entry) : null}
           />
+          {/* 예상 위험노출 — 본전 이상이면 0% (「본전 이상」 칩을 걷고 이 값이 대신 말한다) */}
+          <div className="flex min-w-0 flex-col gap-0.5 @4xl:items-end @4xl:justify-center @4xl:gap-0 @4xl:self-stretch @4xl:border-l @4xl:border-white/[0.08]">
+            <span className="text-[11px] text-white/45 @4xl:hidden">
+              예상 위험
+            </span>
+            <span
+              className={cn(
+                't-num text-[15px] font-medium',
+                risk === null ? 'text-white/30' : riskTone(risk),
+              )}
+            >
+              {risk === null ? '—' : `${risk.toFixed(1)}%`}
+            </span>
+            <span className="hidden text-[11px] @4xl:invisible @4xl:block">
+              ·
+            </span>
+          </div>
           {/* 동작은 한 단 흐리게 — 올린 줄 · 키보드로 들어온 줄에서만 밝아진다 (Q23 · 줄 4장 ① 나) */}
-          <div className="flex items-center justify-end gap-4 opacity-45 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
-            {link}
+          <NowBar p={p} goalPrice={goalPrice} />
+          <div className="order-first col-start-4 row-start-1 flex items-center justify-end gap-4 opacity-45 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 @4xl:order-none @4xl:col-start-auto @4xl:row-start-auto">
             <button
               type="button"
               onClick={() => onFill(p)}
-              className="rounded-pill px-3 py-1 text-[12px] text-white/85 ring-1 ring-white/25 hover:bg-white/[0.08] hover:text-white"
+              className="rounded-pill relative z-10 px-3 py-1 text-[12px] whitespace-nowrap text-white/85 ring-1 ring-white/25 hover:bg-white/[0.08] hover:text-white"
             >
               + 체결
             </button>
+            {chevron}
           </div>
         </>
       ) : (
         <>
-          <span className="t-num text-[13px] text-white/55">
+          <span className="t-num text-[13px] text-white/55 @4xl:text-right">
             {p.writtenAt.slice(0, 10)}
           </span>
           <span
             className={cn(
-              't-num text-[15px] font-medium',
+              't-num text-[15px] font-medium @4xl:text-right',
               p.realized === null ? 'text-white/30' : tone(p.realized),
             )}
           >
@@ -568,18 +702,76 @@ function PlanRow({
           {/* 수익률로도 줄 세우므로 같이 싣는다 (7장 ②) */}
           <span
             className={cn(
-              't-num text-[13px]',
+              't-num text-[13px] @4xl:text-right',
               p.realizedPct === null ? 'text-white/30' : tone(p.realizedPct),
             )}
           >
             {p.realizedPct === null ? '—' : pct(p.realizedPct / 100)}
           </span>
-          <div className="flex justify-end opacity-45 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
-            {link}
+          <span aria-hidden className="hidden @4xl:block" />
+          <div className="col-start-4 row-start-1 flex justify-end opacity-45 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 @4xl:col-start-auto @4xl:row-start-auto">
+            {chevron}
           </div>
         </>
       )}
     </article>
+  )
+}
+
+/**
+ * **지금 어디쯤** — 손절 ─ 진입 ─ 목표 막대 위에 전날 종가 점 (Q23 · 줄 배치 A).
+ * 💀 넓은 판에서 어떻게 두어도 남던 빈 공간을 이 목록을 매일 여는 이유 — 「지금 가격이 손절 · 목표 사이 어디쯤인가」 로 채운다.
+ * 손절까지 3% 안이면 주황. 판이 넓을 때(@6xl) 만 막대를 그리고, 좁으면 「손절까지 −x%」 글자만.
+ */
+function NowBar({
+  p,
+  goalPrice,
+}: {
+  p: PlanListItem
+  goalPrice: number | null
+}) {
+  const now = p.lastClose
+  if (now === null)
+    return (
+      <span className="col-span-4 text-[11px] text-white/30 @4xl:col-span-1 @4xl:self-stretch @4xl:border-l @4xl:border-white/[0.08] @4xl:pl-4">
+        —
+      </span>
+    )
+  const toStop = (p.stopPrice - now) / now
+  const toGoal = goalPrice !== null ? (goalPrice - now) / now : null
+  const near = toStop > -0.03
+  const lo = p.stopPrice
+  const hi = goalPrice ?? Math.max(now, p.entryPrice) * 1.05
+  const at = (v: number) =>
+    `${Math.min(100, Math.max(0, ((v - lo) / (hi - lo)) * 100))}%`
+  return (
+    // 위험노출과 사이에 옅은 세로선 (사용자 「선 좀」)
+    // 오른쪽 동작(+ 체결) 과 떼어 둔다 — 막대 끝 점이 버튼에 붙지 않게 (pr-8)
+    <div className="col-span-4 flex min-w-0 flex-col justify-center gap-1 @4xl:col-span-1 @4xl:self-stretch @4xl:border-l @4xl:border-white/[0.08] @4xl:pr-8 @4xl:pl-4">
+      <div className="from-candle-down/40 to-candle-up/40 relative hidden h-1 rounded-full bg-gradient-to-r via-white/15 @6xl:block">
+        <span
+          aria-hidden
+          className="absolute -top-1 h-3 w-px bg-white/50"
+          style={{ left: at(p.entryPrice) }}
+        />
+        <span
+          aria-hidden
+          className="border-bg-elevated absolute -top-[5px] h-3.5 w-3.5 -translate-x-1/2 rounded-full border-2 bg-white"
+          style={{ left: at(now) }}
+        />
+      </div>
+      <div className="t-num flex items-baseline justify-between gap-3 text-[11px]">
+        <span className={near ? 'text-warning' : 'text-white/55'}>
+          손절까지 {pct(toStop)}
+        </span>
+        <span className="text-white/80">{won(now)}</span>
+        {toGoal !== null && (
+          <span className="hidden text-white/55 @6xl:inline">
+            목표까지 {pct(toGoal)}
+          </span>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -596,16 +788,22 @@ function Cell({
   note: string | null
 }) {
   return (
-    <div className="flex min-w-0 items-baseline gap-2">
-      <span className="w-8 shrink-0 text-[11px] text-white/45 @3xl:hidden">
-        {head}
-      </span>
-      <span className={cn('t-num text-[15px] font-medium', tone)}>
+    // 좁으면 [열 이름 값 보조] 한 줄 · 판이 넓으면(@3xl) 값 오른쪽 맞춤 + 보조는 값 밑 (줄 4장 ③)
+    <div className="flex min-w-0 flex-col gap-0.5 @4xl:items-end @4xl:gap-0">
+      <span className="text-[11px] text-white/45 @4xl:hidden">{head}</span>
+      <span
+        className={cn('t-num text-[14px] font-medium sm:text-[15px]', tone)}
+      >
         {value !== null ? won(Math.round(value)) : '—'}
       </span>
-      {note && (
-        <span className="t-num truncate text-[11px] text-white/45">{note}</span>
-      )}
+      <span
+        className={cn(
+          't-num truncate text-[11px] text-white/45',
+          !note && 'hidden @4xl:invisible @4xl:block',
+        )}
+      >
+        {note ?? '·'}
+      </span>
     </div>
   )
 }

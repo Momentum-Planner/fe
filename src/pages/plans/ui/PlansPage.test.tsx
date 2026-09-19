@@ -11,7 +11,7 @@ import {
   vi,
 } from 'vitest'
 import { server } from 'mocks/server'
-import { closeFill, openFill } from '@/widgets/fill'
+import { closeFill, openFill } from './fill'
 import { PlansPage } from './PlansPage'
 
 /**
@@ -23,7 +23,13 @@ import { PlansPage } from './PlansPage'
  */
 
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
+  Link: ({
+    children,
+    className,
+  }: {
+    children: React.ReactNode
+    className?: string
+  }) => <a className={className}>{children}</a>,
   useNavigate: () => () => Promise.resolve(),
 }))
 
@@ -64,8 +70,12 @@ describe('거래 계획 — 계획 하나 = 카드 하나 · 거르기로 가른
     draw()
     await screen.findAllByText('SK하이닉스')
     await user.click(screen.getByRole('button', { name: '대기' }))
-    // 삼성전자 대기 둘 — 카드 둘에 이름이 각각
-    expect(screen.getAllByText('삼성전자')).toHaveLength(2)
+    // 삼성전자 대기 둘 — 줄 둘에 이름이 각각 · 붙어 서고 둘째 줄 이름은 흐리다 (줄 4장 ④)
+    const sam = screen.getAllByText('삼성전자')
+    expect(sam).toHaveLength(2)
+    const first = sam[0]!.closest('article')!
+    expect(first.nextElementSibling).toBe(sam[1]!.closest('article'))
+    expect(sam[1]).toHaveClass('text-white/30')
     expect(screen.queryByRole('region', { name: '삼성전자' })).toBeNull()
   })
 
@@ -118,6 +128,15 @@ describe('거래 계획 — 계획 하나 = 카드 하나 · 거르기로 가른
     expect(screen.getByLabelText('종목')).toBeInTheDocument()
     await user.keyboard('{Escape}')
     expect(screen.queryByLabelText('종목')).not.toBeInTheDocument()
+  })
+
+  it('지금 어디쯤 — 줄마다 전날 종가와 「손절까지 −x%」 (줄 배치 A)', async () => {
+    draw()
+    await screen.findAllByText('SK하이닉스')
+    expect(
+      screen.getAllByText(/^손절까지 [−+]?\d+\.\d%$/).length,
+    ).toBeGreaterThan(0)
+    expect(screen.getAllByText('현재가').length).toBeGreaterThan(0)
   })
 })
 
@@ -191,5 +210,22 @@ describe('거래 계획만의 찾기 — 찾으면 카드 끝에 찾은 종목�
     expect(
       await screen.findByText(/에 맞는 계획이 없습니다/),
     ).toBeInTheDocument()
+  })
+})
+
+describe('예상 위험노출 — 계획대로 다 샀다면 · 지금 손절 기준 (Q23)', () => {
+  it('riskOf = (계획 진입 − 지금 손절) × 계획 수량 ÷ 계좌 · 본전 이상이면 0', async () => {
+    const { riskOf } = await import('./PlansPage')
+    const p = { entryPrice: 387_500, stopPrice: 361_150, quantity: 15 }
+    expect(riskOf(p as never, 8_000_000)).toBeCloseTo(4.94, 2)
+    expect(riskOf({ ...p, stopPrice: 387_500 } as never, 8_000_000)).toBe(0)
+    expect(riskOf(p as never, 0)).toBeNull()
+  })
+
+  it('계좌 합계 막대는 없다 · 열 머리에 「예상 위험노출」', async () => {
+    draw()
+    await screen.findAllByText('SK하이닉스')
+    expect(screen.queryByRole('meter')).toBeNull()
+    expect(screen.getAllByText('예상 위험노출').length).toBeGreaterThan(0)
   })
 })

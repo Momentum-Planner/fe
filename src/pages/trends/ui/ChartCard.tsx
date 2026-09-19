@@ -14,9 +14,10 @@ import { MarketChart } from './MarketChart'
  */
 export function ChartCard() {
   return (
-    <section className="card px-6 pt-4 pb-2">
-      <header className="mb-2 flex items-center gap-3">
-        <h2 className="text-[17px] leading-none font-bold text-white">
+    <section className="card px-4 pt-4 pb-2 sm:px-6">
+      {/* 좁으면 줄을 바꿔 둘째 줄로 — 한 줄에 우겨 넣어 종목 이름이 한 글자씩 세로로 꺾였다 (2026-09-19) */}
+      <header className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <h2 className="text-[17px] leading-none font-bold whitespace-nowrap text-white">
           SK하이닉스
         </h2>
         <span className="font-number text-[12px] leading-none text-white/40">
@@ -25,10 +26,10 @@ export function ChartCard() {
 
         <span className="ml-1 h-3.5 w-px bg-white/10" />
 
-        <span className="font-number text-[24px] leading-none font-bold tracking-[-0.02em] text-white">
+        <span className="font-number text-[24px] leading-none font-bold tracking-[-0.02em] whitespace-nowrap text-white">
           ₩ 1,150,482
         </span>
-        <span className="font-number bg-brand-red/10 text-brand-red rounded-md px-2 py-1 text-[13px] leading-none font-semibold">
+        <span className="font-number bg-brand-red/10 text-brand-red rounded-md px-2 py-1 text-[13px] leading-none font-semibold whitespace-nowrap">
           ▲ +1.18%
           <span className="ml-1.5 opacity-70">+13,482</span>
         </span>

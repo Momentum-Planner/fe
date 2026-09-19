@@ -6,7 +6,9 @@ import { EntryGateBadge } from '@/shared/ui/EntryGateBadge'
 const won = (n: number) => n.toLocaleString('ko-KR')
 
 /** 종목 · 진입 상태 · 현재가 — 머리줄과 줄이 같은 칸을 쓴다 */
-const COLS = 'grid grid-cols-[minmax(0,1fr)_200px_140px] items-center gap-5'
+// 좁으면(sm 미만) 진입 상태 칸을 줄이고 가격은 내용 폭 — 200 · 140px 고정에 종목 칸이 0 으로 눌려 이름이 사라졌다 (2026-09-19)
+const COLS =
+  'grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 sm:grid-cols-[minmax(0,1fr)_200px_140px] sm:gap-5'
 
 /**
  * 종목 검색 결과. 틀은 계획 세부 화면을 따른다 — `px-6 pt-4` 판 위에 `card` 가 쌓이고,
@@ -37,7 +39,7 @@ export function SearchResultsPage() {
           : null
 
   return (
-    <main className="flex flex-col gap-3 px-6 pt-4 pb-6">
+    <main className="flex flex-col gap-3 px-3 pt-4 pb-6 sm:px-6">
       {/* ── 검색어 · 한 줄 ── 계획 화면의 «이 종목 · 한 줄» 자리 */}
       <section className="card flex flex-wrap items-baseline gap-x-3 gap-y-1 px-5 py-3">
         {query ? (
@@ -77,13 +79,14 @@ export function SearchResultsPage() {
               key={r.stockCode}
               to="/stocks/$ticker"
               params={{ ticker: r.stockCode }}
-              className={`${COLS} rounded-md px-4 py-3.5 transition-colors hover:bg-white/[0.04]`}
+              className={`${COLS} rounded-md px-3 py-3.5 transition-colors hover:bg-white/[0.04] sm:px-4`}
             >
               <div className="flex min-w-0 items-baseline gap-2">
                 <span className="truncate text-[16px] font-bold text-white">
                   {r.stockName}
                 </span>
-                <span className="font-number text-[12px] text-white/35">
+                {/* 좁으면 코드는 감춘다 — 이름이 「S…」 로 잘렸다 */}
+                <span className="font-number hidden text-[12px] text-white/35 sm:inline">
                   {r.stockCode}
                 </span>
               </div>
@@ -99,7 +102,7 @@ export function SearchResultsPage() {
                   <span className="text-[12px] text-white/30">판정 없음</span>
                 )}
               </div>
-              <span className="font-number text-right text-[15px] font-bold text-white">
+              <span className="font-number text-right text-[15px] font-bold whitespace-nowrap text-white">
                 {r.price != null ? won(r.price) : '—'}
               </span>
             </Link>

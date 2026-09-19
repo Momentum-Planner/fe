@@ -390,8 +390,8 @@ export function PeriodPick({
   const from = period?.from ?? months[0]!
   const to = period?.to ?? months[months.length - 1]!
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-[11px] text-white/35">기간</span>
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-[11px] whitespace-nowrap text-white/35">기간</span>
       <MonthPick
         value={from}
         months={months}
@@ -407,7 +407,7 @@ export function PeriodPick({
         type="button"
         onClick={() => onPeriod(null)}
         disabled={!period}
-        className="rounded-pill border border-white/12 px-3 py-1 text-[11px] text-white/60 transition enabled:hover:bg-white/8 disabled:opacity-25"
+        className="rounded-pill border border-white/12 px-3 py-1 text-[11px] whitespace-nowrap text-white/60 transition enabled:hover:bg-white/8 disabled:opacity-25"
       >
         전체 기간
       </button>

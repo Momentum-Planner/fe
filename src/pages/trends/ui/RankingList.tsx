@@ -16,8 +16,14 @@ import { useRankingStream } from '@/entities/realtime'
 // 값은 «가운데»로 모은다 — 오른쪽 정렬이면 머리글과 값의 글자 폭이 달라
 // 서로 다른 자리에 서고, 그게 열이 어긋나 보이던 이유였다.
 // 간격을 1.5 → 2.5 로 벌리고 그만큼 칸 폭을 깎았다 (종목명은 안 건드린다)
+/**
+ * 순위 · 종목 · EPS 증가율 · 동반 상승 · 현재 가격.
+ * 「점수」 열은 뺐다 (2026-09-19 사용자) — 순서가 이미 점수다.
+ * 현재 가격은 96px · 한 줄 — 72px 에서 「₩ 1,240,000」 이 두 줄로 꺾였다.
+ */
 const GRID =
-  'grid grid-cols-[20px_minmax(0,1fr)_68px_72px_30px_72px] items-center gap-2.5'
+  // 좁으면(sm 미만) 「동반 상승」 을 감춘다 — 네 칸 고정 폭에 종목 이름 칸이 0 으로 눌려 이름이 사라졌다 (2026-09-19)
+  'grid grid-cols-[20px_minmax(0,1fr)_64px_92px] items-center gap-2.5 sm:grid-cols-[20px_minmax(0,1fr)_68px_72px_96px]'
 
 interface RankingRow {
   stockName: string
@@ -180,9 +186,8 @@ export function RankingList() {
         <span />
         <span />
         <span className="text-center">EPS 증가율</span>
-        <span className="text-center">동반 상승</span>
-        <span className="text-center">점수</span>
-        <span className="text-center">현재 가격</span>
+        <span className="hidden text-center sm:block">동반 상승</span>
+        <span className="text-right">현재 가격</span>
       </div>
 
       {isLoading && (
@@ -232,13 +237,10 @@ export function RankingList() {
                 {row.direction != null ? DIRECTION[row.direction] : ''}
               </span>
             </span>
-            <Coincident up={row.up} />
-            <span className="font-number text-center font-semibold text-white">
-              {row.fundamentalScore != null
-                ? row.fundamentalScore.toFixed(1)
-                : DASH}
+            <span className="hidden sm:block">
+              <Coincident up={row.up} />
             </span>
-            <span className="font-number text-center font-medium text-white">
+            <span className="font-number text-right font-medium whitespace-nowrap text-white">
               {row.currentPrice != null
                 ? `₩ ${row.currentPrice.toLocaleString()}`
                 : '-'}

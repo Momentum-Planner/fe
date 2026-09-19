@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { StatsPage } from '@/pages/stats'
 
 /**
@@ -15,5 +15,9 @@ import { StatsPage } from '@/pages/stats'
  *    지금 유효한 것은 ①~⑧ 이고 통계는 ⑦ 이다.
  */
 export const Route = createFileRoute('/stats')({
+  // 거래 통계는 마이페이지로 옮겼다 (2026-09-19) — 옛 주소로 오면 거기로 보낸다
+  beforeLoad: () => {
+    throw redirect({ to: '/profile' })
+  },
   component: StatsPage,
 })

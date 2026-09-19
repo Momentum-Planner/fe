@@ -66,7 +66,7 @@ export function FillRow({ r }: { r: PlanRecord }) {
   return (
     <div className="group flex items-center gap-2">
       <Pair
-        className="font-number flex-1 py-0.5 text-[12px]"
+        className="font-number min-w-0 flex-1 py-0.5 text-[12px] whitespace-nowrap"
         left={
           <div className="flex justify-between">
             <span className="text-white/40">{r.filledAt.slice(5)}</span>
@@ -83,7 +83,7 @@ export function FillRow({ r }: { r: PlanRecord }) {
         }
       />
       {mode === 'confirm' ? (
-        <span className="flex items-center gap-1 text-[11px]">
+        <span className="flex shrink-0 items-center gap-1 text-[11px] whitespace-nowrap">
           <span className="text-white/55">지울까?</span>
           <button
             type="button"
@@ -102,7 +102,7 @@ export function FillRow({ r }: { r: PlanRecord }) {
           </button>
         </span>
       ) : (
-        <span className="flex gap-1 text-[11px] text-white/40">
+        <span className="flex shrink-0 gap-1 text-[11px] whitespace-nowrap text-white/40">
           <button
             type="button"
             onClick={() => setMode('edit')}

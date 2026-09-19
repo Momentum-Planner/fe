@@ -16,10 +16,11 @@ import { RankingList } from './RankingList'
 export function TrendsPage() {
   return (
     <main className="flex flex-col gap-4 px-6 pt-6 pb-6">
-      <div className="grid grid-cols-[6fr_4fr] items-stretch gap-4">
+      {/* 좁으면(lg 미만) 위아래로 — 옆에 두면 랭킹이 40% 폭으로 눌려 가격 · 이름이 꺾였다 (2026-09-19) */}
+      <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-[6fr_4fr]">
         <div className="flex min-w-0 flex-col gap-4">
           <ChartCard />
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {/* 순서가 곧 계산 순서다 — 매출 × 마진 = 순이익, ÷ 주식 수 = EPS */}
             <RevenueCard />
             <MarginCard />

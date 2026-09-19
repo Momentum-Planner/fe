@@ -191,6 +191,7 @@ type Seed = Omit<
   // 실현 손익은 체결에서 낸다 (Q20)
   | 'realized'
   | 'realizedPct'
+  | 'lastClose'
   | 'accountTotal'
   // 계좌 값과 상한 근거는 사용자에 하나다 — 계획마다 박으면 어긋난다
   | 'accountCash'
@@ -766,6 +767,8 @@ function build(s: Seed): PlanDetail {
     fillRate: quantity === 0 ? 0 : +(filled / quantity).toFixed(2),
     // 실현 손익은 «체결에서» 낸다 — 손으로 박으면 체결과 어긋난다 (Q20)
     ...realizedOf(s.records, s.entryPrice),
+    // 목록의 「지금 어디쯤」 — 캔들 마지막 종가 (마감 뒤 값)
+    lastClose: makeCandles(s.stockCode).at(-1)?.closePrice ?? null,
     entryState: s.snapshot.entryState,
     fundamentalScore: s.snapshot.fundamentalScore,
     riskBefore: s.plannedPosition.riskBefore,
@@ -1260,6 +1263,7 @@ export const toListItem = (p: PlanDetail): PlanListItem => ({
   initialStopWidth: p.initialStopWidth,
   realized: p.realized,
   realizedPct: p.realizedPct,
+  lastClose: p.lastClose,
 })
 
 /**

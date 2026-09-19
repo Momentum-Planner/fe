@@ -17,7 +17,7 @@ export function PeakTrades({ closed }: { closed: Closed[] }) {
   // 기간을 좁히면 «한 건도 없는» 구간이 생긴다. 빈 줄 둘을 띄우지 않는다
   if (closed.length === 0)
     return (
-      <p className="col-span-4 m-0 text-[12px] text-white/45">
+      <p className="m-0 text-[12px] text-white/45 sm:col-span-4">
         이 기간에 매도한 거래가 없습니다.
       </p>
     )
@@ -41,7 +41,7 @@ function Peak({ label, rec }: { label: string; rec: Closed }) {
   const d = rec.derived
   return (
     <div
-      className="col-span-2 flex items-baseline gap-x-2.5"
+      className="flex items-baseline gap-x-2.5 sm:col-span-2"
       title={`${rec.filledAt} · ${rec.planTitle ?? '계획에 없음'}`}
     >
       <span className="text-fg-tertiary text-[11px]">{label}</span>
