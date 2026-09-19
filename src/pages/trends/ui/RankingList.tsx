@@ -54,7 +54,7 @@ function batchStamp(now = new Date()): string {
 }
 
 /**
- * 스크리너 — 돌파성공 + 돌파준비를 합친 하나의 목록. 1위 행만 강조한다.
+ * 오늘의 후보 — 돌파성공 + 돌파준비를 합친 하나의 목록. 1위 행만 강조한다.
  * 궤적 ① 근거 노출의 자리다. 여기서 고른 종목이 ③ 계획 작성으로 넘어간다.
  * 레짐을 탭으로 고르지 않기로 해서 prop이 없다.
  */
@@ -91,7 +91,7 @@ export function RankingList({
     <section className="card flex w-full min-w-0 flex-col px-4 pt-4 pb-3 sm:px-5">
       <div className="shrink-0">
         <div className="flex items-start justify-between">
-          {/* 제목은 내비를 따라 쓰지 않는다 — 내비는 «화면 이름»(스크리너)이고
+          {/* 제목은 내비를 따라 쓰지 않는다 — 내비는 «화면 이름»(오늘의 후보)이고
             여기는 그 화면 안 «이 목록»이다. 목록을 목록이게 하는 건 무엇으로
             줄 세웠나이므로 그것을 쓴다.
             「순위」가 상설 순위표로 읽히는 문제는 옆의 시각이 막는다 —

@@ -6,7 +6,7 @@ import { useBases, useDailyCandles } from '@/entities/stock'
 import { MarketChart } from './MarketChart'
 
 /**
- * 스크리너 화면의 주 차트 카드 — 종목 머리글 + 캔들.
+ * 오늘의 후보 화면의 주 차트 카드 — 종목 머리글 + 캔들.
  * **목록에서 고른 종목**이다 (4장 ① 가). 종목(계획) 화면으로 가는 길 「계획 세우기 →」 는
  * 이름 줄 오른쪽 하나. 판 맨 아래로 내렸다가(⑤ 가) 되올렸다 — 이름 곁이어야 한다 (사용자).
  *

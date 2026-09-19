@@ -5,7 +5,7 @@ import { EpsCard, MarginCard, RevenueCard } from './FundamentalCards'
 import { RankingList } from './RankingList'
 
 /**
- * 스크리너 — 차트와 목록을 6:4로 나눈다. 목록은 돌파성공/준비를 합친 하나다
+ * 오늘의 후보 — 차트와 목록을 6:4로 나눈다. 목록은 돌파성공/준비를 합친 하나다
  * (레짐을 탭으로 고르지 않는다).
  *
  * **목록이 고르고, 차트 · 카드가 따라온다** (2026-09-19 · Q23 · 4장 ① 가).

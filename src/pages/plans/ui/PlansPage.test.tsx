@@ -70,12 +70,19 @@ describe('거래 계획 — 계획 하나 = 카드 하나 · 거르기로 가른
     draw()
     await screen.findAllByText('SK하이닉스')
     await user.click(screen.getByRole('button', { name: '대기' }))
-    // 삼성전자 대기 둘 — 줄 둘에 이름이 각각 · 붙어 서고 둘째 줄 이름은 흐리다 (줄 4장 ④)
+    // 삼성전자 대기 둘 — 줄 둘에 이름이 각각 · 붙어 서고 이름 옆에 1 · 2 (줄 4장 ④ · 다)
     const sam = screen.getAllByText('삼성전자')
     expect(sam).toHaveLength(2)
     const first = sam[0]!.closest('article')!
-    expect(first.nextElementSibling).toBe(sam[1]!.closest('article'))
-    expect(sam[1]).toHaveClass('text-white/30')
+    const second = sam[1]!.closest('article')!
+    expect(first.nextElementSibling).toBe(second)
+    expect(
+      within(first).getByLabelText('같은 종목 1번째 계획'),
+    ).toHaveTextContent('1')
+    expect(
+      within(second).getByLabelText('같은 종목 2번째 계획'),
+    ).toHaveTextContent('2')
+    expect(sam[1]).toHaveClass('text-white')
     expect(screen.queryByRole('region', { name: '삼성전자' })).toBeNull()
   })
 
@@ -226,6 +233,6 @@ describe('예상 위험노출 — 계획대로 다 샀다면 · 지금 손절 �
     draw()
     await screen.findAllByText('SK하이닉스')
     expect(screen.queryByRole('meter')).toBeNull()
-    expect(screen.getAllByText('예상 위험노출').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/^예상 위험/).length).toBeGreaterThan(0)
   })
 })

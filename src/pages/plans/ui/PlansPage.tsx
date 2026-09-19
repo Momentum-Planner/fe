@@ -19,7 +19,7 @@ import {
  *
  * ```text
  * 거래 계획   [실행 중 | 대기 | 완료 | 폐기]                  (찾기) [+ 체결 기록]
- *   「+ 새 계획」 은 뺐다 — 검색바 → 빈 칸, 또는 스크리너 → 종목 화면에서 세운다 (2026-09-19)
+ *   「+ 새 계획」 은 뺐다 — 검색바 → 빈 칸, 또는 오늘의 후보 → 종목 화면에서 세운다 (2026-09-19)
  *
  * ┌ SK하이닉스 실행 중 · 돌파  20주  계획 › ┐ ┌ …  ┐    ← 계획 하나 = 카드 하나 · 균등한 그리드
  * │ 목표 [223,000] 2R            +44만       │ │    │
@@ -175,7 +175,7 @@ export function PlansPage() {
     if (scope === 'RUNNING') return sorted
     /**
      * 대기 · 폐기 — **같은 종목은 붙여 세운다** (Q23 · 줄 4장 ④ 나 근접성). 종목 순서는 그 안 가장 최근 계획 순.
-     * 판 · 테두리 없이 붙이기만 — 둘째 줄부터 이름을 흐린다(PlanRow repeat).
+     * 판 · 테두리 없이 붙이기만 — 같은 종목 줄은 이름 옆 작은 번호(PlanRow seq · 다). 흐림 · 막대는 걷었다
      */
     const by = new Map<string, PlanListItem[]>()
     for (const p of sorted)
@@ -238,7 +238,10 @@ export function PlansPage() {
          * @container 는 이 틀에 — 머리와 줄이 같은 폭을 보고 접혀야 열이 맞는다.
          */}
         <div className="@container">
-          <div className="bg-bg-surface sticky top-[56px] z-20 -mx-3 px-3 pt-4 sm:-mx-5 sm:px-5 sm:pt-5">
+          {/* 판과 같은 색 · 같은 둥근 윗모서리 (2026-09-19 사용자 · 「제일 밖 박스 테두리」).
+              💀 bg-surface(#1e1e1e)는 판(카드 그라데이션 ≈ #0b0b0b)보다 밝아 위 띠만 떠 보였고,
+              네모 모서리가 판의 둥근 모서리를 덮었다. 붙잡혀 내용 위에 떠야 해서 불투명 — 판 위쪽 색에 가장 가까운 #0a0a0a */}
+          <div className="bg-bg-input sticky top-[56px] z-20 -mx-3 rounded-t-lg px-3 pt-4 sm:-mx-5 sm:px-5 sm:pt-5">
             <header className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <h3 className="m-0 text-[18px] font-bold text-white">
                 거래 계획
@@ -261,12 +264,13 @@ export function PlansPage() {
                   </button>
                 ))}
               </div>
-              <div className="ml-auto flex items-center gap-2">
+              {/* 줄이 바뀌면(@3xl 미만) 한 줄을 다 쓴다 — 오른쪽에 붙어 들여 쓴 것처럼 «깨져» 보였다 (2026-09-19 사용자) */}
+              <div className="flex basis-full items-center gap-2 @min-[700px]:ml-auto @min-[700px]:basis-auto">
                 {/**
                  * 거래 계획만의 찾기 — 지금 거르기 안의 카드를 줄이고, 실행 중 · 대기 에선 찾은 종목의 빈 칸이 선다.
                  * 💀 처음엔 배경과 같은 어두운 칸이라 「안 보인다」 — 테두리 · 돋보기 · 지우기를 붙였다.
                  */}
-                <label className="rounded-pill bg-bg-input relative flex h-8 w-[240px] items-center ring-1 ring-white/20 transition-shadow focus-within:ring-white/45">
+                <label className="rounded-pill bg-bg-input relative flex h-8 min-w-0 flex-1 items-center ring-1 ring-white/20 transition-shadow focus-within:ring-white/45 @min-[700px]:w-[240px] @min-[700px]:flex-none">
                   <Search
                     size={14}
                     aria-hidden
@@ -381,15 +385,17 @@ export function PlansPage() {
                  * **판 폭에 맞춰 줄이 접힌다 — 화면 폭이 아니라** (컨테이너 쿼리 @container).
                  * 💀 오른쪽 체결 칸(440px) 이 열리면 판이 좁아지는데 열 틀이 화면 폭(lg) 을 봐서 줄이 넘쳤다.
                  */
-                <div className="bg-bg-elevated overflow-hidden rounded-lg @4xl:rounded-t-none">
+                <div className="bg-bg-elevated overflow-hidden rounded-lg @min-[700px]:rounded-t-none">
                   {rows.map((p, i) => (
                     <PlanRow
                       key={p.planId}
                       p={p}
                       onFill={onFill}
-                      repeat={
-                        scope !== 'DONE' &&
-                        rows[i - 1]?.stockCode === p.stockCode
+                      seq={
+                        // 종목끼리 붙여 세우는 대기 · 폐기에서만 — 실행 중이 붙는 건 우연이다
+                        scope === 'PLANNED' || scope === 'CLOSED'
+                          ? seqOf(rows, i)
+                          : null
                       }
                       risk={riskOf(p, accountTotal)}
                     />
@@ -397,7 +403,7 @@ export function PlansPage() {
                 </div>
               )}
               {slots.length > 0 && (
-                <div className="mt-2.5 grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-2.5">
+                <div className="mt-2 flex flex-col gap-1.5">
                   {slots.map((h) => {
                     const none = !plans.some((p) => p.stockCode === h.stockCode)
                     return (
@@ -495,22 +501,25 @@ const Empty = ({ children }: { children: React.ReactNode }) => (
  * **한 판 목록** (Q23 · 사용자 「붕 떠 보인다」 → 나) — 카드를 걷고 판 하나에 줄을 쌓는다.
  * 열 이름은 머리에 한 번 · 줄 사이는 옅은 선 · 머리와 줄이 **같은 열 틀** 을 써서 세로로 곧게 선다.
  * 💀 따로 떠 있는 긴 카드는 둥근 판 · 틈 · 줄마다 반복되는 「목표 · 진입 · 손절」 때문에 떠 보였다.
- * 판이 좁으면(@4xl = 896px 미만) 머리를 감추고 줄이 위아래로 접힌다.
+ * 판이 좁으면(700px 미만) 머리를 감추고 줄이 위아래로 접힌다.
+ * 700 ~ 896 에선 표는 두고 현재가 열만 비운다 — 체결 칸을 열면 1280 에서 판 안쪽이 721 까지 준다 (2026-09-19 사용자 「현재가만 날리면」)
  */
 /**
  * 열 틀 — **값 열은 고정 폭 · 숫자 오른쪽 맞춤 · 남는 폭은 버튼 앞 한 칸(1fr)** (Q23 · 줄 4장 ③ 나).
+ * 버튼 칸은 104 고정 — max-content 였을 때 머리(버튼 없음 · 0)와 줄(103)의 폭이 달라
+ * 좁은 판에서 머리의 이름 칸만 넓어져 숫자 열 머리가 오른쪽으로 밀렸다 (2026-09-19 사용자 「숫자랑 안 맞아」).
  * 💀 값 열이 판 폭을 나눠 가져 넓을수록 벌어졌고, 왼쪽 맞춤이라 자릿수가 다른 줄은 끝이 어긋났다.
  */
 const COLS =
   // 가 (열 간격) — 값은 96px 고정으로 촘촘히 한 덩어리 · 이름 288 · 남는 폭은 버튼 앞 한 칸 · 버튼 칸은 내용 폭
   // 「조화」(값 1fr : 틈 0.6fr) 는 써 보고 「별로」 로 되돌렸다
-  '@4xl:grid @4xl:grid-cols-[minmax(180px,224px)_repeat(3,minmax(88px,112px))_minmax(0,1fr)_max-content] @4xl:items-center @4xl:gap-x-3'
+  '@min-[700px]:grid @min-[700px]:grid-cols-[minmax(160px,224px)_repeat(3,minmax(88px,112px))_minmax(0,1fr)_104px] @min-[700px]:items-center @min-[700px]:gap-x-4'
 const LIVE_COLS =
-  '@4xl:grid @4xl:grid-cols-[minmax(180px,224px)_repeat(3,minmax(88px,112px))_minmax(100px,132px)_minmax(150px,1fr)_max-content] @4xl:items-center @4xl:gap-x-3'
+  '@min-[700px]:grid @min-[700px]:grid-cols-[minmax(150px,224px)_repeat(3,minmax(84px,112px))_minmax(96px,132px)_minmax(0,1fr)_104px] @4xl:grid-cols-[minmax(160px,224px)_repeat(3,minmax(88px,112px))_minmax(100px,132px)_minmax(150px,1fr)_104px] @min-[700px]:items-center @min-[700px]:gap-x-4'
 const ENDED_COLS = COLS
 /** 실행 중 · 대기는 값 열이 넷 — 손절 뒤에 「예상 위험노출」 */
 const RUN_COLS =
-  '@4xl:grid @4xl:grid-cols-[minmax(180px,224px)_repeat(3,minmax(88px,112px))_minmax(100px,132px)_minmax(150px,1fr)_max-content] @4xl:items-center @4xl:gap-x-3'
+  '@min-[700px]:grid @min-[700px]:grid-cols-[minmax(150px,224px)_repeat(3,minmax(84px,112px))_minmax(96px,132px)_minmax(0,1fr)_104px] @4xl:grid-cols-[minmax(160px,224px)_repeat(3,minmax(88px,112px))_minmax(100px,132px)_minmax(150px,1fr)_104px] @min-[700px]:items-center @min-[700px]:gap-x-4'
 
 type Kind = 'RUNNING' | 'PLANNED' | 'ENDED'
 const kindOf = (s: Scope): Kind =>
@@ -537,7 +546,7 @@ function SheetHead({ kind }: { kind: Kind }) {
             i > 0 && 'text-right',
             // 가격 셋과 위험노출을 조금 떼어 놓는다 — 폭 132(값 96 + 36) · 옅은 세로선
             c === '예상 위험노출' &&
-              '@4xl:self-stretch @4xl:border-l @4xl:border-white/[0.08]',
+              '@min-[700px]:self-stretch @min-[700px]:border-l @min-[700px]:border-white/[0.08]',
           )}
         >
           {/* 색은 머리에만 — 차트 태그 색을 한 번 알려 준다 (Q23 · 줄 4장 ⑤ 나) */}
@@ -557,6 +566,12 @@ function SheetHead({ kind }: { kind: Kind }) {
               />
               {c}
             </span>
+          ) : c === '예상 위험노출' ? (
+            // 칸이 좁으면(판 896 미만) 「노출」 을 뺀다 — 102px 칸에서 두 줄로 꺾였다
+            <span className="whitespace-nowrap">
+              예상 위험
+              <span className="hidden @4xl:inline">노출</span>
+            </span>
           ) : (
             c
           )}
@@ -566,7 +581,7 @@ function SheetHead({ kind }: { kind: Kind }) {
         <span />
       ) : (
         // 「현재가」 — 전날 종가(마감 뒤 값) 가 손절 · 목표 사이 어디 있나 (Q23 · 줄 배치 A · 이름은 랭킹 · 검색과 맞춘다)
-        <span className="@4xl:self-stretch @4xl:border-l @4xl:border-white/[0.08] @4xl:pl-4">
+        <span className="overflow-hidden whitespace-nowrap @min-[700px]:self-stretch @min-[700px]:text-transparent @4xl:border-l @4xl:border-white/[0.08] @4xl:pl-4 @4xl:text-inherit">
           현재가
         </span>
       )}
@@ -575,16 +590,29 @@ function SheetHead({ kind }: { kind: Kind }) {
   )
 }
 
+/**
+ * 같은 종목 무리 안의 몇 번째인가 — 무리가 둘 이상일 때만 (1부터). 혼자면 null.
+ * 이름 옆 작은 번호로 보인다 (2026-09-19 사용자 · 다). 흐림 · 왼쪽 막대는 「어색」
+ */
+function seqOf(rows: PlanListItem[], i: number): number | null {
+  const code = rows[i]?.stockCode
+  let start = i
+  while (start > 0 && rows[start - 1]?.stockCode === code) start--
+  let end = i
+  while (end < rows.length - 1 && rows[end + 1]?.stockCode === code) end++
+  return end > start ? i - start + 1 : null
+}
+
 function PlanRow({
   p,
   onFill,
-  repeat = false,
+  seq = null,
   risk = null,
 }: {
   p: PlanListItem
   onFill: (p: PlanListItem) => void
-  /** 바로 윗줄과 같은 종목 — 이름을 흐린다 (줄 4장 ④) */
-  repeat?: boolean
+  /** 같은 종목 무리 안의 번호 — 이름 옆 작은 알약 (줄 4장 ④ · 다) */
+  seq?: number | null
   /** 예상 위험노출 % — 계좌 총액을 모르면 null */
   risk?: number | null
 }) {
@@ -616,7 +644,7 @@ function PlanRow({
       )}
     >
       {/* 종목 · 계획 */}
-      <div className="col-span-3 min-w-0 pr-4 @4xl:col-span-1">
+      <div className="col-span-3 min-w-0 pr-4 @min-[700px]:col-span-1">
         <div className="flex items-baseline gap-2">
           <Link
             to="/stocks/$ticker/plan/$planId"
@@ -624,11 +652,19 @@ function PlanRow({
             aria-label={`${p.stockName} ${p.title} 계획 보기`}
             className={cn(
               "truncate text-[15px] outline-none after:absolute after:inset-0 after:content-[''] focus-visible:after:ring-1 focus-visible:after:ring-white/40",
-              repeat ? 'font-medium text-white/30' : 'font-bold text-white',
+              'font-bold text-white',
             )}
           >
             {p.stockName}
           </Link>
+          {seq !== null && (
+            <span
+              aria-label={`같은 종목 ${seq}번째 계획`}
+              className="rounded-pill shrink-0 px-1.5 text-[10px] leading-4 font-medium text-white/55 ring-1 ring-white/20"
+            >
+              {seq}
+            </span>
+          )}
         </div>
         <p className="m-0 mt-0.5 truncate text-[11px] text-white/45">
           {/* 회색은 칸마다 하나 — 수량은 계획 화면에서 (Q23 · 줄 보조 글자 나) */}
@@ -653,8 +689,8 @@ function PlanRow({
             note={entry > 0 ? pct((stop - entry) / entry) : null}
           />
           {/* 예상 위험노출 — 본전 이상이면 0% (「본전 이상」 칩을 걷고 이 값이 대신 말한다) */}
-          <div className="flex min-w-0 flex-col gap-0.5 @4xl:items-end @4xl:justify-center @4xl:gap-0 @4xl:self-stretch @4xl:border-l @4xl:border-white/[0.08]">
-            <span className="text-[11px] text-white/45 @4xl:hidden">
+          <div className="flex min-w-0 flex-col gap-0.5 @min-[700px]:items-end @min-[700px]:justify-center @min-[700px]:gap-0 @min-[700px]:self-stretch @min-[700px]:border-l @min-[700px]:border-white/[0.08]">
+            <span className="text-[11px] text-white/45 @min-[700px]:hidden">
               예상 위험
             </span>
             <span
@@ -665,13 +701,13 @@ function PlanRow({
             >
               {risk === null ? '—' : `${risk.toFixed(1)}%`}
             </span>
-            <span className="hidden text-[11px] @4xl:invisible @4xl:block">
+            <span className="hidden text-[11px] @min-[700px]:invisible @min-[700px]:block">
               ·
             </span>
           </div>
           {/* 동작은 한 단 흐리게 — 올린 줄 · 키보드로 들어온 줄에서만 밝아진다 (Q23 · 줄 4장 ① 나) */}
           <NowBar p={p} goalPrice={goalPrice} />
-          <div className="order-first col-start-4 row-start-1 flex items-center justify-end gap-4 opacity-45 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 @4xl:order-none @4xl:col-start-auto @4xl:row-start-auto">
+          <div className="order-first col-start-4 row-start-1 flex items-center justify-end gap-4 opacity-45 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 @min-[700px]:order-none @min-[700px]:col-start-auto @min-[700px]:row-start-auto @min-[700px]:pl-4">
             <button
               type="button"
               onClick={() => onFill(p)}
@@ -684,12 +720,12 @@ function PlanRow({
         </>
       ) : (
         <>
-          <span className="t-num text-[13px] text-white/55 @4xl:text-right">
+          <span className="t-num text-[13px] text-white/55 @min-[700px]:text-right">
             {p.writtenAt.slice(0, 10)}
           </span>
           <span
             className={cn(
-              't-num text-[15px] font-medium @4xl:text-right',
+              't-num text-[15px] font-medium @min-[700px]:text-right',
               p.realized === null ? 'text-white/30' : tone(p.realized),
             )}
           >
@@ -702,14 +738,14 @@ function PlanRow({
           {/* 수익률로도 줄 세우므로 같이 싣는다 (7장 ②) */}
           <span
             className={cn(
-              't-num text-[13px] @4xl:text-right',
+              't-num text-[13px] @min-[700px]:text-right',
               p.realizedPct === null ? 'text-white/30' : tone(p.realizedPct),
             )}
           >
             {p.realizedPct === null ? '—' : pct(p.realizedPct / 100)}
           </span>
-          <span aria-hidden className="hidden @4xl:block" />
-          <div className="col-start-4 row-start-1 flex justify-end opacity-45 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 @4xl:col-start-auto @4xl:row-start-auto">
+          <span aria-hidden className="hidden @min-[700px]:block" />
+          <div className="col-start-4 row-start-1 flex justify-end opacity-45 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 @min-[700px]:col-start-auto @min-[700px]:row-start-auto @min-[700px]:pl-4">
             {chevron}
           </div>
         </>
@@ -733,7 +769,7 @@ function NowBar({
   const now = p.lastClose
   if (now === null)
     return (
-      <span className="col-span-4 text-[11px] text-white/30 @4xl:col-span-1 @4xl:self-stretch @4xl:border-l @4xl:border-white/[0.08] @4xl:pl-4">
+      <span className="col-span-4 text-[11px] text-white/30 @min-[700px]:invisible @min-[700px]:col-span-1 @min-[700px]:self-stretch @min-[700px]:border-l @min-[700px]:border-white/[0.08] @min-[700px]:pl-4 @4xl:visible">
         —
       </span>
     )
@@ -747,7 +783,7 @@ function NowBar({
   return (
     // 위험노출과 사이에 옅은 세로선 (사용자 「선 좀」)
     // 오른쪽 동작(+ 체결) 과 떼어 둔다 — 막대 끝 점이 버튼에 붙지 않게 (pr-8)
-    <div className="col-span-4 flex min-w-0 flex-col justify-center gap-1 @4xl:col-span-1 @4xl:self-stretch @4xl:border-l @4xl:border-white/[0.08] @4xl:pr-8 @4xl:pl-4">
+    <div className="col-span-4 flex min-w-0 flex-col justify-center gap-1 @min-[700px]:invisible @min-[700px]:col-span-1 @min-[700px]:self-stretch @min-[700px]:pr-8 @min-[700px]:pl-4 @4xl:visible @4xl:border-l @4xl:border-white/[0.08]">
       <div className="from-candle-down/40 to-candle-up/40 relative hidden h-1 rounded-full bg-gradient-to-r via-white/15 @6xl:block">
         <span
           aria-hidden
@@ -789,8 +825,10 @@ function Cell({
 }) {
   return (
     // 좁으면 [열 이름 값 보조] 한 줄 · 판이 넓으면(@3xl) 값 오른쪽 맞춤 + 보조는 값 밑 (줄 4장 ③)
-    <div className="flex min-w-0 flex-col gap-0.5 @4xl:items-end @4xl:gap-0">
-      <span className="text-[11px] text-white/45 @4xl:hidden">{head}</span>
+    <div className="flex min-w-0 flex-col gap-0.5 @min-[700px]:items-end @min-[700px]:gap-0">
+      <span className="text-[11px] text-white/45 @min-[700px]:hidden">
+        {head}
+      </span>
       <span
         className={cn('t-num text-[14px] font-medium sm:text-[15px]', tone)}
       >
@@ -799,7 +837,7 @@ function Cell({
       <span
         className={cn(
           't-num truncate text-[11px] text-white/45',
-          !note && 'hidden @4xl:invisible @4xl:block',
+          !note && 'hidden @min-[700px]:invisible @min-[700px]:block',
         )}
       >
         {note ?? '·'}
@@ -829,17 +867,19 @@ function Slot({
     <div
       role="group"
       aria-label={`${name} 빈 칸`}
-      className="flex min-h-[120px] flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-white/25 px-4 py-3"
+      // 표 밑의 가로 줄 (2026-09-19 사용자 · 가) — 이름 왼쪽 · 버튼 오른쪽, 표의 줄과 같은 안쪽 여백.
+      // 점선이 «아직 없는 줄». 💀 카드 시절의 가운데 정렬 상자(약 170px)가 표 밑에서 혼자 떠 보였다
+      className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg border border-dashed border-white/25 px-3 py-2.5 sm:px-5"
     >
-      <span className="text-[13px] font-medium text-white/85">
+      <span className="min-w-0 truncate text-[15px] font-bold text-white/85">
         {name}
         {none && (
-          <span className="ml-1.5 text-[11px] font-normal text-white/40">
+          <span className="ml-2 text-[11px] font-normal text-white/40">
             계획 없음
           </span>
         )}
       </span>
-      <div className="flex flex-wrap justify-center gap-1.5">
+      <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
         <Link to="/stocks/$ticker" params={{ ticker: code }} className={btn}>
           + 새 계획
         </Link>

@@ -31,6 +31,8 @@ export function FillSheet({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose, open])
 
+  // 옆에 나란히(dock)는 xl(1280) 부터 — 이때 목록은 776 까지 준다. 목록은 768 부터 표를 지키고
+  // 896 밑에선 현재가 열만 비운다 (2026-09-19 사용자 「현재가만 날리면」 · 1400 서랍 안을 되돌림)
   return (
     <>
       {open && (
