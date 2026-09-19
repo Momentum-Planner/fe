@@ -1,12 +1,12 @@
-import { Link, useNavigate } from '@tanstack/react-router'
-import { ClipboardList, LogOut, TrendingUp, User } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
+import { ClipboardList, TrendingUp, User } from 'lucide-react'
 import { useState } from 'react'
 import type { ComponentType } from 'react'
 import { MomentumLogo } from '@/shared/ui/MomentumLogo'
 import { SearchBar } from '@/shared/ui/SearchBar'
 import { WatchMenu } from '@/widgets/WatchMenu'
 import { AuthModal } from '@/widgets/AuthModal'
-import { useAccount, useLogout } from '@/entities/auth'
+import { useAccount } from '@/entities/auth'
 
 /** 상단 가로 바 높이. WatchPanel의 sticky 오프셋이 이 값에 맞물린다. */
 export const TOPBAR_H = 56
@@ -53,8 +53,6 @@ export function TopBar() {
   const [authOpen, setAuthOpen] = useState(false)
 
   const { data: account } = useAccount()
-  const logout = useLogout()
-  const navigate = useNavigate()
 
   return (
     <header
@@ -134,33 +132,17 @@ export function TopBar() {
         </div>
 
         {account?.isLoggedIn ? (
-          <div className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-white/[0.06] pr-3 pl-3 min-[360px]:pr-1">
-            {/* 닉네임 칩이 마이페이지로 간다 (Q5) */}
-            <Link
-              to="/profile"
-              aria-label="마이페이지"
-              className="flex items-center gap-1.5 truncate text-[13px] font-semibold whitespace-nowrap text-white hover:text-white/80"
-            >
-              <User size={15} strokeWidth={2} />
-              <span className="hidden sm:inline">
-                {account.nickname ?? '회원'}
-              </span>
-            </Link>
-            <button
-              type="button"
-              onClick={() =>
-                logout.mutate(undefined, {
-                  onSettled: () => void navigate({ to: '/trends' }),
-                })
-              }
-              disabled={logout.isPending}
-              aria-label="로그아웃"
-              // 360px 미만에선 뺀다 — 320 에서 상단 바가 20px 넘쳤다. 로그아웃은 마이페이지 머리에도 있다 (2026-09-19 사용자 · 가)
-              className="hidden h-7 w-7 items-center justify-center rounded-full text-white/60 transition-colors hover:bg-white/10 hover:text-white min-[360px]:flex"
-            >
-              <LogOut size={15} strokeWidth={2} />
-            </button>
-          </div>
+          // 닉네임 칩 전체가 마이페이지로 (Q5). 로그아웃은 마이페이지에서만 (2026-09-19 사용자) — 상단 바엔 칩 하나
+          <Link
+            to="/profile"
+            aria-label="마이페이지"
+            className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-white/[0.06] px-3 text-[13px] font-semibold whitespace-nowrap text-white transition-colors hover:bg-white/[0.12]"
+          >
+            <User size={15} strokeWidth={2} />
+            <span className="hidden sm:inline">
+              {account.nickname ?? '회원'}
+            </span>
+          </Link>
         ) : (
           // 흰색 반투명 채움 — 조용하되 강조는 남긴다.
           // 꽉 찬 흰색(bg-white/85)은 바에서 로고보다 밝아 시선을 다 가져갔고,
